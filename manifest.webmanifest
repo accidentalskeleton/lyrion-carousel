@@ -1,0 +1,13 @@
+{
+  "name": "Lyrion Carousel",
+  "short_name": "Carousel",
+  "description": "Jewel-case carousel controller for Lyrion Music Server",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#08090b",
+  "theme_color": "#08090b",
+  "icons": [
+    {"src":"assets/lyrion-carousel-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
