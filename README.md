@@ -142,6 +142,42 @@ The package/service names are consistently `lyrion-carousel`:
 
 The package includes `VERSION`, the web-app manifest, assets, CSS and JavaScript.
 
+### Manage the Debian service
+
+After installation, start the service and enable it to start automatically at boot:
+
+```bash
+sudo systemctl enable --now lyrion-carousel.service
+```
+
+Use these commands to control the running service:
+
+```bash
+sudo systemctl stop lyrion-carousel.service
+sudo systemctl start lyrion-carousel.service
+sudo systemctl restart lyrion-carousel.service
+sudo systemctl status lyrion-carousel.service
+```
+
+View recent service output or follow the log while troubleshooting:
+
+```bash
+sudo journalctl -u lyrion-carousel.service -n 100 --no-pager
+sudo journalctl -u lyrion-carousel.service -f
+```
+
+Runtime defaults are stored in `/etc/default/lyrion-carousel`. After changing that file, restart the service to apply the new values:
+
+```bash
+sudo systemctl restart lyrion-carousel.service
+```
+
+To prevent the service from starting at boot and stop it immediately:
+
+```bash
+sudo systemctl disable --now lyrion-carousel.service
+```
+
 ## Server endpoints
 
 `server.py` is intentionally small and is not a general-purpose proxy:
