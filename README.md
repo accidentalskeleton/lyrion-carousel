@@ -2,7 +2,7 @@
 
 Lyrion Carousel is the album-browsing and playback-control interface for Lyrion Music Server (LMS) in this hi-fi project. It presents the library as a circular, book-like carousel of CD jewel cases while keeping the normal listening screen deliberately uncluttered.
 
-The default LMS URL is `http://mrlazy:9000`.
+Current application version: **1.0.0**. The canonical version is stored in [`VERSION`](VERSION).
 
 ## Features
 
@@ -10,29 +10,32 @@ The default LMS URL is `http://mrlazy:9000`.
 - circular book/page-style album carousel with realistic jewel-case presentation;
 - incremental 40-album catalogue batches with neighbouring-batch prefetch;
 - lightweight album-ID → `sort:artflow` position index for direct jumps;
-- persistent local artwork cache;
+- persistent server-side artwork cache;
+- browser-side cached LMS discovery/catalogue fallback for temporary LMS outages;
 - event-driven library refresh after LMS scans complete;
 - album/artist search and A–Z navigation;
 - shamrock random-album selection with configurable animation duration;
 - click/tap a cover to load and play that album;
 - LMS CometD long-polling for live playback and server/library state;
 - current track, track number and locally advancing progress display;
-- current-track details dim while browsing away from the playing album;
 - configurable automatic return to the playing album after an idle period;
 - saved player and album position across browser sessions;
 - configurable carousel density;
 - Settings panel containing Player, Idle return, Random scroll duration, Carousel density and Status/About;
-- automatic LMS reconnection.
+- automatic LMS reconnection;
+- installable/fullscreen-friendly web-app metadata and application icon;
+- zero-idle-loop long-task performance diagnostics.
 
 ## Source layout
 
-The application is deliberately framework-free and uses native ES modules:
-
 ```text
 lyrion-carousel/
+├── VERSION
 ├── index.html
+├── manifest.webmanifest
 ├── assets/
-│   └── jewel-case-overlay.svg
+│   ├── jewel-case-overlay.svg
+│   └── lyrion-carousel-icon.svg
 ├── css/
 │   ├── album-browser.css
 │   ├── jewel-overlay.css
@@ -42,15 +45,16 @@ lyrion-carousel/
 │   ├── browser.js
 │   ├── catalogue.js
 │   ├── lms.js
+│   ├── resilience.js
+│   ├── performance.js
 │   ├── settings-runtime.js
 │   └── settings.js
-├── packaging/
-│   └── debian/
+├── packaging/debian/
 ├── server.py
 └── README.md
 ```
 
-There is no Node/npm dependency and no build step. `server.py` serves the client files normally and provides the required LMS/CometD/artwork API proxies and artwork cache.
+There is no Node/npm dependency and no build step. `server.py` serves the client files and provides the required LMS/CometD/artwork API proxies and artwork cache.
 
 ## Run directly
 
@@ -59,7 +63,7 @@ cd software/lyrion-carousel
 python3 server.py
 ```
 
-Open `http://127.0.0.1:8088/`. To make it available on the LAN:
+Open `http://127.0.0.1:8088/`. For trusted-LAN access:
 
 ```bash
 python3 server.py --bind 0.0.0.0
@@ -82,50 +86,41 @@ python3 server.py --bind 0.0.0.0
 | `--random-scroll-max-seconds` | `3` | Default maximum shamrock animation duration |
 | `--search-limit` | `100` | Maximum albums returned by a search |
 
-Player, idle return, random-scroll duration and carousel density can also be selected in the in-app Settings panel. Browser settings are stored locally.
+Player, idle return, random-scroll duration and carousel density can also be selected in Settings. Browser settings are stored locally.
 
-Periodic playback polling and the old periodic library-count check are not used. CometD provides live player status and server scan state; one-shot status requests are used for initial state and command confirmation.
+## Jewel-case rendering
 
-## Artwork and carousel rendering
+Artwork is fetched through `/api/art/<artwork-id>` and cached on disk. The carousel uses real LMS artwork as the booklet image. `assets/jewel-case-overlay.svg` is now authoritative for the complete physical case: outer clear shell, black ribbed hinge, clear separator, opening border, latches and reflections. Legacy CSS/DOM case pieces are suppressed rather than visually duplicated.
 
-Artwork is fetched through `/api/art/<artwork-id>` and cached on disk. The carousel uses the real LMS artwork as the booklet image and a reusable transparent jewel-case overlay for the physical case appearance. The visual case is deliberately separated from the carousel movement so the page-like browsing geometry can be tuned independently of the jewel-case artwork.
+The overlay URL is versioned in CSS so an updated case cannot be hidden by a stale browser cache. Carousel transforms remain independent of case construction.
 
-Browsing prefetches the current and neighbouring catalogue batches so artwork is warmed naturally.
+## Catalogue loading, persistence and outages
 
-Clear the server-side artwork cache at startup with:
+LMS is queried in fixed batches using `albums <start> <batch-size> sort:artflow tags:ajlys`. Current and neighbouring batches are prefetched automatically, including across the final/first album boundary. A lightweight `tags:s` request builds the album-ID-to-position map.
 
-```bash
-python3 server.py --bind 0.0.0.0 --clear-cache
-```
+`js/resilience.js` retains successful read-only `players` and `albums` RPC responses in browser local storage. If LMS is temporarily unreachable, those responses can be replayed so the previously seen library remains available for browsing while normal reconnect attempts continue. Mutating/player-control RPC calls are deliberately never cached or replayed.
 
-This does not alter LMS, the music library or browser local storage.
+CometD subscribes to player status and LMS `serverstatus`. When a library scan completes, Lyrion Carousel refreshes the catalogue, album count and position index once.
 
-## Catalogue loading and library changes
+## Performance
 
-LMS is queried in fixed batches using `albums <start> <batch-size> sort:artflow tags:ajlys`. The current and neighbouring batches are fetched automatically, including across the final/first album boundary.
+The signature interaction is intentionally based on compositor-friendly `translate3d`/rotation transforms. Jewel cases are layout/style-contained and marked for transform/filter/opacity compositing. Catalogue batching limits the number of album elements/artworks normally present at once rather than constructing the entire library up front.
 
-A lightweight catalogue request using `tags:s` builds an album-ID-to-position map. Idle return, saved-position restoration, search-result navigation and playback changes can therefore fetch the required batch directly instead of walking the entire catalogue.
+`js/performance.js` uses `PerformanceObserver` where supported to report main-thread tasks of 100 ms or longer to the developer console. It does **not** run a permanent `requestAnimationFrame` loop or add polling while the carousel is idle. Final acceptance should include measured frame-rate/memory testing on the intended Raspberry Pi/display hardware with the full library.
 
-The CometD session subscribes to LMS `serverstatus` with change-only updates. When a library scan completes, Lyrion Carousel refreshes the catalogue, album count and position index once.
+## Web-app / kiosk use
 
-## Playback and CometD
+`manifest.webmanifest`, the application icon and fullscreen display metadata allow Lyrion Carousel to behave more like a dedicated appliance when installed/launched from a supporting browser. This does not add a service worker or attempt to cache the application shell; LMS reconnection and catalogue fallback remain explicit application behaviours.
 
-`js/lms.js` owns the CometD session. A single client subscribes to both the selected player's status and LMS server status. Player changes cleanly replace the previous subscription/session.
+## Versioning
 
-The progress display advances locally between LMS updates. When the carousel is centred on an album other than the playing album, current-track information is dimmed while the browsed album title and artist remain prominent.
+`VERSION` is the single canonical application version. Settings → Status/About reads it directly. Debian packaging reads the same file by default, so the UI and generated package do not maintain independent version numbers.
 
-## Server endpoints
-
-`server.py` is intentionally small and is not a general-purpose proxy:
-
-- `/api/lms` → LMS JSON-RPC;
-- `/api/cometd` → LMS CometD;
-- `/api/art/<artwork-id>` → LMS artwork with persistent disk caching;
-- `/api/config` → runtime defaults.
+A package version can still be explicitly supplied to the build script for packaging experiments, but normal release builds should use the canonical value.
 
 ## Debian packaging
 
-Build the package from `software/lyrion-carousel` with:
+Build from `software/lyrion-carousel`:
 
 ```bash
 packaging/debian/build-deb.sh
@@ -139,9 +134,21 @@ The package/service names are consistently `lyrion-carousel`:
 - application: `/opt/lyrion-carousel`;
 - artwork cache: `/var/cache/lyrion-carousel/artwork`.
 
+The package includes `VERSION`, the web-app manifest, assets, CSS and JavaScript.
+
+## Server endpoints
+
+`server.py` is intentionally small and is not a general-purpose proxy:
+
+- `/api/lms` → LMS JSON-RPC;
+- `/api/cometd` → LMS CometD;
+- `/api/art/<artwork-id>` → LMS artwork with persistent disk caching;
+- `/api/config` → runtime defaults.
+
 ## Current limitations
 
 - LMS password authentication is not yet implemented.
 - Search is capped by `--search-limit` (100 by default).
 - Artwork cache eviction and automatic cover-change invalidation are not yet implemented.
-- Library refresh is driven by LMS scan completion; changes not incorporated into LMS's database are intentionally invisible to the application.
+- Browser catalogue fallback only contains read-only LMS responses previously seen by that browser; it is not an independent mirror of the complete LMS database.
+- Final 60 fps/memory acceptance testing still needs to be performed on the intended wall-controller hardware.
