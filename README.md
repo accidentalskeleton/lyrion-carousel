@@ -76,7 +76,7 @@ python3 server.py --bind 0.0.0.0
 | `--random-scroll-max-seconds` | `3` | Default maximum shamrock animation duration |
 | `--search-limit` | `100` | Maximum albums returned by a search |
 
-Player, idle return, random-scroll duration and carousel density can also be selected in Settings. Browser settings are stored locally. Idle return, random duration and density are applied immediately without a reload.
+The Lyrion Music Server URL, player, idle return, random-scroll duration and carousel density can also be selected in Settings. Changing the server URL reconnects the running proxy and refreshes the available player list. Browser settings, including the selected LMS URL, are stored locally and reapplied when that browser restarts. The server URL is runtime state on the proxy; set `LMS_URL` in `/etc/default/lyrion-carousel` for the persistent machine-wide default. Idle return, random duration and density are applied immediately without a reload.
 
 ## Startup and browsing behaviour
 

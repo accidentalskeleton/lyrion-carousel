@@ -26,12 +26,13 @@ def non_negative_int(value:str)->int:
 
 class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     server_version="LyrionCarousel/1.0"
-    def __init__(self,*args,directory:str,lms_url:str,cache_dir:Path,runtime_config:dict[str,int],**kwargs):
+    def __init__(self,*args,directory:str,lms_url:str,cache_dir:Path,runtime_config:dict[str,object],**kwargs):
         self.lms_url=lms_url.rstrip('/'); self.cache_dir=cache_dir; self.runtime_config=runtime_config
         super().__init__(*args,directory=directory,**kwargs)
     def do_POST(self)->None:
         path=urlsplit(self.path).path
         if path=='/api/cache/clear': self._clear_cache(); return
+        if path=='/api/config/lms': self._update_lms_url(); return
         if path not in {'/api/lms','/api/cometd'}: self.send_error(404); return
         try: length=int(self.headers.get('Content-Length','0'))
         except ValueError: self.send_error(400,'Invalid Content-Length'); return
@@ -49,6 +50,19 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 if path.is_file() or path.is_symlink(): path.unlink(); removed+=1
             self._send_payload(200,json.dumps({'removed':removed}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except OSError as error: self._send_upstream_error(error)
+    def _update_lms_url(self)->None:
+        try:
+            length=int(self.headers.get('Content-Length','0'))
+            if length<1 or length>MAX_RPC_BYTES: self.send_error(413,'Invalid request size'); return
+            payload=json.loads(self.rfile.read(length))
+            value=payload.get('lms_url') if isinstance(payload,dict) else None
+            lms_url=str(value).strip().rstrip('/')
+            parsed=urlsplit(lms_url)
+            if parsed.scheme not in {'http','https'} or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment: raise ValueError
+            self.runtime_config['lms_url']=lms_url
+            self.lms_url=lms_url
+            self._send_payload(200,json.dumps({'lms_url':lms_url}).encode(),'application/json; charset=utf-8',cache_control='no-store')
+        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError): self.send_error(400,'Invalid LMS URL')
     def _log_lms_rpc(self,payload:object)->None:
         try:
             params=payload.get('params') if isinstance(payload,dict) else None
@@ -129,8 +143,8 @@ def main()->int:
     if args.clear_cache and cache_dir.exists():
         removed=sum(1 for path in cache_dir.rglob('*') if path.is_file()); shutil.rmtree(cache_dir); print(f"Cleared artwork cache: {removed} file{'s' if removed!=1 else ''} removed from {cache_dir}")
     cache_dir.mkdir(parents=True,exist_ok=True)
-    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit}
-    def handler(*handler_args,**handler_kwargs): return LyrionCarouselHandler(*handler_args,directory=str(static_dir),lms_url=args.lms,cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
+    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'lms_url':args.lms.rstrip('/')}
+    def handler(*handler_args,**handler_kwargs): return LyrionCarouselHandler(*handler_args,directory=str(static_dir),lms_url=runtime_config['lms_url'],cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
     server=ThreadingHTTPServer((args.bind,args.port),handler)
     if args.bind in {'0.0.0.0','::'}: print('Lyrion Carousel listening on all network interfaces.'); print(f'Open: http://{socket.gethostname()}:{args.port}/ or http://<server-ip>:{args.port}/')
     else: print(f'Lyrion Carousel: http://{args.bind}:{args.port}/')
