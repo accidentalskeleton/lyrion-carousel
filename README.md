@@ -2,12 +2,13 @@
 
 Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). It presents the music library as a continuous, book-like carousel of CD jewel cases while keeping the normal listening screen deliberately uncluttered.
 
-Current application version: **0.8.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
+Current application version: **0.8.1**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
 ## Features
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
 - circular book/page-style album carousel with realistic jewel-case presentation;
+- artist/album, album-only, or persistent randomized album display order;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - incremental 40-album catalogue batches with neighbouring-batch prefetch;
 - paged album-ID → `sort:artflow` position index for direct jumps;
