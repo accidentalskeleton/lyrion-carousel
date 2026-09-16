@@ -3,7 +3,8 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
-VERSION=${1:-1.0.0}
+CANONICAL_VERSION=$(tr -d '[:space:]' < "$PROJECT_DIR/VERSION")
+VERSION=${1:-$CANONICAL_VERSION}
 PACKAGE=lyrion-carousel
 STAGE="$PROJECT_DIR/.deb-build/${PACKAGE}_${VERSION}_all"
 OUTPUT="$PROJECT_DIR/dist/${PACKAGE}_${VERSION}_all.deb"
@@ -15,6 +16,8 @@ esac
 rm -rf -- "$STAGE"
 mkdir -p "$STAGE/DEBIAN" "$PROJECT_DIR/dist"
 install -Dm0644 "$PROJECT_DIR/index.html" "$STAGE/opt/$PACKAGE/index.html"
+install -Dm0644 "$PROJECT_DIR/VERSION" "$STAGE/opt/$PACKAGE/VERSION"
+install -Dm0644 "$PROJECT_DIR/manifest.webmanifest" "$STAGE/opt/$PACKAGE/manifest.webmanifest"
 install -Dm0755 "$PROJECT_DIR/server.py" "$STAGE/opt/$PACKAGE/server.py"
 install -Dm0644 "$PROJECT_DIR/README.md" "$STAGE/usr/share/doc/$PACKAGE/README.md"
 cp -a "$PROJECT_DIR/assets" "$PROJECT_DIR/css" "$PROJECT_DIR/js" "$STAGE/opt/$PACKAGE/"
