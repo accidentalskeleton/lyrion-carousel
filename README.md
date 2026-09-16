@@ -10,7 +10,7 @@ Current application version: **0.7.0**. The canonical version is stored in [`VER
 - circular book/page-style album carousel with realistic jewel-case presentation;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - incremental 40-album catalogue batches with neighbouring-batch prefetch;
-- lightweight album-ID → `sort:artflow` position index for direct jumps;
+- paged album-ID → `sort:artflow` position index for direct jumps;
 - persistent server-side artwork cache;
 - browser-side cached LMS discovery/catalogue fallback for temporary LMS outages;
 - event-driven library refresh after LMS scans complete;
@@ -92,7 +92,7 @@ The overlay URL is versioned so an updated case cannot be hidden by a stale brow
 
 ## Catalogue loading, persistence and outages
 
-LMS is queried in fixed batches using `albums <start> <batch-size> sort:artflow tags:ajlys`. Current and neighbouring batches are prefetched automatically, including across the final/first album boundary. A lightweight `tags:s` request builds the album-ID-to-position map.
+LMS is queried in fixed batches using `albums <start> <batch-size> sort:artflow tags:ajlys`. Current and neighbouring batches are prefetched automatically, including across the final/first album boundary. The album-ID-to-position map is built with bounded, paged `tags:s` requests.
 
 `js/resilience.js` retains successful read-only `players` and `albums` RPC responses in browser local storage. If LMS is temporarily unreachable, those responses can be replayed so previously seen catalogue data remains available while normal reconnect attempts continue. Stale replayed catalogue responses are explicitly marked so Status/About can distinguish cached from live data. Mutating/player-control RPC calls are deliberately never cached or replayed.
 
