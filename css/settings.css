@@ -22,6 +22,45 @@
     color: #ddd9d2;
     font: inherit;
 }
+
+.bf-lms-connect {
+    display: flex;
+    gap: 8px;
+}
+
+.bf-lms-url {
+    min-width: 0;
+    width: 230px;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 7px;
+    padding: 7px 9px;
+    background: #171717;
+    color: #ddd9d2;
+    font: inherit;
+    font-size: 11px;
+}
+
+.bf-lms-connect-button {
+    min-height: 34px;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 7px;
+    padding: 5px 10px;
+    background: #171717;
+    color: #ddd9d2;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.bf-lms-connect-button:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, .28);
+    color: #f1eee8;
+}
+
+.bf-lms-connect-button:disabled {
+    opacity: .5;
+    cursor: wait;
+}
 .bf-settings-about {
     padding-top: 17px;
 }
@@ -112,6 +151,15 @@
     }
     .bf-settings-section select {
         width: 100%;
+    }
+
+    .bf-lms-connect {
+        width: 100%;
+    }
+
+    .bf-lms-url {
+        flex: 1;
+        width: auto;
     }
     .bf-status-grid {
         grid-template-columns: 1fr;
