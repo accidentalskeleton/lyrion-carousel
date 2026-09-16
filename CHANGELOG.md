@@ -2,7 +2,7 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
-## [0.8.0] - 2026-09-16
+## [0.8.1] - 2026-09-16
 
 ### Security and resilience
 
@@ -22,8 +22,9 @@ All notable changes to Lyrion Carousel are documented here.
 - Center and scale desktop jewel cases within the larger carousel stage while preserving the existing mobile layout.
 - Add long-press album actions for playing now, playing after the current album, and adding to the queue.
 - Add a configurable album-menu timeout, defaulting to 10 seconds.
+- Add a circular display-order control beside the random-play control with Artists / Album, Album, and Random modes.
 - Add track-list viewing and clear-playlist-and-play actions to the album menu.
 
-## [0.7.0] - 2026-09-16
+## [0.8.0] - 2026-09-16
 
 - Initial tagged release.
