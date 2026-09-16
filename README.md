@@ -2,7 +2,7 @@
 
 Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). It presents the music library as a continuous, book-like carousel of CD jewel cases while keeping the normal listening screen deliberately uncluttered.
 
-Current application version: **0.7.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
+Current application version: **0.8.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
 ## Features
 
