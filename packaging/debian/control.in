@@ -1,11 +1,10 @@
-Package: hifi-album-browser-poc
+Package: lyrion-carousel
 Version: @VERSION@
 Section: sound
 Priority: optional
 Architecture: all
 Maintainer: accidentalskeleton <46867808+accidentalskeleton@users.noreply.github.com>
 Depends: python3 (>= 3.9)
-Description: Book-fan controller for Lyrion Music Server
- A local-network proof of concept that browses an LMS album library with a
- book-page fan interface, controls playback, pages the catalogue and caches
- cover artwork locally.
+Description: Carousel controller for Lyrion Music Server
+ Lyrion Carousel browses an LMS album library with a circular book-page
+ interface, controls playback and caches cover artwork locally.

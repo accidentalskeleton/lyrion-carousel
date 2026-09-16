@@ -1,5 +1,5 @@
 [Unit]
-Description=Hi-fi Lyrion album browser POC
+Description=Lyrion Carousel
 After=network-online.target
 Wants=network-online.target
 
@@ -8,19 +8,17 @@ Type=simple
 Environment=LMS_URL=http://mrlazy:9000
 Environment=BIND_ADDRESS=0.0.0.0
 Environment=PORT=8088
-Environment=CACHE_DIR=/var/cache/hifi-album-browser-poc/artwork
+Environment=CACHE_DIR=/var/cache/lyrion-carousel/artwork
 Environment=BATCH_SIZE=40
 Environment=IDLE_RETURN_SECONDS=30
-Environment=LIBRARY_CHECK_SECONDS=30
-Environment=STATUS_POLL_SECONDS=2
 Environment=RECONNECT_MAX_SECONDS=30
 Environment=RANDOM_SCROLL_MAX_SECONDS=3
 Environment=SEARCH_LIMIT=100
-EnvironmentFile=-/etc/default/hifi-album-browser-poc
-ExecStart=/usr/bin/python3 /opt/hifi-album-browser-poc/server.py --lms ${LMS_URL} --bind ${BIND_ADDRESS} --port ${PORT} --cache-dir ${CACHE_DIR} --batch-size ${BATCH_SIZE} --idle-return-seconds ${IDLE_RETURN_SECONDS} --library-check-seconds ${LIBRARY_CHECK_SECONDS} --status-poll-seconds ${STATUS_POLL_SECONDS} --reconnect-max-seconds ${RECONNECT_MAX_SECONDS} --random-scroll-max-seconds ${RANDOM_SCROLL_MAX_SECONDS} --search-limit ${SEARCH_LIMIT}
-WorkingDirectory=/opt/hifi-album-browser-poc
+EnvironmentFile=-/etc/default/lyrion-carousel
+ExecStart=/usr/bin/python3 /opt/lyrion-carousel/server.py --lms ${LMS_URL} --bind ${BIND_ADDRESS} --port ${PORT} --cache-dir ${CACHE_DIR} --batch-size ${BATCH_SIZE} --idle-return-seconds ${IDLE_RETURN_SECONDS} --reconnect-max-seconds ${RECONNECT_MAX_SECONDS} --random-scroll-max-seconds ${RANDOM_SCROLL_MAX_SECONDS} --search-limit ${SEARCH_LIMIT}
+WorkingDirectory=/opt/lyrion-carousel
 DynamicUser=yes
-CacheDirectory=hifi-album-browser-poc
+CacheDirectory=lyrion-carousel
 CacheDirectoryMode=0750
 Restart=on-failure
 RestartSec=5

@@ -3,8 +3,8 @@ set -e
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     systemctl daemon-reload
-    systemctl enable hifi-album-browser-poc.service >/dev/null
-    systemctl restart hifi-album-browser-poc.service || true
+    systemctl enable lyrion-carousel.service >/dev/null
+    systemctl restart lyrion-carousel.service || true
 fi
 
 exit 0

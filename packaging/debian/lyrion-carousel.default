@@ -1,0 +1,15 @@
+# Lyrion Music Server used by Lyrion Carousel.
+LMS_URL=http://mrlazy:9000
+
+# Listen on the LAN. Use 127.0.0.1 for local access only.
+BIND_ADDRESS=0.0.0.0
+PORT=8088
+
+# Persistent artwork cache owned automatically by the systemd service.
+CACHE_DIR=/var/cache/lyrion-carousel/artwork
+
+BATCH_SIZE=40
+IDLE_RETURN_SECONDS=30
+RECONNECT_MAX_SECONDS=30
+RANDOM_SCROLL_MAX_SECONDS=3
+SEARCH_LIMIT=100

@@ -2,8 +2,8 @@
 set -e
 
 if [ "$1" = "remove" ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
-    systemctl stop hifi-album-browser-poc.service || true
-    systemctl disable hifi-album-browser-poc.service >/dev/null || true
+    systemctl stop lyrion-carousel.service || true
+    systemctl disable lyrion-carousel.service >/dev/null || true
 fi
 
 exit 0
