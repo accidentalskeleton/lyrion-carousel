@@ -2,12 +2,13 @@
 
 Lyrion Carousel is the album-browsing and playback-control interface for Lyrion Music Server (LMS) in this hi-fi project. It presents the library as a circular, book-like carousel of CD jewel cases while keeping the normal listening screen deliberately uncluttered.
 
-Current application version: **1.0.0**. The canonical version is stored in [`VERSION`](VERSION).
+Current application version: **0.7.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
 ## Features
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
 - circular book/page-style album carousel with realistic jewel-case presentation;
+- startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - incremental 40-album catalogue batches with neighbouring-batch prefetch;
 - lightweight album-ID → `sort:artflow` position index for direct jumps;
 - persistent server-side artwork cache;
@@ -19,9 +20,9 @@ Current application version: **1.0.0**. The canonical version is stored in [`VER
 - LMS CometD long-polling for live playback and server/library state;
 - current track, track number and locally advancing progress display;
 - configurable automatic return to the playing album after an idle period;
-- saved player and album position across browser sessions;
-- configurable carousel density;
-- Settings panel containing Player, Idle return, Random scroll duration, Carousel density and Status/About;
+- saved player selection across browser sessions;
+- live configurable carousel density, idle return and random-scroll duration;
+- Settings panel with explicit LMS, CometD/live-update, player, library, cache and application status;
 - automatic LMS reconnection;
 - installable/fullscreen-friendly web-app metadata and application icon;
 - zero-idle-loop long-task performance diagnostics.
@@ -47,7 +48,6 @@ lyrion-carousel/
 │   ├── lms.js
 │   ├── resilience.js
 │   ├── performance.js
-│   ├── settings-runtime.js
 │   └── settings.js
 ├── packaging/debian/
 ├── server.py
@@ -86,25 +86,39 @@ python3 server.py --bind 0.0.0.0
 | `--random-scroll-max-seconds` | `3` | Default maximum shamrock animation duration |
 | `--search-limit` | `100` | Maximum albums returned by a search |
 
-Player, idle return, random-scroll duration and carousel density can also be selected in Settings. Browser settings are stored locally.
+Player, idle return, random-scroll duration and carousel density can also be selected in Settings. Browser settings are stored locally. Idle return, random duration and density are applied immediately without a reload.
+
+## Startup and browsing behaviour
+
+The live carousel is not rendered until LMS catalogue and player status are resolved. If the selected player is playing, its current `album_id` is located and that album is the first visible selection. If the player is not playing, a random library position is selected and displayed without starting playback. The completed carousel then fades in briefly.
+
+While the user browses, CometD status changes do not forcibly steal the carousel position. Once the configured idle period expires, the carousel resolves the then-current playing `album_id` and returns smoothly to it. This also covers playback being changed from another LMS controller while Lyrion Carousel is being browsed.
 
 ## Jewel-case rendering
 
-Artwork is fetched through `/api/art/<artwork-id>` and cached on disk. The carousel uses real LMS artwork as the booklet image. `assets/jewel-case-overlay.svg` is now authoritative for the complete physical case: outer clear shell, black ribbed hinge, clear separator, opening border, latches and reflections. Legacy CSS/DOM case pieces are suppressed rather than visually duplicated.
+Artwork is fetched through `/api/art/<artwork-id>` and cached on disk. The carousel uses real LMS artwork as the booklet image. `assets/jewel-case-overlay.svg` is authoritative for the complete physical case: outer clear shell, black ribbed hinge, clear separator, opening border, latches and reflections. Legacy CSS/DOM case pieces are suppressed rather than visually duplicated.
 
-The overlay URL is versioned in CSS so an updated case cannot be hidden by a stale browser cache. Carousel transforms remain independent of case construction.
+The overlay URL is versioned so an updated case cannot be hidden by a stale browser cache. Carousel transforms remain independent of case construction.
 
 ## Catalogue loading, persistence and outages
 
 LMS is queried in fixed batches using `albums <start> <batch-size> sort:artflow tags:ajlys`. Current and neighbouring batches are prefetched automatically, including across the final/first album boundary. A lightweight `tags:s` request builds the album-ID-to-position map.
 
-`js/resilience.js` retains successful read-only `players` and `albums` RPC responses in browser local storage. If LMS is temporarily unreachable, those responses can be replayed so the previously seen library remains available for browsing while normal reconnect attempts continue. Mutating/player-control RPC calls are deliberately never cached or replayed.
+`js/resilience.js` retains successful read-only `players` and `albums` RPC responses in browser local storage. If LMS is temporarily unreachable, those responses can be replayed so previously seen catalogue data remains available while normal reconnect attempts continue. Stale replayed catalogue responses are explicitly marked so Status/About can distinguish cached from live data. Mutating/player-control RPC calls are deliberately never cached or replayed.
 
-CometD subscribes to player status and LMS `serverstatus`. When a library scan completes, Lyrion Carousel refreshes the catalogue, album count and position index once.
+CometD subscribes to player status and LMS `serverstatus`. When a library scan completes, Lyrion Carousel refreshes the catalogue, album count and position index once. Status/About reports LMS connectivity and CometD/live-update state separately.
+
+### Reconnect acceptance check
+
+Before deployment to the wall controller, exercise this sequence against the real LMS installation: start Lyrion Carousel and browse enough of the library to populate browser/artwork caches; stop LMS; confirm previously cached catalogue/artwork remains browsable and playback controls fail safely; restart LMS; confirm the connection and live-update indicators recover and playback commands work again without reloading the page. This is an integration test and cannot be considered passed until run against the actual LMS service.
+
+## Carousel density
+
+Density changes the geometry of the complete carousel rather than scaling only the front face of each jewel case. Compact tightens case size/spread/step, Normal uses the reference geometry, and Spacious increases them. The physical case remains a single coherent object in every mode.
 
 ## Performance
 
-The signature interaction is intentionally based on compositor-friendly `translate3d`/rotation transforms. Jewel cases are layout/style-contained and marked for transform/filter/opacity compositing. Catalogue batching limits the number of album elements/artworks normally present at once rather than constructing the entire library up front.
+The signature interaction is intentionally based on compositor-friendly `translate3d`/rotation transforms. Jewel cases are marked for transform/filter/opacity compositing. Catalogue batching limits the number of album elements/artworks normally present at once rather than constructing the entire library up front.
 
 `js/performance.js` uses `PerformanceObserver` where supported to report main-thread tasks of 100 ms or longer to the developer console. It does **not** run a permanent `requestAnimationFrame` loop or add polling while the carousel is idle. Final acceptance should include measured frame-rate/memory testing on the intended Raspberry Pi/display hardware with the full library.
 
@@ -116,7 +130,7 @@ The signature interaction is intentionally based on compositor-friendly `transla
 
 `VERSION` is the single canonical application version. Settings → Status/About reads it directly. Debian packaging reads the same file by default, so the UI and generated package do not maintain independent version numbers.
 
-A package version can still be explicitly supplied to the build script for packaging experiments, but normal release builds should use the canonical value.
+The version is deliberately **not** auto-incremented by feature work or packaging. It remains at the value in `VERSION` until an explicit version-change request is made.
 
 ## Debian packaging
 
@@ -151,4 +165,5 @@ The package includes `VERSION`, the web-app manifest, assets, CSS and JavaScript
 - Search is capped by `--search-limit` (100 by default).
 - Artwork cache eviction and automatic cover-change invalidation are not yet implemented.
 - Browser catalogue fallback only contains read-only LMS responses previously seen by that browser; it is not an independent mirror of the complete LMS database.
+- Final reconnect acceptance still needs to be exercised against the actual LMS installation.
 - Final 60 fps/memory acceptance testing still needs to be performed on the intended wall-controller hardware.
