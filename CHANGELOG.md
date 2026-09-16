@@ -20,6 +20,9 @@ All notable changes to Lyrion Carousel are documented here.
 
 - Expand the desktop carousel to use available viewport height.
 - Center and scale desktop jewel cases within the larger carousel stage while preserving the existing mobile layout.
+- Add long-press album actions for playing now, playing after the current album, and adding to the queue.
+- Add a configurable album-menu timeout, defaulting to 10 seconds.
+- Add track-list viewing and clear-playlist-and-play actions to the album menu.
 
 ## [0.7.0] - 2026-09-16
 
