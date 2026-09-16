@@ -11,11 +11,11 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/lyrion-carousel-icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/album-browser.css">
-  <link rel="stylesheet" href="css/jewel-overlay.css?v=1.0.0">
+  <link rel="stylesheet" href="css/jewel-overlay.css?v=0.7.0">
   <link rel="stylesheet" href="css/settings.css">
 </head>
 <body>
-<div id="book-fan-browser" aria-label="Lyrion Carousel album browser">
+<div id="book-fan-browser" class="is-starting" aria-label="Lyrion Carousel album browser">
   <section class="bf-screen">
     <div class="bf-header">
       <span class="bf-connection"><span class="bf-status-dot" aria-hidden="true"></span><span class="bf-connection-label">Connecting to Lyrion…</span><button class="bf-settings-open" type="button" aria-label="Settings" title="Settings">i</button></span>
@@ -27,11 +27,11 @@
         <div class="bf-settings-body">
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Player</strong><span>Choose the Lyrion player controlled by this browser.</span></div><select class="bf-player-select" aria-label="Lyrion player" disabled><option>Discovering…</option></select></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Idle return</strong><span>Return to the playing album after browsing has stopped.</span></div><select class="bf-idle-return" aria-label="Idle return delay"><option value="0">Off</option><option value="15000">15 seconds</option><option value="30000">30 seconds</option><option value="60000">1 minute</option><option value="120000">2 minutes</option></select></div>
-          <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Random scroll duration</strong><span>Maximum time for the shamrock animation to reach its album.</span></div><select class="bf-random-duration" aria-label="Random scroll duration"><option value="1000">1 second</option><option value="2000">2 seconds</option><option value="3000">3 seconds</option><option value="5000">5 seconds</option></select></div>
-          <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Carousel density</strong><span>Adjust the visual size of cases without changing the book-style movement.</span></div><select class="bf-carousel-density" aria-label="Carousel density"><option value="compact">Compact</option><option value="normal">Normal</option><option value="spacious">Spacious</option></select></div>
-          <div class="bf-settings-about"><div class="bf-settings-copy"><strong>Status / About</strong><span>Live information from this browser session.</span></div><dl class="bf-status-grid"><div><dt>Connection</dt><dd class="bf-about-connection">—</dd></div><div><dt>Player</dt><dd class="bf-about-player">—</dd></div><div><dt>Library</dt><dd class="bf-about-library">—</dd></div><div><dt>Application</dt><dd>Lyrion Carousel <span class="bf-about-version">—</span></dd></div></dl></div>
+          <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Random scroll duration</strong><span>Maximum time for the shamrock animation to reach its album.</span></div><select class="bf-random-duration" aria-label="Random scroll duration"><option value="1000">1 second</option><option value="2000">2 seconds</option><option value="3000">3 seconds</option></select></div>
+          <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Carousel density</strong><span>Adjust the spacing and size of the complete jewel cases.</span></div><select class="bf-carousel-density" aria-label="Carousel density"><option value="compact">Compact</option><option value="normal">Normal</option><option value="spacious">Spacious</option></select></div>
+          <div class="bf-settings-about"><div class="bf-settings-copy"><strong>Status / About</strong><span>Live information from this browser session.</span></div><dl class="bf-status-grid"><div><dt>LMS</dt><dd class="bf-about-connection">—</dd></div><div><dt>Live updates</dt><dd class="bf-about-live">—</dd></div><div><dt>Player</dt><dd class="bf-about-player">—</dd></div><div><dt>Library</dt><dd class="bf-about-library">—</dd></div><div><dt>Cache</dt><dd class="bf-about-cache">—</dd></div><div><dt>Application</dt><dd>Lyrion Carousel <span class="bf-about-version">—</span></dd></div></dl></div>
         </div>
-        <div class="bf-settings-note">Timing changes are saved and take effect after the browser reloads.</div>
+        <div class="bf-settings-note">Changes are saved and applied immediately.</div>
       </div>
     </div>
     <div class="bf-search-overlay" hidden><div class="bf-search-panel"><div class="bf-search-row"><input class="bf-search-input" type="search" placeholder="Search albums or artists" autocomplete="off" aria-label="Search albums or artists"><button class="bf-search-close" type="button" aria-label="Close search">×</button></div><div class="bf-alphabet" aria-label="Jump by artist initial"></div><div class="bf-search-status">Type to search, or choose an artist initial.</div><div class="bf-search-results"></div></div></div>
@@ -42,6 +42,6 @@
   </section>
 </div>
 <script src="js/resilience.js"></script>
-<script type="module" src="js/settings-runtime.js"></script><script type="module" src="js/app.js"></script><script type="module" src="js/settings.js"></script><script type="module" src="js/performance.js"></script>
+<script type="module" src="js/settings.js"></script><script type="module" src="js/app.js"></script><script type="module" src="js/performance.js"></script>
 </body>
 </html>
