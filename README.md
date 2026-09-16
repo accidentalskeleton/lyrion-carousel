@@ -1,6 +1,6 @@
 # Lyrion Carousel
 
-Lyrion Carousel is the album-browsing and playback-control interface for Lyrion Music Server (LMS) in this hi-fi project. It presents the library as a circular, book-like carousel of CD jewel cases while keeping the normal listening screen deliberately uncluttered.
+Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). It presents the music library as a continuous, book-like carousel of CD jewel cases while keeping the normal listening screen deliberately uncluttered.
 
 Current application version: **0.7.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
@@ -35,20 +35,10 @@ lyrion-carousel/
 ├── index.html
 ├── manifest.webmanifest
 ├── assets/
-│   ├── jewel-case-overlay.svg
-│   └── lyrion-carousel-icon.svg
 ├── css/
-│   ├── album-browser.css
-│   ├── jewel-overlay.css
-│   └── settings.css
+├── docs/
+│   └── wall-controller.md
 ├── js/
-│   ├── app.js
-│   ├── browser.js
-│   ├── catalogue.js
-│   ├── lms.js
-│   ├── resilience.js
-│   ├── performance.js
-│   └── settings.js
 ├── packaging/debian/
 ├── server.py
 └── README.md
@@ -59,7 +49,7 @@ There is no Node/npm dependency and no build step. `server.py` serves the client
 ## Run directly
 
 ```bash
-cd software/lyrion-carousel
+cd lyrion-carousel
 python3 server.py
 ```
 
@@ -110,7 +100,7 @@ CometD subscribes to player status and LMS `serverstatus`. When a library scan c
 
 ### Reconnect acceptance check
 
-Before deployment to the wall controller, exercise this sequence against the real LMS installation: start Lyrion Carousel and browse enough of the library to populate browser/artwork caches; stop LMS; confirm previously cached catalogue/artwork remains browsable and playback controls fail safely; restart LMS; confirm the connection and live-update indicators recover and playback commands work again without reloading the page. This is an integration test and cannot be considered passed until run against the actual LMS service.
+Before deployment to a dedicated controller, exercise this sequence against the real LMS installation: start Lyrion Carousel and browse enough of the library to populate browser/artwork caches; stop LMS; confirm previously cached catalogue/artwork remains browsable and playback controls fail safely; restart LMS; confirm the connection and live-update indicators recover and playback commands work again without reloading the page. This is an integration test and cannot be considered passed until run against the actual LMS service.
 
 ## Carousel density
 
@@ -120,11 +110,13 @@ Density changes the geometry of the complete carousel rather than scaling only t
 
 The signature interaction is intentionally based on compositor-friendly `translate3d`/rotation transforms. Jewel cases are marked for transform/filter/opacity compositing. Catalogue batching limits the number of album elements/artworks normally present at once rather than constructing the entire library up front.
 
-`js/performance.js` uses `PerformanceObserver` where supported to report main-thread tasks of 100 ms or longer to the developer console. It does **not** run a permanent `requestAnimationFrame` loop or add polling while the carousel is idle. Final acceptance should include measured frame-rate/memory testing on the intended Raspberry Pi/display hardware with the full library.
+`js/performance.js` uses `PerformanceObserver` where supported to report main-thread tasks of 100 ms or longer to the developer console. It does **not** run a permanent `requestAnimationFrame` loop or add polling while the carousel is idle. Final acceptance should include measured frame-rate/memory testing on the intended controller/display hardware with the full library.
 
 ## Web-app / kiosk use
 
 `manifest.webmanifest`, the application icon and fullscreen display metadata allow Lyrion Carousel to behave more like a dedicated appliance when installed/launched from a supporting browser. This does not add a service worker or attempt to cache the application shell; LMS reconnection and catalogue fallback remain explicit application behaviours.
+
+The planned wall-controller/display hardware is documented separately in [`docs/wall-controller.md`](docs/wall-controller.md).
 
 ## Versioning
 
@@ -134,7 +126,7 @@ The version is deliberately **not** auto-incremented by feature work or packagin
 
 ## Debian packaging
 
-Build from `software/lyrion-carousel`:
+Build from the repository root:
 
 ```bash
 packaging/debian/build-deb.sh
@@ -166,4 +158,4 @@ The package includes `VERSION`, the web-app manifest, assets, CSS and JavaScript
 - Artwork cache eviction and automatic cover-change invalidation are not yet implemented.
 - Browser catalogue fallback only contains read-only LMS responses previously seen by that browser; it is not an independent mirror of the complete LMS database.
 - Final reconnect acceptance still needs to be exercised against the actual LMS installation.
-- Final 60 fps/memory acceptance testing still needs to be performed on the intended wall-controller hardware.
+- Final 60 fps/memory acceptance testing still needs to be performed on the intended controller hardware.
