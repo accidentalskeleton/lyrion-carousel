@@ -2,7 +2,7 @@ const root=document.getElementById('book-fan-browser');
 const openButton=root?.querySelector('.bf-settings-open'),overlay=root?.querySelector('.bf-settings-overlay'),closeButton=root?.querySelector('.bf-settings-close');
 const player=root?.querySelector('.bf-player-select'),idle=root?.querySelector('.bf-idle-return'),menuTimeout=root?.querySelector('.bf-album-menu-timeout'),random=root?.querySelector('.bf-random-duration'),density=root?.querySelector('.bf-carousel-density'),lmsUrl=root?.querySelector('.bf-lms-url'),lmsConnect=root?.querySelector('.bf-lms-connect-button');
 const aboutConnection=root?.querySelector('.bf-about-connection'),aboutLive=root?.querySelector('.bf-about-live'),aboutPlayer=root?.querySelector('.bf-about-player'),aboutLibrary=root?.querySelector('.bf-about-library'),aboutCache=root?.querySelector('.bf-about-cache'),aboutVersion=root?.querySelector('.bf-about-version'),clearCacheButton=root?.querySelector('.bf-clear-cache'),cacheFeedback=root?.querySelector('.bf-cache-feedback');
-const storage={idle:'albumBrowserIdleReturnMs',menuTimeout:'albumBrowserAlbumMenuTimeoutMs',random:'albumBrowserRandomScrollMs',density:'albumBrowserCarouselDensity',lms:'albumBrowserLmsUrl'};
+const storage={idle:'albumBrowserIdleReturnMs',menuTimeout:'albumBrowserAlbumMenuTimeoutMs',random:'albumBrowserRandomScrollMs',density:'albumBrowserCarouselDensity',lms:'albumBrowserLmsUrl'}
 function get(key,fallback){try{return localStorage.getItem(key)??fallback}catch(_){return fallback}}
 function set(key,value){try{localStorage.setItem(key,value)}catch(_){}}
 function apply(value,name){set(storage[name],value);window.dispatchEvent(new CustomEvent('lyrion-carousel-setting',{detail:{name,value}}))}
