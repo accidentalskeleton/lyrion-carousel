@@ -1,7 +1,7 @@
 const root=document.getElementById('book-fan-browser');
 const openButton=root?.querySelector('.bf-settings-open'),overlay=root?.querySelector('.bf-settings-overlay'),closeButton=root?.querySelector('.bf-settings-close');
 const player=root?.querySelector('.bf-player-select'),idle=root?.querySelector('.bf-idle-return'),random=root?.querySelector('.bf-random-duration'),density=root?.querySelector('.bf-carousel-density');
-const aboutConnection=root?.querySelector('.bf-about-connection'),aboutLive=root?.querySelector('.bf-about-live'),aboutPlayer=root?.querySelector('.bf-about-player'),aboutLibrary=root?.querySelector('.bf-about-library'),aboutCache=root?.querySelector('.bf-about-cache'),aboutVersion=root?.querySelector('.bf-about-version');
+const aboutConnection=root?.querySelector('.bf-about-connection'),aboutLive=root?.querySelector('.bf-about-live'),aboutPlayer=root?.querySelector('.bf-about-player'),aboutLibrary=root?.querySelector('.bf-about-library'),aboutCache=root?.querySelector('.bf-about-cache'),aboutVersion=root?.querySelector('.bf-about-version'),clearCacheButton=root?.querySelector('.bf-clear-cache'),cacheFeedback=root?.querySelector('.bf-cache-feedback');
 const storage={idle:'albumBrowserIdleReturnMs',random:'albumBrowserRandomScrollMs',density:'albumBrowserCarouselDensity'};
 function get(key,fallback){try{return localStorage.getItem(key)??fallback}catch(_){return fallback}}
 function set(key,value){try{localStorage.setItem(key,value)}catch(_){}}
@@ -15,6 +15,7 @@ idle?.addEventListener('change',()=>apply(idle.value,'idle'));
 random?.addEventListener('change',()=>apply(random.value,'random'));
 density?.addEventListener('change',()=>apply(density.value,'density'));
 player?.addEventListener('change',()=>setTimeout(refreshStatus,0));
+clearCacheButton?.addEventListener('click',async()=>{if(!confirm('Clear all cached artwork from the server?'))return;clearCacheButton.disabled=true;if(cacheFeedback)cacheFeedback.textContent='Clearing…';try{const response=await fetch('/api/cache/clear',{method:'POST'});if(!response.ok)throw Error('Cache clear failed');const result=await response.json();if(cacheFeedback)cacheFeedback.textContent=(result.removed??0)+' cached files removed';if(aboutCache)aboutCache.textContent='Artwork cache cleared'}catch(_){if(cacheFeedback)cacheFeedback.textContent='Could not clear artwork cache'}finally{clearCacheButton.disabled=false}});
 window.addEventListener('lyrion-carousel-status',refreshStatus);
 openButton?.addEventListener('click',openSettings);closeButton?.addEventListener('click',closeSettings);overlay?.addEventListener('click',event=>{if(event.target===overlay)closeSettings()});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&overlay&&!overlay.hidden)closeSettings()});
 initialise();
