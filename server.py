@@ -31,6 +31,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         super().__init__(*args,directory=directory,**kwargs)
     def do_POST(self)->None:
         path=urlsplit(self.path).path
+        if path=='/api/cache/clear': self._clear_cache(); return
         if path not in {'/api/lms','/api/cometd'}: self.send_error(404); return
         try: length=int(self.headers.get('Content-Length','0'))
         except ValueError: self.send_error(400,'Invalid Content-Length'); return
@@ -41,6 +42,13 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if path=='/api/cometd':
             self._log_cometd(payload); self._relay(Request(f'{self.lms_url}/cometd',data=body,headers={'Content-Type':'application/json'},method='POST'),70); return
         self._log_lms_rpc(payload); self._relay(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'},method='POST'))
+    def _clear_cache(self)->None:
+        removed=0
+        try:
+            for path in self.cache_dir.rglob('*'):
+                if path.is_file() or path.is_symlink(): path.unlink(); removed+=1
+            self._send_payload(200,json.dumps({'removed':removed}).encode(),'application/json; charset=utf-8',cache_control='no-store')
+        except OSError as error: self._send_upstream_error(error)
     def _log_lms_rpc(self,payload:object)->None:
         try:
             params=payload.get('params') if isinstance(payload,dict) else None
