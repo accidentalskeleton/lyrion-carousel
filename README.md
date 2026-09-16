@@ -17,6 +17,7 @@ Current application version: **0.7.0**. The canonical version is stored in [`VER
 - album/artist search and A–Z navigation;
 - shamrock random-album selection with configurable animation duration;
 - click/tap a cover to load and play that album;
+- long-press a cover to clear the playlist and play it, play it now, play it after the current album, add it to the queue, or open Album Information;
 - LMS CometD long-polling for live playback and server/library state;
 - current track, track number and locally advancing progress display;
 - configurable automatic return to the playing album after an idle period;
@@ -76,7 +77,7 @@ python3 server.py --bind 0.0.0.0
 | `--random-scroll-max-seconds` | `3` | Default maximum shamrock animation duration |
 | `--search-limit` | `100` | Maximum albums returned by a search |
 
-The Lyrion Music Server URL, player, idle return, random-scroll duration and carousel density can also be selected in Settings. Changing the server URL reconnects the running proxy and refreshes the available player list. Browser settings, including the selected LMS URL, are stored locally and reapplied when that browser restarts. The server URL is runtime state on the proxy; set `LMS_URL` in `/etc/default/lyrion-carousel` for the persistent machine-wide default. Idle return, random duration and density are applied immediately without a reload.
+The Lyrion Music Server URL, player, idle return, album-menu timeout, random-scroll duration and carousel density can also be selected in Settings. Changing the server URL reconnects the running proxy and refreshes the available player list. Browser settings, including the selected LMS URL, are stored locally and reapplied when that browser restarts. The server URL is runtime state on the proxy; set `LMS_URL` in `/etc/default/lyrion-carousel` for the persistent machine-wide default. Idle return, menu timeout, random duration and density are applied immediately without a reload.
 
 ## Startup and browsing behaviour
 
