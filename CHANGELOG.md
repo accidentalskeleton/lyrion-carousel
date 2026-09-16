@@ -16,6 +16,11 @@ All notable changes to Lyrion Carousel are documented here.
 - Build the album ID-to-position index with sequential page-sized LMS requests instead of one request for the entire library.
 - Preserve absolute album positions across index pages so playback and search navigation continue to locate albums correctly.
 
+### User experience
+
+- Expand the desktop carousel to use available viewport height.
+- Center and scale desktop jewel cases within the larger carousel stage while preserving the existing mobile layout.
+
 ## [0.7.0] - 2026-09-16
 
 - Initial tagged release.
