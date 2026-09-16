@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serve the album browser and proxy its requests to Lyrion Music Server."""
+"""Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
 import argparse, hashlib, json, os, re, shutil, socket, sys, threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -19,8 +19,8 @@ def non_negative_int(value:str)->int:
     if parsed<0: raise argparse.ArgumentTypeError("must be zero or greater")
     return parsed
 
-class AlbumBrowserHandler(SimpleHTTPRequestHandler):
-    server_version="AlbumBrowserPOC/2.1"
+class LyrionCarouselHandler(SimpleHTTPRequestHandler):
+    server_version="LyrionCarousel/1.0"
     def __init__(self,*args,directory:str,lms_url:str,cache_dir:Path,runtime_config:dict[str,int],**kwargs):
         self.lms_url=lms_url.rstrip('/'); self.cache_dir=cache_dir; self.runtime_config=runtime_config
         super().__init__(*args,directory=directory,**kwargs)
@@ -89,10 +89,10 @@ def main()->int:
         removed=sum(1 for path in cache_dir.rglob('*') if path.is_file()); shutil.rmtree(cache_dir); print(f"Cleared artwork cache: {removed} file{'s' if removed!=1 else ''} removed from {cache_dir}")
     cache_dir.mkdir(parents=True,exist_ok=True)
     runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit}
-    def handler(*handler_args,**handler_kwargs): return AlbumBrowserHandler(*handler_args,directory=str(static_dir),lms_url=args.lms,cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
+    def handler(*handler_args,**handler_kwargs): return LyrionCarouselHandler(*handler_args,directory=str(static_dir),lms_url=args.lms,cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
     server=ThreadingHTTPServer((args.bind,args.port),handler)
-    if args.bind in {'0.0.0.0','::'}: print('Album browser listening on all network interfaces.'); print(f'Open: http://{socket.gethostname()}:{args.port}/ or http://<server-ip>:{args.port}/')
-    else: print(f'Album browser: http://{args.bind}:{args.port}/')
+    if args.bind in {'0.0.0.0','::'}: print('Lyrion Carousel listening on all network interfaces.'); print(f'Open: http://{socket.gethostname()}:{args.port}/ or http://<server-ip>:{args.port}/')
+    else: print(f'Lyrion Carousel: http://{args.bind}:{args.port}/')
     print(f'Lyrion server: {args.lms}'); print(f'Artwork cache: {cache_dir}'); print(f'Runtime config: batch={args.batch_size}, idle={args.idle_return_seconds}s, library-events=CometD, live-status=CometD, album-index=lightweight, random-scroll-max={args.random_scroll_max_seconds}s')
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nStopping.')
