@@ -9,7 +9,12 @@ from urllib.parse import quote, unquote, urlsplit
 from urllib.request import Request, urlopen
 
 MAX_RPC_BYTES=1_000_000
+MAX_UPSTREAM_BYTES=8_000_000
+MAX_ARTWORK_BYTES=10_000_000
+MAX_ARTWORK_CACHE_BYTES=512_000_000
 ARTWORK_ID=re.compile(r"^[A-Za-z0-9._:@%-]+$")
+class UpstreamPayloadTooLarge(Exception):
+    pass
 def positive_int(value:str)->int:
     parsed=int(value)
     if parsed<1: raise argparse.ArgumentTypeError("must be at least 1")
@@ -60,19 +65,47 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if payload is not None: self._send_payload(200,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'HIT'}); return
         try:
             with urlopen(Request(f"{self.lms_url}/music/{quote(artwork_id,safe='')}/cover.jpg",method='GET'),timeout=10) as response:
-                payload=response.read(); content_type=response.headers.get_content_type() or 'image/jpeg'; self._store_artwork(cache_path,type_path,payload,content_type); self._send_payload(response.status,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'MISS'})
+                payload=self._read_limited(response,MAX_ARTWORK_BYTES); content_type=response.headers.get_content_type() or 'image/jpeg'; self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache(); self._send_payload(response.status,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'MISS'})
         except HTTPError as error: self._send_http_error(error)
+        except UpstreamPayloadTooLarge as error: self._send_upstream_error(error)
         except (URLError,TimeoutError,OSError) as error: self._send_upstream_error(error)
     def _store_artwork(self,cache_path:Path,type_path:Path,payload:bytes,content_type:str)->None:
         suffix=f'.{os.getpid()}.{threading.get_ident()}.tmp'; image_temp=cache_path.with_name(cache_path.name+suffix); type_temp=type_path.with_name(type_path.name+suffix)
         try: image_temp.write_bytes(payload); type_temp.write_text(content_type,encoding='ascii'); image_temp.replace(cache_path); type_temp.replace(type_path)
         finally: image_temp.unlink(missing_ok=True); type_temp.unlink(missing_ok=True)
+    def _prune_artwork_cache(self)->None:
+        entries=[]; total=0
+        for path in self.cache_dir.glob('*.img'):
+            try:
+                size=path.stat().st_size; entries.append((path.stat().st_mtime,path,size)); total+=size
+            except OSError: continue
+        for _,path,size in sorted(entries):
+            if total<=MAX_ARTWORK_CACHE_BYTES: break
+            try:
+                path.unlink(); path.with_suffix('.type').unlink(missing_ok=True); total-=size
+            except OSError: continue
+    def _read_limited(self,response,limit:int)->bytes:
+        content_length=response.headers.get('Content-Length')
+        try:
+            if content_length is not None and int(content_length)>limit: raise UpstreamPayloadTooLarge(f'Upstream response exceeds {limit} bytes')
+        except ValueError: pass
+        chunks=[]; total=0
+        while True:
+            chunk=response.read(min(65536,limit-total+1))
+            if not chunk: break
+            chunks.append(chunk); total+=len(chunk)
+            if total>limit: raise UpstreamPayloadTooLarge(f'Upstream response exceeds {limit} bytes')
+        return b''.join(chunks)
     def _relay(self,request:Request,timeout:int=10)->None:
         try:
-            with urlopen(request,timeout=timeout) as response: self._send_payload(response.status,response.read(),response.headers.get('Content-Type','application/octet-stream'),cache_control='no-store')
+            with urlopen(request,timeout=timeout) as response: self._send_payload(response.status,self._read_limited(response,MAX_UPSTREAM_BYTES),response.headers.get('Content-Type','application/octet-stream'),cache_control='no-store')
         except HTTPError as error: self._send_http_error(error)
+        except UpstreamPayloadTooLarge as error: self._send_upstream_error(error)
         except (URLError,TimeoutError,OSError) as error: self._send_upstream_error(error)
-    def _send_http_error(self,error:HTTPError)->None: self._send_payload(error.code,error.read(),error.headers.get('Content-Type','text/plain'),cache_control='no-store')
+    def _send_http_error(self,error:HTTPError)->None:
+        try: payload=self._read_limited(error,MAX_UPSTREAM_BYTES)
+        except UpstreamPayloadTooLarge as too_large: self._send_upstream_error(too_large); return
+        self._send_payload(error.code,payload,error.headers.get('Content-Type','text/plain'),cache_control='no-store')
     def _send_upstream_error(self,error:Exception)->None: self._send_payload(502,f'Could not contact LMS: {error}'.encode('utf-8','replace'),'text/plain; charset=utf-8',cache_control='no-store')
     def _send_payload(self,status:int,payload:bytes,content_type:str,*,cache_control:str,extra_headers:dict[str,str]|None=None)->None:
         self.send_response(status); self.send_header('Content-Type',content_type); self.send_header('Content-Length',str(len(payload))); self.send_header('Cache-Control',cache_control)
