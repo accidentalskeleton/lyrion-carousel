@@ -1,19 +1,19 @@
 # Lyrion Carousel
 
-Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). This experimental branch presents the library as a circular shelf of CD spines with an opening album cover. It replaces the earlier photorealistic/WebGL experiment with a CSS shelf; no remote renderer or font downloads are required.
+Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines or a fan of jewel-case covers. Both displays use CSS transforms; no WebGL renderer or remote font downloads are required.
 
-Current application version: **0.8.1**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
+Current application version: **0.9.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
 ## Features
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
 - circular CD shelf with artwork-derived spine colours, stable readable font choices, and configurable displayed-album count;
-- saved artist/album, album-only, or random display mode; random order is retained across library refreshes within the session;
+- saved Shelf/Fan display style and server-prepared artist/album, album-only, colour or random ordering; random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
-- bounded catalogue requests (40 albums by default), with a complete catalogue loaded for display ordering and only a window of spines rendered;
+- server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered;
 - paged album-ID → `sort:artflow` position index for direct jumps;
-- persistent server-side artwork cache;
-- browser-side cached LMS discovery/catalogue fallback for temporary LMS outages;
+- persistent server-side artwork and spine metadata cache, plus resized covers (128–1024 px);
+- browser-side caching of read-only LMS discovery and album RPCs; prepared ordering requires LMS connectivity;
 - event-driven library refresh after LMS scans complete;
 - album/artist search and A–Z navigation;
 - shamrock random-album selection with configurable animation duration;
@@ -73,15 +73,15 @@ python3 server.py --bind 0.0.0.0
 | `--lms` | `http://mrlazy:9000` | Lyrion Music Server base URL |
 | `--bind` | `127.0.0.1` | Controller listening address |
 | `--port` | `8088` | Controller HTTP port |
-| `--cache-dir` | `.cache/album-art` | Persistent artwork location |
-| `--clear-cache` | off | Delete the persistent artwork cache before starting |
-| `--batch-size` | `40` | Albums fetched per LMS catalogue request |
+| `--cache-dir` | `.cache/album-art` | Persistent album cache location |
+| `--clear-cache` | off | Delete cached artwork, resized covers and metadata before starting |
+| `--batch-size` | `40` | Albums per browser fallback/index request (server ordering uses 200) |
 | `--idle-return-seconds` | `30` | Default inactivity before returning to now playing; `0` disables |
 | `--reconnect-max-seconds` | `30` | Maximum reconnect delay |
 | `--random-scroll-max-seconds` | `3` | Maximum random/startup/idle-return scroll duration |
 | `--search-limit` | `100` | Maximum albums returned by a search |
 
-Settings apply immediately and are saved in this browser. They include LMS URL, player, idle return, menu/preview timeouts, maximum scroll duration, displayed albums and keeping the playing cover open. The obsolete carousel-density control has been removed; use Displayed albums to set spine width and spacing.
+Settings apply immediately and are saved in this browser. They include LMS URL, player, idle return, menu/preview timeouts, maximum scroll duration, displayed albums, display style, cover resolution and keeping the playing cover open. The obsolete carousel-density control has been removed; use Displayed albums to set spine width and spacing.
 
 The server URL is shared runtime state on the proxy. Set `LMS_URL` in `/etc/default/lyrion-carousel` for a persistent machine-wide default. Saved browser choices override server defaults; the saved LMS URL is applied before initial discovery.
 
@@ -95,11 +95,19 @@ A short click on an ordinary preview or the surrounding shelf closes it. Hold a 
 
 The detail area shows the album under the pointer; outside the shelf it shows the playing album, or clears when nothing is playing. Track details and progress appear only for the playing album. The heading stays at the same vertical position in both states.
 
+## Display style and cover resolution
+
+**Settings → Display style** switches immediately between Shelf (default) and Fan. The choice is saved per browser; both share ordering, playback and cover controls. Displayed albums controls shelf density; the fan keeps a bounded window of nearby cases.
+
+**Settings → Album cover size** selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls image resolution, not the displayed case size. Server-generated JPEG variants preserve aspect ratio and never upscale. Originals remain available for spine-colour calculation.
+
+**Settings → Status / About → Clear album cache** uses an inline confirmation and removes artwork, resized covers and derived colours, fonts and colour indexes. Metadata rebuilds as needed; colour ordering prepares it for the whole library.
+
 ## Colour ordering
 
 Choose **Colour** in the album-order menu to arrange spines from red through yellow, green, blue and violet. Nearly neutral colours follow, dark to light; albums with unavailable artwork sort last. Equal colours are ordered by artist and title. The choice persists across reloads and catalogue refreshes.
 
-The server derives a numeric `colour_index` from each cached spine colour and upgrades older metadata without refetching artwork. The first colour sort may take longer while metadata is gathered for the whole library, using six shared server workers while the browser shows a preparation message. Subsequent sorts reuse the cache. Restart the Python server after installing this change.
+The server derives a numeric `colour_index` from each cached spine colour and upgrades older metadata without refetching artwork. The first colour sort may take longer while metadata is gathered for the whole library, using six shared server workers while the browser shows a preparation message. Subsequent sorts reuse cached metadata. Changing any sort order immediately centres and opens the playing album once the new catalogue is ready; otherwise it preserves the selected album.
 
 ## Shelf rendering and metadata
 
@@ -109,9 +117,9 @@ Labels scale with spine width, truncate with an ellipsis and retain their full t
 
 ## Catalogue loading, persistence and outages
 
-LMS is queried in fixed batches using `albums <start> <batch-size> sort:artflow tags:ajlys`. Current and neighbouring batches are prefetched automatically, including across the final/first album boundary. Ordering loads all album records through those bounded requests; it does not send an unbounded whole-library RPC. Artwork and metadata are loaded for displayed spines. The fallback album-ID-to-position map uses bounded, paged `tags:s` requests.
+`/api/catalogue?order=artistAlbum|album|colour|random` reads LMS in pages of up to 200 albums and returns the full ordered catalogue. Colour order includes prepared spine metadata, calculated using six shared server workers. The browser receives the prepared order and renders nearby albums. Catalogue records are fetched again when ordering or refreshing; the catalogue itself is not persistently cached on the server.
 
-`js/resilience.js` retains successful read-only `players` and `albums` RPC responses in browser local storage. If LMS is temporarily unreachable, those responses can be replayed so previously seen catalogue data remains available while normal reconnect attempts continue. Stale replayed catalogue responses are explicitly marked so Status/About can distinguish cached from live data. Mutating/player-control RPC calls are deliberately never cached or replayed.
+Browser fallback/index requests remain bounded by `--batch-size`. `js/resilience.js` caches successful read-only `players` and `albums` RPC responses in local storage; mutating and player-control calls are never replayed. This cache does not cover `/api/catalogue`, so a fresh load or sort change still requires LMS connectivity. An already loaded catalogue can remain visible during an outage while reconnection is attempted.
 
 CometD subscribes to player status and LMS `serverstatus`. When a library scan completes, Lyrion Carousel refreshes the catalogue, album count and position index once. Status/About reports LMS connectivity and CometD/live-update state separately.
 
@@ -197,8 +205,10 @@ sudo systemctl disable --now lyrion-carousel.service
 
 - `/api/lms` → LMS JSON-RPC;
 - `/api/cometd` → LMS CometD;
-- `/api/art/<artwork-id>` → LMS artwork with persistent disk caching;
-- `/api/art-meta/<artwork-id>` → cached spine colour, text contrast and font;
+- `/api/catalogue?order=artistAlbum|album|colour|random` → server-prepared ordered catalogue;
+- `/api/art/<artwork-id>?size=512` → cached resized cover; omit size for original artwork;
+- `/api/art-meta/<artwork-id>` → cached spine colour, text contrast, font and colour index;
+- `/api/art-meta` → prepare metadata for up to 64 artwork IDs (POST);
 - `/api/config` → runtime defaults;
 - `/api/config/lms` → change the proxy LMS URL (POST);
 - `/api/cache/clear` → clear persistent artwork and metadata (POST).
@@ -207,7 +217,7 @@ sudo systemctl disable --now lyrion-carousel.service
 
 - LMS password authentication is not yet implemented.
 - Search is capped by `--search-limit` (100 by default).
-- Artwork is evicted above 512 MB; automatic detection of changed covers under the same artwork ID is not implemented.
+- Original and resized artwork share a 512 MB image-cache limit; automatic detection of changed covers under the same artwork ID is not implemented.
 - Browser catalogue fallback only contains read-only LMS responses previously seen by that browser; it is not an independent mirror of the complete LMS database.
 - Final reconnect acceptance still needs to be exercised against the actual LMS installation.
 - Final 60 fps/memory acceptance testing still needs to be performed on the intended controller hardware.
@@ -221,9 +231,6 @@ node tests/regressions.mjs
 
 Node is needed only for the JavaScript regression runner. It uses DOM/event doubles and mocked LMS responses; it does not start playback. It checks catalogue paging, scan events, server-switch isolation, display ordering, startup, pinned covers and details. These checks do not replace real-browser visual/touch checks or the live LMS reconnect acceptance sequence above.
 
-Colour metadata requests populate missing artwork directly on the server and return only metadata, avoiding full-cover transfers to the browser during colour ordering. Existing disk metadata is reused. Restart the server after updating this behaviour.
+## Upgrading to 0.9.0
 
-
-Album ordering is prepared by `/api/catalogue?order=artistAlbum|album|colour|random`: the server reads LMS in bounded pages and returns the ordered catalogue, including spine metadata for colour order. Settings → Album cover size selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls downloaded image resolution, not the physical size of the open case. JPEG derivatives preserve aspect ratio, never upscale, and share the existing cache limit and clear action. Restart the server after this update.
-
-Settings → Display style switches immediately between Shelf (default) and the Fan layout from main. The choice is saved per browser. Both use the same catalogue, ordering, cover resolution and playback controls. Fan rendering keeps only nearby jewel cases in the DOM.
+Restart the Python server (or the Debian service) and refresh the browser. The updated client requires the prepared-catalogue and resized-artwork endpoints. Existing spine metadata upgrades automatically; clearing the cache is optional.

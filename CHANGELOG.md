@@ -2,14 +2,36 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
-## Unreleased — experimental shelf
+## [0.9.0] - 2026-09-18
 
-- Replace the WebGL experiment with a circular CSS spine shelf, padded readable labels and cached colour/font metadata.
-- Add persistent playing-cover behaviour, bounded startup/idle scrolling, cover gestures and stable hover/now-playing details.
-- Keep Settings and Search above the cover; isolate their keyboard input from shelf navigation.
-- Repair scan-completion refreshes, preserve display order, apply saved timeouts and discard stale server responses.
-- Remove duplicate renderer scheduling, redundant Settings CSS and the inactive density control.
-- Add server and JavaScript regression checks; retain application version 0.8.1.
+### Displays and playback
+
+- Add a circular CSS spine shelf with artwork-derived colours, varied readable fonts, ellipsis and padded labels inset from the case end caps.
+- Add a saved Shelf/Fan display setting, retaining the fan layout with bounded rendering; Shelf is the default.
+- Open the playing album on startup and idle return; use a random browsing position without playback when nothing is playing.
+- Keep the playing cover open by default, move it with scrolling, and follow album changes. Add click-to-close and long-press album actions.
+- Centre and open the playing album immediately after changing sort order.
+- Stabilise hover/now-playing headings and keep Settings, Search and their keyboard input above and separate from cover interactions.
+
+### Server preparation and cache
+
+- Prepare artist/album, album, colour and random catalogue ordering on the server using bounded LMS pages.
+- Cache spine colours, contrast, font and rainbow colour indexes; upgrade existing metadata automatically.
+- Calculate metadata on the server with six shared workers and support batched metadata requests.
+- Add cached aspect-preserving cover resizing and a saved 128–1024 px resolution setting, defaulting to 512 px.
+- Rename the cache control to Clear album cache and replace native confirmation with an inline Settings confirmation.
+
+### Reliability and maintenance
+
+- Fix missing shelf albums during scrolling, preview opening, scan refreshes and stale responses after server changes.
+- Preserve ordering across refreshes and apply saved/runtime timeouts consistently.
+- Revalidate static files, version client asset URLs and retain renderer compatibility for older cached clients.
+- Remove redundant rendering and styling; add Python and JavaScript regression coverage.
+- Require Pillow for metadata and cover processing; include it in Debian package dependencies.
+
+### Upgrade
+
+- Restart the server and refresh the browser to load the new endpoints and client assets. Existing metadata upgrades without requiring a cache clear.
 
 ## [0.8.1] - 2026-09-16
 
