@@ -129,3 +129,5 @@
 /* Let the shelf receive wheel and drag input around a pinned playing cover. */
 .bf-front-preview[data-pinned="true"] { pointer-events:none; }
 .bf-front-preview[data-pinned="true"] .bf-front-case { pointer-events:auto; }
+
+.bf-stage.bf-fan-active .bf-album[data-front-preview] { opacity:0!important; pointer-events:none!important; }

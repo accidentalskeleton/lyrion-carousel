@@ -10,10 +10,10 @@
   <title>Lyrion Carousel</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/lyrion-carousel-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/album-browser.css?v=shelf-prepared-2">
-  <link rel="stylesheet" href="css/jewel-overlay.css?v=shelf-prepared-2">
-  <link rel="stylesheet" href="css/shelf.css?v=shelf-prepared-2">
-  <link rel="stylesheet" href="css/settings.css?v=shelf-prepared-2">
+  <link rel="stylesheet" href="css/album-browser.css?v=display-choice-1">
+  <link rel="stylesheet" href="css/jewel-overlay.css?v=display-choice-1">
+  <link rel="stylesheet" href="css/shelf.css?v=display-choice-1">
+  <link rel="stylesheet" href="css/settings.css?v=display-choice-1">
 </head>
 <body>
 <div id="book-fan-browser" class="is-starting" data-ready="false" aria-label="Lyrion Carousel album browser">
@@ -26,6 +26,7 @@
       <div class="bf-settings-panel" role="dialog" aria-modal="true" aria-labelledby="bf-settings-title">
         <div class="bf-settings-heading"><div><span class="bf-settings-kicker">Lyrion Carousel</span><h2 id="bf-settings-title">Settings</h2></div><button class="bf-settings-close" type="button" aria-label="Close settings">×</button></div>
         <div class="bf-settings-body">
+          <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Display style</strong><span>Browse album spines on a shelf or covers in a fan.</span></div><select class="bf-display-style" aria-label="Display style"><option value="shelf">Shelf</option><option value="fan">Fan</option></select></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Player</strong><span>Choose the Lyrion player controlled by this browser.</span></div><select class="bf-player-select" aria-label="Lyrion player" disabled><option>Discovering…</option></select></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Lyrion Music Server</strong><span>Choose the server used for the library and player connection.</span></div><div class="bf-lms-connect"><input class="bf-lms-url" type="url" inputmode="url" spellcheck="false" autocomplete="off" aria-label="Lyrion Music Server URL" placeholder="http://mrlazy:9000"><button class="bf-lms-connect-button" type="button">Connect</button></div></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Idle return</strong><span>Return to the playing album after browsing has stopped.</span></div><select class="bf-idle-return" aria-label="Idle return delay"><option value="0">Off</option><option value="15000">15 seconds</option><option value="30000">30 seconds</option><option value="60000">1 minute</option><option value="120000">2 minutes</option></select></div>
@@ -50,7 +51,7 @@
     <button class="bf-play cursor-interaction" type="button" aria-label="Play selected album"><span aria-hidden="true">▶</span></button>
   </section>
 </div>
-<script src="js/resilience.js?v=shelf-prepared-2"></script>
-<script type="module" src="js/settings.js?v=shelf-prepared-2"></script><script type="module" src="js/app.js?v=shelf-prepared-2"></script><script type="module" src="js/performance.js?v=shelf-prepared-2"></script>
+<script src="js/resilience.js?v=display-choice-1"></script>
+<script type="module" src="js/settings.js?v=display-choice-1"></script><script type="module" src="js/app.js?v=display-choice-1"></script><script type="module" src="js/performance.js?v=display-choice-1"></script>
 </body>
 </html>

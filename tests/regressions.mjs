@@ -4,7 +4,7 @@ export async function runTests(sources) {
   let checks = 0;
   const assert = (value, message) => { if (!value) throw Error(message); checks++; };
   const plain = source => source.replace(/^import .*;\n/gm, '').replace(/\bexport /g, '');
-  const geometry = new Function(plain(sources.browser) + ';return {clamp,modulo,circularDelta,nearestPositionForIndex};')();
+  const geometry = new Function(plain(sources.browser) + ';return {clamp,modulo,circularDelta,nearestPositionForIndex,fanLayout};')();
   assert(geometry.circularDelta(0, 99, 100) === 1, 'circular wrap');
   assert(geometry.nearestPositionForIndex(99, 0, 100) === -1, 'shortest route');
   const catalogue = new Function(plain(sources.catalogue) + ';return {buildAlbumPositionIndex,locateAlbum};')();
@@ -69,7 +69,7 @@ export async function runTests(sources) {
   window.dispatchEvent=()=>{};
   let metadataFetch=async()=>({ok:false});
   const env={document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
-    ResizeObserver:class{observe(){}},Event:class{},Image:class{},fetch:(url,...args)=>url.startsWith('/api/catalogue')?Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})}):metadataFetch(url,...args),rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
+    ResizeObserver:class{observe(){}},Event:class{},Image:class{},fetch:(url,...args)=>url.startsWith('/api/catalogue')?Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})}):metadataFetch(url,...args),rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},fanLayout:geometry.fanLayout,clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
@@ -163,6 +163,20 @@ export async function runTests(sources) {
   }
   api.applySetting('coverSize',256);
   assert(api.state().albums.every(a=>a[8].includes('size=256')),'cover size updates artwork URLs');
+  const beforeStyle=api.state().albums[Math.round(api.state().position)][6];
+  api.applySetting('displayStyle','fan');
+  assert(api.state().albums[Math.round(api.state().position)][6]===beforeStyle,'display switch preserves position');
+  assert(stage.classList.contains('bf-fan-active')&&!stage.classList.contains('bf-shelf-active'),'fan style activates exclusively');
+  assert(stage.children.length<=27&&stage.children.every(el=>el.querySelector('.bf-jewel-front')),'fan renders bounded jewel cases');
+  assert(stage.children.every(el=>el.style.transform.includes('rotateY(')),'fan applies main carousel transforms');
+  api.set({position:api.state().position+35});api.draw();
+  assert(api.geometry().nodes.some(n=>n.index===Math.round(api.state().position)%api.state().albums.length),'fan updates visible window after scrolling');
+  api.applySetting('displayStyle','shelf');
+  assert(stage.classList.contains('bf-shelf-active')&&!stage.classList.contains('bf-fan-active'),'switch back restores shelf');
+  assert(stage.children.every(el=>!el.querySelector('.bf-jewel-front')),'switch back removes fan cover nodes');
+  const styleSelect=element('.bf-display-style');styleSelect.value='fan';styleSelect.listeners.change[0]();
+  assert(storage.get('albumBrowserDisplayStyle')==='fan','display style preference saved');
+  assert(window.__lyrionCarouselSettings.displayStyle==='shelf','display style defaults to shelf');
   return checks;
 }
 
