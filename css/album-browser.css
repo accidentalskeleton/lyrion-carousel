@@ -107,7 +107,7 @@ body {
 }
 .bf-settings-overlay {
     position:absolute;
-    z-index:150;
+    z-index:220;
     inset:0;
     display:flex;
     align-items:flex-start;
@@ -442,6 +442,9 @@ body {
     left:50%;
     bottom:8px;
     width:min(560px,76%);
+    /* Reserve the track and progress rows so the album heading never shifts. */
+    height:59px;
+    line-height:18px;
     padding:6px 14px 7px;
     box-sizing:border-box;
     transform:translateX(-50%);
@@ -523,6 +526,13 @@ body {
 .bf-track-list li { display:grid; grid-template-columns:28px 1fr auto; gap:8px; padding:7px 8px; border-radius:5px; color:#ddd9d2; font-size:12px; }
 .bf-track-list li:nth-child(odd) { background:rgba(255,255,255,.035); }
 .bf-track-list li span:first-child,.bf-track-list li span:last-child { color:var(--bf-muted); }
+.bf-album-detail {
+    height:18px;
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+}
+.bf-meta:empty { visibility:hidden; }
 .bf-meta strong {
     font-size:13px;
     font-weight:500
@@ -558,7 +568,7 @@ body {
 }
 .bf-search-overlay {
     position:absolute;
-    z-index:140;
+    z-index:210;
     inset:0;
     padding:18px;
     border-radius:14px;
@@ -727,8 +737,21 @@ body {
     background:rgba(35,58,38,.96);
     color:#9fd0a2
 }
-.bf-order-toggle[data-mode="album"] { color:#d7c58d; }
-.bf-order-toggle[data-mode="random"] { color:#9fd0a2; }
+.bf-order-toggle[data-mode="artistAlbum"] { color:#8fb8c8; }
+.bf-order-toggle[data-mode="album"] { color:#d5b86f; }
+.bf-order-toggle[data-mode="random"] { color:#d28d83; }
+.bf-order-toggle[data-mode="album"] .bf-order-icon.album { display:none; }
+.bf-order-toggle[data-mode="album"]::before,
+.bf-order-menu button[data-order="album"]::before {
+    content:"";
+    display:block;
+    width:20px;
+    height:20px;
+    flex:0 0 auto;
+    border:1px solid currentColor;
+    border-radius:50%;
+    background:radial-gradient(circle,currentColor 0 2px,transparent 2.5px 5px,currentColor 5.5px 6px,transparent 6.5px);
+}
 .bf-order-toggle:disabled {
     opacity:.5;
     cursor:wait
@@ -761,8 +784,12 @@ body {
     cursor:pointer
 }
 .bf-order-menu button:hover,.bf-order-menu button:focus-visible { background:rgba(255,255,255,.1); outline:none; }
-.bf-order-menu button[aria-checked="true"] { background:rgba(143,186,145,.15); color:#9fd0a2; }
+.bf-order-menu button[aria-checked="true"] { background:rgba(255,255,255,.08); }
 .bf-order-menu svg { width:19px; height:19px; flex:0 0 auto; }
+.bf-order-menu button[data-order="artistAlbum"] svg { color:#8fb8c8; }
+.bf-order-menu button[data-order="album"] svg { color:#d5b86f; }
+.bf-order-menu button[data-order="random"] svg { color:#d28d83; }
+.bf-order-menu button[data-order="album"] svg { display:none; }
 @keyframes bf-shamrock-spin {
     to {
         transform:rotate(360deg)
@@ -826,4 +853,16 @@ body {
     .bf-player-select {
         width:100%
     }
+}
+
+.bf-order-toggle[data-mode="colour"]::before,
+.bf-order-menu button[data-order="colour"]::before {
+    content:"";
+    display:block;
+    width:20px;
+    height:20px;
+    flex:0 0 auto;
+    border:1px solid rgba(255,255,255,.4);
+    border-radius:50%;
+    background:conic-gradient(#e45b52,#e6cd54,#68b969,#56bdc8,#6773d8,#bc6cce,#e45b52);
 }

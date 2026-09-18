@@ -1,3 +1,12 @@
+/* Settings must cover the shelf, including the pinned playing cover. */
+#book-fan-browser .bf-settings-overlay {
+    z-index:220;
+}
+#book-fan-browser .bf-settings-overlay:not([hidden]) ~ .bf-front-preview {
+    visibility:hidden;
+    pointer-events:none;
+}
+
 .bf-settings-panel {
     max-height: calc(100% - 4px);
     display: flex;
@@ -131,12 +140,12 @@
     color: #777d80;
     font-size: 10px;
 }
-#book-fan-browser .bf-stage, #book-fan-browser .bf-meta, #book-fan-browser .bf-play, #book-fan-browser .bf-random {
+#book-fan-browser .bf-stage, #book-fan-browser .bf-meta, #book-fan-browser .bf-play, #book-fan-browser .bf-random, #book-fan-browser .bf-search-open, #book-fan-browser .bf-order-toggle {
     transition: opacity .18s ease;
 }
-#book-fan-browser.is-starting .bf-stage, #book-fan-browser.is-starting .bf-meta, #book-fan-browser.is-starting .bf-play, #book-fan-browser.is-starting .bf-random {
-    opacity: 0;
-    pointer-events: none;
+#book-fan-browser.is-starting .bf-stage, #book-fan-browser.is-starting .bf-meta, #book-fan-browser.is-starting .bf-play, #book-fan-browser.is-starting .bf-random, #book-fan-browser.is-starting .bf-search-open, #book-fan-browser.is-starting .bf-order-toggle {
+    opacity: 0!important;
+    pointer-events: none!important;
 }
 @media (max-width: 560px) {
     .bf-settings-overlay {
@@ -169,147 +178,32 @@
         padding: 9px 16px;
     }
 }
-.bf-settings-panel {
-    max-height:calc(100% - 4px);
-    display:flex;
-    flex-direction:column;
-    box-sizing:border-box
+#book-fan-browser[data-ready="false"] .bf-play,
+#book-fan-browser[data-ready="false"] .bf-random,
+#book-fan-browser[data-ready="false"] .bf-search-open,
+#book-fan-browser[data-ready="false"] .bf-order-toggle {
+    visibility:hidden!important;
+    pointer-events:none!important;
 }
-.bf-settings-body {
-    overflow:auto;
-    padding-right:3px
+
+.bf-cache-actions { flex-wrap: wrap; }
+.bf-cache-confirm[hidden], .bf-clear-cache[hidden] { display: none; }
+.bf-cache-confirm {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid rgba(143, 186, 145, .3);
+    border-radius: 10px;
+    background: #171e1a;
+    color: #e4e1da;
+    box-sizing: border-box;
 }
-.bf-settings-section {
-    padding:15px 0;
-    border-bottom:1px solid rgba(255,255,255,.07)
+.bf-cache-confirm strong { font-size: 14px; }
+.bf-cache-confirm p { margin: 8px 0 14px; color: #aeb5af; font-size: 12px; line-height: 1.5; }
+.bf-cache-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.bf-cache-confirm-actions button {
+    padding: 8px 14px; border: 1px solid #59665b; border-radius: 8px;
+    background: #202923; color: #e4e1da; font: inherit; font-size: 12px; cursor: pointer;
 }
-.bf-settings-section select {
-    min-width:170px;
-    min-height:34px;
-    border:1px solid rgba(255,255,255,.14);
-    border-radius:7px;
-    padding:4px 28px 4px 9px;
-    background:#171717;
-    color:#ddd9d2;
-    font:inherit
-}
-.bf-settings-about {
-    padding-top:17px
-}
-.bf-status-grid {
-    margin:13px 0 0;
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:8px
-}
-.bf-status-grid>div {
-    min-width:0;
-    padding:9px 10px;
-    border-radius:7px;
-    background:rgba(255,255,255,.035)
-}
-.bf-status-grid dt {
-    margin:0 0 3px;
-    color:#777d80;
-    font-size:9px;
-    letter-spacing:.09em;
-    text-transform:uppercase
-}
-.bf-status-grid dd {
-    margin:0;
-    overflow:hidden;
-    color:#c9c6c0;
-    font-size:11px;
-    white-space:nowrap;
-    text-overflow:ellipsis
-}
-.bf-cache-actions {
-    display:flex;
-    align-items:center;
-    gap:10px;
-    margin-top:13px
-}
-.bf-clear-cache {
-    min-height:32px;
-    border:1px solid rgba(255,255,255,.14);
-    border-radius:7px;
-    padding:5px 10px;
-    background:#171717;
-    color:#ddd9d2;
-    font:inherit;
-    font-size:11px;
-    cursor:pointer
-}
-.bf-clear-cache:hover:not(:disabled) {
-    border-color:rgba(255,255,255,.28);
-    color:#f1eee8
-}
-.bf-clear-cache:disabled {
-    opacity:.5;
-    cursor:wait
-}
-.bf-cache-feedback {
-    min-width:0;
-    color:#8fba91;
-    font-size:10px;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis
-}
-.bf-settings-note {
-    margin:15px -20px -20px;
-    padding:10px 20px;
-    border-top:1px solid rgba(255,255,255,.07);
-    color:#777d80;
-    font-size:10px
-}
-#book-fan-browser .bf-stage,#book-fan-browser .bf-meta,#book-fan-browser .bf-play,#book-fan-browser .bf-random {
-    transition:opacity .18s ease
-}
-#book-fan-browser.is-starting .bf-stage,#book-fan-browser.is-starting .bf-meta,#book-fan-browser.is-starting .bf-play,#book-fan-browser.is-starting .bf-random {
-    opacity:0;
-    pointer-events:none
-}
-@media(max-width:560px) {
-    .bf-settings-overlay {
-        padding-top:18px
-    }
-    .bf-settings-panel {
-        padding:16px
-    }
-    .bf-settings-section {
-        grid-template-columns:1fr;
-        gap:9px
-    }
-    .bf-settings-section select {
-        width:100%
-    }
-    .bf-status-grid {
-        grid-template-columns:1fr
-    }
-    .bf-settings-note {
-        margin:12px -16px -16px;
-        padding:9px 16px
-    }
-    @media(max-width:560px) {
-        .bf-settings-overlay {
-            padding-top:18px
-        }
-        .bf-settings-panel {
-            padding:16px
-        }
-        .bf-settings-section {
-            grid-template-columns:1fr;
-            gap:9px
-        }
-        .bf-settings-section select {
-            width:100%
-        }
-        .bf-status-grid {
-            grid-template-columns:1fr
-        }
-        .bf-settings-note {
-            margin:12px -16px -16px;
-            padding:9px 16px
-        }
-    }
+.bf-cache-confirm-actions .bf-cache-confirm-clear { background: #8fba91; color: #111b13; border-color: #8fba91; }
+.bf-cache-confirm-actions button:hover { filter: brightness(1.15); }
+.bf-cache-confirm-actions button:focus-visible { outline: 2px solid #e4e1da; outline-offset: 3px; }

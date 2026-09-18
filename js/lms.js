@@ -1,6 +1,9 @@
 let requestId = 0;
+let session = 0;
+export function resetRpcSession() { session++; }
 
 export async function rpc(targetPlayer, command) {
+  const generation = session;
   const response = await fetch('/api/lms', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -8,6 +11,7 @@ export async function rpc(targetPlayer, command) {
   });
   if (!response.ok) throw new Error('LMS returned HTTP ' + response.status);
   const body = await response.json();
+  if (generation !== session) throw new Error('LMS server changed during request');
   if (!body || !body.result) throw new Error('LMS returned no result');
   return body.result;
 }
@@ -40,7 +44,7 @@ export class CometDClient {
   handleServerStatus(data) {
     const scanning = String(data?.rescan ?? '0') === '1';
     if (this.serverWasScanning === true && !scanning) {
-      this.onLibraryChanged();
+      this.onLibraryChanged(data);
     }
     this.serverWasScanning = scanning;
   }
