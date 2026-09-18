@@ -225,3 +225,5 @@ Colour metadata requests populate missing artwork directly on the server and ret
 
 
 Album ordering is prepared by `/api/catalogue?order=artistAlbum|album|colour|random`: the server reads LMS in bounded pages and returns the ordered catalogue, including spine metadata for colour order. Settings → Album cover size selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls downloaded image resolution, not the physical size of the open case. JPEG derivatives preserve aspect ratio, never upscale, and share the existing cache limit and clear action. Restart the server after this update.
+
+Settings → Display style switches immediately between Shelf (default) and the Fan layout from main. The choice is saved per browser. Both use the same catalogue, ordering, cover resolution and playback controls. Fan rendering keeps only nearby jewel cases in the DOM.
