@@ -1,4 +1,5 @@
-export async function buildAlbumPositionIndex(rpc, totalAlbums, generation, currentGeneration, pageSize) {
+export async function buildAlbumPositionIndex(rpc, totalAlbums, generation, currentGeneration, pageSize = 40) {
+  if (!Number.isInteger(pageSize) || pageSize < 1) throw new Error('Invalid catalogue page size');
   if (!totalAlbums) return new Map();
   const index = new Map();
   for (let start = 0; start < totalAlbums; start += pageSize) {

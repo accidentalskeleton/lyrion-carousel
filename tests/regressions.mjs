@@ -1,0 +1,173 @@
+// Run with: node tests/regressions.mjs
+// Small DOM doubles exercise the complete app module without LMS or playback writes.
+export async function runTests(sources) {
+  let checks = 0;
+  const assert = (value, message) => { if (!value) throw Error(message); checks++; };
+  const plain = source => source.replace(/^import .*;\n/gm, '').replace(/\bexport /g, '');
+  const geometry = new Function(plain(sources.browser) + ';return {clamp,modulo,circularDelta,nearestPositionForIndex};')();
+  assert(geometry.circularDelta(0, 99, 100) === 1, 'circular wrap');
+  assert(geometry.nearestPositionForIndex(99, 0, 100) === -1, 'shortest route');
+  const catalogue = new Function(plain(sources.catalogue) + ';return {buildAlbumPositionIndex,locateAlbum};')();
+  const pages = [];
+  const index = await catalogue.buildAlbumPositionIndex(async (_, cmd) => {
+    pages.push(cmd.slice(1, 3));
+    return {albums_loop:Array.from({length:cmd[2]}, (_, i) => ({id:cmd[1]+i}))};
+  }, 95, 1, () => 1);
+  assert(pages.length === 3 && pages[2][1] === 15 && index.get('94') === 94, 'default bounded index pages');
+  const stale = await catalogue.buildAlbumPositionIndex(async () => ({albums_loop:[]}), 2, 1, () => 2);
+  assert(stale === null, 'stale index discarded');
+  let invalid = false;
+  try { await catalogue.buildAlbumPositionIndex(() => {}, 1, 1, () => 1, 0); } catch (_) { invalid = true; }
+  assert(invalid, 'invalid page size rejected');
+
+  let libraryEvents = 0;
+  const {CometDClient, rpc:realRpc, resetRpcSession} = new Function('fetch', plain(sources.lms) + ';return {CometDClient,rpc,resetRpcSession};')(
+    async () => ({ok:true,json:async () => ({result:{}})})
+  );
+  const comet = new CometDClient(() => {}, () => {}, data => { assert(data.rescan === 0, 'scan payload forwarded'); libraryEvents++; });
+  comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:1}); comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:0});
+  assert(libraryEvents === 1, 'one refresh per completed scan');
+  const oldRpc = realRpc('0', ['players',0,1]); resetRpcSession();
+  let rejected = false; try { await oldRpc; } catch (_) { rejected = true; }
+  assert(rejected, 'old server RPC rejected');
+
+  class Element {
+    constructor(name='') {
+      this.name=name;this.children=[];this.hidden=/overlay|menu|front-preview/.test(name);
+      this.dataset={};this.attributes={};this.listeners={};this.value='';this.clientWidth=1000;this.clientHeight=400;
+      this.style={setProperty(k,v){this[k]=v;},getPropertyValue(k){return this[k]||'';}};
+      const classes=new Set();this.classList={add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x)};
+    }
+    get options(){return this.children;}
+    append(...nodes){for(const n of nodes){n.parent=this;this.children.push(n);}}
+    replaceChildren(...nodes){this.children=[];this.append(...nodes);}
+    remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}
+    setAttribute(k,v){this.attributes[k]=v;}
+    getAttribute(k){return this.attributes[k];}
+    toggleAttribute(k,v){if(v)this.attributes[k]='';else delete this.attributes[k];}
+    addEventListener(k,fn){(this.listeners[k]??=[]).push(fn);}
+    contains(el){return el===this||this.children.some(n=>n.contains?.(el));}
+    focus(){} select(){} setPointerCapture(){}
+    getBoundingClientRect(){return {left:0,right:1000,top:0,bottom:400,width:this.name==='case'?(this.coverWidth||300):1000,height:400};}
+    querySelectorAll(selector){return this.children.filter(el=>selector==='.'+el.className?.split(' ')[0]);}
+    querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
+  }
+  const elements=new Map(),root=new Element('root');
+  const element=selector=>{if(!elements.has(selector))elements.set(selector,new Element(selector));return elements.get(selector);};
+  root.querySelector=selector=>selector.includes(':not(')?null:element(selector);
+  const stage=element('.bf-stage'),preview=element('.bf-front-preview'),frontCase=new Element('case');
+  preview.querySelector=()=>frontCase;
+  const document=new Element('document');document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
+  const window=new Element('window');window.innerWidth=1000;window.innerHeight=600;
+  const storage=new Map();const localStorage={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v))};
+  let time=0,nextId=0;const frames=new Map(),timers=new Map();
+  const setTimeout=fn=>{timers.set(++nextId,fn);return nextId;},clearTimeout=id=>timers.delete(id);
+  const requestAnimationFrame=fn=>{frames.set(++nextId,fn);return nextId;},cancelAnimationFrame=id=>frames.delete(id);
+  const rpcCalls=[];
+  let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
+  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='albums')return {count:library.length,albums_loop:library.slice(cmd[1],cmd[1]+cmd[2])};return {};};
+  window.dispatchEvent=()=>{};
+  let metadataFetch=async()=>({ok:false});
+  const env={document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
+    ResizeObserver:class{observe(){}},Event:class{},Image:class{},fetch:(url,...args)=>url.startsWith('/api/catalogue')?Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})}):metadataFetch(url,...args),rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
+    buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum};
+  const app=plain(sources.app).replace(/start\(\);\s*$/, '');
+  const api=new Function(...Object.keys(env), app + `
+    return {connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,updateMeta,draw,
+      set(values){if('playerId' in values)playerId=values.playerId;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
+      geometry:()=>({nodes,frontPreviewIndex})};
+  `)(...Object.values(env));
+  async function settle(promise) {
+    let done=false,error;promise.then(()=>done=true,e=>{done=true;error=e;});
+    for(let i=0;i<500&&!done;i++){
+      await Promise.resolve();time+=16;
+      const pending=[...frames.values()];frames.clear();for(const fn of pending)fn(time);
+    }
+    if(error)throw error;if(!done)throw Error('Animation did not finish');
+  }
+  await api.loadInitialCatalogue();
+  assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
+  assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
+  api.applySetting('displayCount',20);
+  assert(api.state().PAGE_SIZE===40&&stage.children.length>20&&stage.children.length<40, 'display count independent of page size');
+  await api.setDisplayOrder('random');
+  const previous=api.state().albums.map(a=>a[6]);
+  library.push({id:96,album:'New album',artist:'Artist'});
+  await api.refreshCatalogue();
+  assert(api.state().orderMode==='random'&&api.state().albums.slice(0,95).every((a,i)=>a[6]===previous[i]), 'refresh retains random order');
+  api.applySetting('random',1000);
+  await settle(api.selectStartupAlbum({mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1}));
+  assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden&&api.state().frontTimer===0,'startup opens playing cover without timeout');
+  api.stopFollowing();assert(!preview.hidden,'pin survives scrolling');
+  const otherIndex=api.state().albums.findIndex(album=>album[6]!==20);
+  api.openFrontPreview(api.state().albums[otherIndex],otherIndex);
+  assert(api.state().frontPreviewAlbum[6]!==20&&api.state().frontTimer!==0,'other album can preview while keep-open enabled');
+  api.closeFrontPreview();await Promise.resolve();await Promise.resolve();
+  assert(!preview.hidden&&api.state().frontPreviewAlbum[6]===20,'closing preview restores playing cover');
+
+  const oldPosition=api.state().position;api.set({position:oldPosition+2});api.draw();
+  assert(frontCase.style.transform!=='translate3d(0px,0,0)','open cover moves with shelf');
+  for(const coverWidth of [300,1200]){
+    frontCase.coverWidth=coverWidth;
+    for(const offset of [-70,-20,-2,.49,2,20,70]){
+      api.set({position:oldPosition+offset});api.draw();
+      const x=style=>Number(/translate3d\(([-\d.]+)px/.exec(style.transform)[1]);
+      const bounds=api.geometry().nodes.filter(n=>!('data-front-preview' in n.el.attributes)).map(n=>[x(n.el.style),x(n.el.style)+parseFloat(n.el.style.width)]);
+      bounds.push([x(frontCase.style)-coverWidth/2,x(frontCase.style)+coverWidth/2]);
+      assert(Array.from({length:41},(_,i)=>-500+i*25).every(point=>bounds.some(([left,right])=>point>=left-.01&&point<=right+.01)),'shelf coverage with '+coverWidth+'px cover at offset '+offset);
+    }
+  }
+  frontCase.coverWidth=300;
+  api.set({hover:api.state().albums.findIndex(a=>a[6]!==20)});api.updateMeta(true);
+  assert(element('.bf-meta').children.length===1,'hover omits unrelated track');
+  api.set({hover:-1});api.updateMeta(true);assert(element('.bf-meta').children.length===3,'outside hover shows playing track');
+  api.applySetting('keepPlayingOpen',false);api.stopFollowing();assert(preview.hidden,'off restores dismissal');
+  api.set({playing:false});api.updateMeta(true);assert(element('.bf-meta').children.length===0,'stopped details clear');
+  await settle(api.selectStartupAlbum({mode:'stop',playlist_loop:[]}));
+  assert(preview.hidden&&!rpcCalls.some(c=>c[0]==='playlistcontrol'),'stopped startup never opens or plays');
+  assert(frames.size===0,'no idle animation frames remain');
+  api.set({playerId:'player-one'});
+  const random=api.playRandomAlbum();await Promise.resolve();await Promise.resolve();
+  const randomTarget=api.state().target;api.centreAlbumIndex(2);
+  assert(api.state().target===randomTarget,'search cannot redirect random animation');
+  await settle(random);
+  assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===1&&!api.state().randomAnimating,'random plays once and unlocks');
+  const cancelledRandom=api.playRandomAlbum();await Promise.resolve();api.set({playerId:'player-two'});
+  await settle(cancelledRandom);
+  assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===1&&!api.state().randomAnimating,'player change cancels random playback');
+
+  window.fetch=async()=>{};
+  const settingsFetch=async url=>url==='/api/config'?{ok:true,json:async()=>({lms_url:'http://test:9000',idle_return_ms:45000,random_scroll_max_ms:2000})}:{ok:true,text:async()=> '0.8.1'};
+  new Function('document','window','localStorage','fetch','setTimeout','Event','CustomEvent',sources.settings)(document,window,localStorage,settingsFetch,setTimeout,class{},class{constructor(type,options){this.type=type;this.detail=options.detail;}});
+  await window.__lyrionLmsConfigReady;
+  assert(window.__lyrionCarouselSettings.keepPlayingOpen===true,'keep-open defaults on');
+  assert(window.__lyrionCarouselSettings.idle===45000&&window.__lyrionCarouselSettings.random===2000,'unsaved settings respect runtime defaults');
+  const keep=element('.bf-keep-playing-open');keep.value='false';keep.listeners.change[0]();
+  assert(storage.get('albumBrowserKeepPlayingOpen')==='false','keep-open choice persisted');
+  await settle(api.connectLyrion());
+  assert(root.dataset.ready==='true'&&stage.children.length>0,'complete connection reveals shelf');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum[6]===20,'complete connection opens playing album');
+  api.set({playing:false});
+  const selectedBeforeOrder=api.state().albums[Math.round(api.state().position)%api.state().albums.length][6];
+  await api.setDisplayOrder('colour');
+  assert(api.state().albums.every((a,i)=>a[6]===library[i].id),'browser preserves server prepared order');
+  assert(api.state().albums[Math.round(api.state().position)][6]===selectedBeforeOrder,'server ordering preserves selected album');
+  assert(storage.get('albumBrowserOrderMode')==='colour','colour order persists');
+  api.set({playing:true,playingAlbumId:20,position:3});
+  for(const mode of ['artistAlbum','album','colour','random']){
+    await api.setDisplayOrder(mode);
+    assert(api.state().albums[Math.round(api.state().position)][6]===20,'sort '+mode+' immediately centres playing album');
+    assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden,'sort '+mode+' opens playing album');
+    api.set({position:3});
+  }
+  api.applySetting('coverSize',256);
+  assert(api.state().albums.every(a=>a[8].includes('size=256')),'cover size updates artwork URLs');
+  return checks;
+}
+
+if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.mjs')) {
+  const {readFile}=await import('node:fs/promises');
+  const sources={};for(const name of ['app','browser','catalogue','lms','settings'])sources[name]=await readFile(new URL('../js/'+name+'.js',import.meta.url),'utf8');
+  console.log(`${await runTests(sources)} regression checks passed`);
+}

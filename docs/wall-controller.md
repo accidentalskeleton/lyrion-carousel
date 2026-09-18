@@ -1,6 +1,6 @@
 # Wall Controller / Display
 
-Status: **future hardware/deployment work**.
+Status: **future hardware/deployment work**. The interaction below describes the original carousel concept; the current experimental branch uses a spine shelf with a cover that travels with its album. See the repository README for current software behaviour.
 
 ## Purpose
 
