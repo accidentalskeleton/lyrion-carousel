@@ -53,7 +53,15 @@
       <button class="bf-previous cursor-interaction" type="button" aria-label="Previous track" title="Previous track" disabled><span aria-hidden="true">❮</span></button>
       <button class="bf-play cursor-interaction" type="button" aria-label="Resume player" title="Play or pause" disabled><span aria-hidden="true">▶</span></button>
       <button class="bf-next cursor-interaction" type="button" aria-label="Next track" title="Next track" disabled><span aria-hidden="true">❯</span></button>
+      <button class="bf-queue-open cursor-interaction" type="button" aria-label="Open play queue" title="Swipe up or tap to open queue" disabled><span aria-hidden="true">☰</span></button>
     </div>
+    <div class="bf-queue-scrim" aria-hidden="true"></div>
+    <section class="bf-queue-drawer" role="dialog" aria-modal="true" aria-labelledby="bf-queue-title" aria-hidden="true">
+      <button class="bf-queue-grip" type="button" aria-label="Close play queue"><span aria-hidden="true"></span></button>
+      <div class="bf-queue-heading"><div><span class="bf-settings-kicker">Now playing</span><h2 id="bf-queue-title">Play queue</h2></div><button class="bf-queue-close" type="button" aria-label="Close play queue">×</button></div>
+      <div class="bf-queue-status" role="status" aria-live="polite"></div>
+      <ol class="bf-queue-list"></ol>
+    </section>
     <button class="bf-screen-sleep" type="button" aria-label="Wake screen" hidden></button>
   </section>
 </div>
