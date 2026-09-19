@@ -21,6 +21,7 @@ Current application version: **0.9.0**. The canonical version is stored in [`VER
 - long-press a cover to clear the playlist and play it, play it now, play it after the current album, add it to the queue, or open Album Information;
 - LMS CometD long-polling for live playback and server/library state;
 - current track, track number and locally advancing progress display;
+- compact previous, play/pause and next-track controls;
 - configurable idle return that scrolls to and opens the playing album, bounded by the maximum scroll duration;
 - keep-playing-cover-open setting, enabled by default; the cover moves with its album when scrolling;
 - saved player selection across browser sessions;
