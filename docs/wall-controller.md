@@ -29,14 +29,18 @@ The controller and streamer are deliberately separate computers. The interface i
 | --- | --- |
 | Display | Corsair XENEON EDGE, black |
 | Corsair part | CC-9011306-WW |
-| Panel | 14.5-inch, 2560 × 720 touchscreen |
+| Panel | 14.5-inch AHVA, 2560 × 720 at 60 Hz |
 | Approximate size | 372 × 120 × 22 mm |
+| Video inputs | HDMI or USB Type-C DisplayPort Alt Mode |
+| Display power | USB Type-C, 5 V at 2 A |
 | Controller | Dedicated Raspberry Pi 5 |
 | Operating system | Raspberry Pi OS Desktop, 64-bit |
 | Browser/session | Chromium kiosk mode under the default labwc desktop session |
 | Network | Wired Ethernet preferred; Wi-Fi is a fallback |
 
-The display connection must carry video and touch, while the controller needs a stable power arrangement suitable for unattended startup. Exact cabling, mounting and enclosure details will be finalized after the display has been tested with the Raspberry Pi.
+These display specifications come from the [Corsair XENEON EDGE quick-start guide](https://www.corsair.com/us/en/explorer/gamer/monitors/corsair-xeneon-edge/).
+
+The likely Raspberry Pi arrangement is a two-cable connection: HDMI for video plus USB for touch data and display power. Corsair states that a charge-only USB connection disables touch and that the USB-C port is essential for operation. Because the Pi 5 does not provide a USB-C host port and the display requires up to 5 V/2 A, the production design may need a powered USB hub or another power/data arrangement that is proven on the actual hardware; do not assume an unpowered USB-A-to-C cable is sufficient.
 
 The CM5 streamer's own Raspberry Pi display and LMS interface remain independent of this wall controller.
 
@@ -50,7 +54,7 @@ The CM5 streamer's own Raspberry Pi display and LMS interface remain independent
 - Swipe-up queue with current-track indication and direct queue selection.
 - Configurable inactivity sleep and tap-to-wake.
 
-The current sleep implementation is an application-level black overlay. It hides the interface and consumes the first touch to wake safely, but it does **not** claim to switch off the panel or its backlight.
+The current sleep implementation is an application-level black overlay. It hides the interface and consumes the first touch to wake safely, but it does **not** switch off the panel or its backlight.
 
 ## Startup and kiosk deployment
 
@@ -58,22 +62,28 @@ The Raspberry Pi should boot into the desktop session and launch the repository'
 
 Keep the application service and kiosk wrapper separate: systemd supervises the server, while the graphical desktop session owns Chromium. This avoids starting the browser before Wayland is available and makes server/browser failures independently recoverable.
 
-## Display power-management validation
+## Display power management
 
-Before replacing the software blackout with physical display sleep, validate all of the following on the production display and cable arrangement:
+Corsair's specification and quick-start guide do **not** document DDC/CI, VESA power-mode commands, DPMS/no-signal standby, wake behaviour or a whole-display software power-off command.
 
-- Whether the XENEON EDGE advertises DDC/CI and accepts the VESA power-mode VCP command.
-- Whether removal of the HDMI/DisplayPort signal enters a true low-power standby state.
-- Whether touch remains available as a wake source while the panel is in standby.
-- Whether USB power can be switched without also losing the required touch or video data path.
-- Reconnection behaviour after display power or video is restored.
+The guide documents a backlight control in iCUE and says that the XENEON EDGE has no button-driven on-screen display. It lists Windows 11 as the supported operating system. That makes iCUE backlight control a documented Windows feature, not a supported Raspberry Pi/Linux interface.
 
-Until those checks pass, application-level blackout is the supported sleep mode.
+For the Raspberry Pi deployment:
 
-## Remaining deployment work
+- Keep application-level blackout as the supported sleep mode.
+- Treat Wayland output power-off as an experiment only; the guide does not promise how the display behaves when the video signal disappears.
+- Do not assume `ddcutil` can control the display until `ddcutil detect` and the available VCP features have been checked on the real unit.
+- Removing USB-C power will necessarily turn the display off because that port is essential for operation, but it also removes touch and therefore prevents tap-to-wake. A hardware power switch would need an independent wake trigger and verified USB reconnection behaviour.
+- A Linux implementation of Corsair's USB/iCUE backlight control would be reverse-engineered and unsupported by the published specification.
 
-- Verify the native 2560 × 720 mode, touch mapping and reconnect behaviour on Raspberry Pi OS.
-- Confirm the physical display-off method, if any, from manufacturer documentation and hardware tests.
+## Hardware acceptance checks
+
+- Verify the native 2560 × 720 mode and stable 60 Hz output on Raspberry Pi OS.
+- Verify touch enumeration, coordinate mapping and reconnect behaviour.
+- Confirm that the chosen USB topology supplies adequate power while preserving touch data.
+- Run `ddcutil detect` and record any exposed VCP features.
+- Test compositor output-off/on and record panel, backlight, touch and wake behaviour.
+- Test a USB power cycle and confirm that video and touch recover without restarting Chromium.
 - Measure browser performance and thermals during long-running kiosk use.
 - Finalize the wall mount, enclosure, ventilation, cable routing and service access.
 - Decide whether ambient-light brightness control is useful after installation.
