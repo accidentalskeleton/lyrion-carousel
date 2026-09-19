@@ -722,6 +722,19 @@ body {
     opacity:.35;
     cursor:default
 }
+.bf-screen-sleep {
+    position:absolute;
+    z-index:1000;
+    inset:0;
+    width:100%;
+    height:100%;
+    border:0;
+    padding:0;
+    background:#000;
+    cursor:none;
+    touch-action:manipulation
+}
+.bf-screen-sleep[hidden] { display:none; }
 .bf-random {
     left:16px;
     border:1px solid rgba(255,255,255,.16);
