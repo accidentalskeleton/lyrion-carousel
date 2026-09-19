@@ -98,6 +98,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     def do_GET(self)->None:
         path=urlsplit(self.path).path
         if path=='/api/catalogue': self._serve_catalogue(); return
+        if path=='/api/diagnostics/spotty': self._serve_spotty_diagnostic(); return
         if path=='/api/config': self._send_payload(200,json.dumps(self.runtime_config).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
         if path.startswith('/api/art-meta/'):
             artwork_id=unquote(path.removeprefix('/api/art-meta/'))
@@ -116,6 +117,48 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             else: self._serve_artwork(artwork_id)
             return
         super().do_GET()
+    def _lms_rpc(self,player_id:str,command:list[object])->dict:
+        body=json.dumps({'id':1,'method':'slim.request','params':[player_id,command]}).encode()
+        with urlopen(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'}),timeout=15) as response:
+            payload=json.loads(self._read_limited(response,MAX_UPSTREAM_BYTES))
+        return payload.get('result',{}) if isinstance(payload,dict) else {}
+
+    def _serve_spotty_diagnostic(self)->None:
+        """Discover a player and return the real LMS BrowseLibrary/Spotty payload."""
+        try:
+            players_result=self._lms_rpc('', ['players',0,100])
+            players=players_result.get('players_loop',[]) if isinstance(players_result,dict) else []
+            connected=[p for p in players if str(p.get('connected','1')) not in ('0','false','False')]
+            player=(connected or players or [None])[0]
+            if not player:
+                result={'available':False,'stage':'player-discovery','error':'LMS returned no players','lms':self.lms_url,'players':[]}
+            else:
+                player_id=str(player.get('playerid') or player.get('id') or '')
+                if not player_id: raise ValueError('LMS player has no playerid')
+                commands=[
+                    ['browselibrary','items',0,200,'menu:spotty'],
+                    ['browselibrary','items',0,200,'menu:plugins/Spotty'],
+                ]
+                attempts=[]; chosen=None
+                for command in commands:
+                    try:
+                        response=self._lms_rpc(player_id,command)
+                        attempts.append({'command':command,'result':response})
+                        loops=[]
+                        if isinstance(response,dict):
+                            for key in ('item_loop','items_loop','items'):
+                                value=response.get(key)
+                                if isinstance(value,list): loops.extend(value)
+                        if loops and chosen is None: chosen=response
+                    except Exception as error:
+                        attempts.append({'command':command,'error':str(error)})
+                result={'available':chosen is not None,'lms':self.lms_url,'player':{'playerid':player_id,'name':player.get('name','')},'attempts':attempts}
+                if chosen is None: result['error']='No Spotty BrowseLibrary menu was returned by the tested LMS menu identifiers'
+            self._send_payload(200,json.dumps(result,indent=2,default=str).encode(),'application/json; charset=utf-8',cache_control='no-store')
+        except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
+            payload={'available':False,'stage':'request','lms':self.lms_url,'error':str(error)}
+            self._send_payload(200,json.dumps(payload,indent=2).encode(),'application/json; charset=utf-8',cache_control='no-store')
+
     def _serve_catalogue(self)->None:
         mode=parse_qs(urlsplit(self.path).query).get('order',['artistAlbum'])[0]
         if mode not in ('artistAlbum','album','colour','random'):
