@@ -30,6 +30,7 @@
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Player</strong><span>Choose the Lyrion player controlled by this browser.</span></div><select class="bf-player-select" aria-label="Lyrion player" disabled><option>Discovering…</option></select></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Lyrion Music Server</strong><span>Choose the server used for the library and player connection.</span></div><div class="bf-lms-connect"><input class="bf-lms-url" type="url" inputmode="url" spellcheck="false" autocomplete="off" aria-label="Lyrion Music Server URL" placeholder="http://mrlazy:9000"><button class="bf-lms-connect-button" type="button">Connect</button></div></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Idle return</strong><span>Return to the playing album after browsing has stopped.</span></div><select class="bf-idle-return" aria-label="Idle return delay"><option value="0">Off</option><option value="15000">15 seconds</option><option value="30000">30 seconds</option><option value="60000">1 minute</option><option value="120000">2 minutes</option></select></div>
+          <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Screen sleep</strong><span>Black out the controller after no touch, wheel or keyboard activity.</span></div><select class="bf-screen-sleep-delay" aria-label="Screen sleep delay"><option value="0">Off</option><option value="300000">5 minutes</option><option value="900000">15 minutes</option><option value="1800000">30 minutes</option><option value="3600000">1 hour</option></select></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Album menu timeout</strong><span>Close the long-press album menu after inactivity.</span></div><select class="bf-album-menu-timeout" aria-label="Album menu timeout"><option value="0">Off</option><option value="5000">5 seconds</option><option value="10000">10 seconds</option><option value="20000">20 seconds</option><option value="30000">30 seconds</option></select></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Keep playing album open</strong><span>Always show the playing cover, including while scrolling the shelf.</span></div><select class="bf-keep-playing-open" aria-label="Keep playing album open"><option value="true">On</option><option value="false">Off</option></select></div>
           <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Front preview timeout</strong><span>Return a clicked album cover to the shelf.</span></div><select class="bf-front-timeout" aria-label="Front preview timeout"><option value="0">Off</option><option value="5000">5 seconds</option><option value="10000">10 seconds</option><option value="20000">20 seconds</option><option value="30000">30 seconds</option></select></div>
@@ -53,9 +54,10 @@
       <button class="bf-play cursor-interaction" type="button" aria-label="Resume player" title="Play or pause" disabled><span aria-hidden="true">▶</span></button>
       <button class="bf-next cursor-interaction" type="button" aria-label="Next track" title="Next track" disabled><span aria-hidden="true">❯</span></button>
     </div>
+    <button class="bf-screen-sleep" type="button" aria-label="Wake screen" hidden></button>
   </section>
 </div>
 <script src="js/resilience.js?v=display-choice-1"></script>
-<script type="module" src="js/settings.js?v=display-choice-1"></script><script type="module" src="js/app.js?v=display-choice-1"></script><script type="module" src="js/performance.js?v=display-choice-1"></script>
+<script type="module" src="js/settings.js?v=display-choice-1"></script><script type="module" src="js/app.js?v=display-choice-1"></script><script type="module" src="js/screen-sleep.js?v=screen-sleep-1"></script><script type="module" src="js/performance.js?v=display-choice-1"></script>
 </body>
 </html>

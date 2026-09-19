@@ -180,11 +180,19 @@ export async function runTests(sources) {
   const styleSelect=element('.bf-display-style');styleSelect.value='fan';styleSelect.listeners.change[0]();
   assert(storage.get('albumBrowserDisplayStyle')==='fan','display style preference saved');
   assert(window.__lyrionCarouselSettings.displayStyle==='shelf','display style defaults to shelf');
+  const sleepOverlay=element('.bf-screen-sleep'),sleepDelay=element('.bf-screen-sleep-delay');
+  sleepOverlay.hidden=true;sleepDelay.value='100';storage.set('lyrionCarouselScreenSleepMs','100');
+  new Function('document','window','localStorage','setTimeout','clearTimeout',sources.screenSleep)(document,window,localStorage,setTimeout,clearTimeout);
+  const sleepTimer=[...timers.values()].at(-1);sleepTimer();
+  assert(!sleepOverlay.hidden&&root.dataset.screenSleeping==='true','screen sleeps after inactivity');
+  let wakeConsumed=false;sleepOverlay.listeners.pointerdown[0]({preventDefault(){wakeConsumed=true},stopImmediatePropagation(){}});
+  assert(sleepOverlay.hidden&&root.dataset.screenSleeping==='false'&&wakeConsumed,'first touch wakes and is consumed');
   return checks;
 }
 
 if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.mjs')) {
   const {readFile}=await import('node:fs/promises');
   const sources={};for(const name of ['app','browser','catalogue','lms','settings'])sources[name]=await readFile(new URL('../js/'+name+'.js',import.meta.url),'utf8');
+  sources.screenSleep=await readFile(new URL('../js/screen-sleep.js',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }

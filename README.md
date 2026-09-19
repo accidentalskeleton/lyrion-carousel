@@ -22,6 +22,7 @@ Current application version: **0.9.0**. The canonical version is stored in [`VER
 - LMS CometD long-polling for live playback and server/library state;
 - current track, track number and locally advancing progress display;
 - compact previous, play/pause and next-track controls;
+- configurable application screen sleep with touch-to-wake protection against accidental commands;
 - configurable idle return that scrolls to and opens the playing album, bounded by the maximum scroll duration;
 - keep-playing-cover-open setting, enabled by default; the cover moves with its album when scrolling;
 - saved player selection across browser sessions;
