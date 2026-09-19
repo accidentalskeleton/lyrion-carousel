@@ -1,6 +1,6 @@
 # Wall Controller / Display
 
-Status: **hardware selected; deployment and on-device validation remain**.
+Status: **primary hardware selected; Linux-supported alternative evaluated; deployment and on-device validation remain**.
 
 ## Purpose
 
@@ -23,7 +23,7 @@ HiFiBerry Digi2 Pro → DSP/room correction → Δ BogDAC → α24 → β24
 
 The controller and streamer are deliberately separate computers. The interface is hosted locally, with CometD providing event-driven player and library state instead of periodic status polling.
 
-## Selected wall hardware
+## Primary wall hardware
 
 | Component | Selection |
 | --- | --- |
@@ -43,6 +43,30 @@ These display specifications come from the [Corsair XENEON EDGE quick-start guid
 The likely Raspberry Pi arrangement is a two-cable connection: HDMI for video plus USB for touch data and display power. Corsair states that a charge-only USB connection disables touch and that the USB-C port is essential for operation. Because the Pi 5 does not provide a USB-C host port and the display requires up to 5 V/2 A, the production design may need a powered USB hub or another power/data arrangement that is proven on the actual hardware; do not assume an unpowered USB-A-to-C cable is sufficient.
 
 The CM5 streamer's own Raspberry Pi display and LMS interface remain independent of this wall controller.
+
+## Linux-supported alternative: Waveshare 12.3inch HDMI LCD
+
+The [Waveshare 12.3inch HDMI LCD (22841)](https://www.waveshare.com/12.3inch-hdmi-lcd.htm) is the preferred alternative when explicit Raspberry Pi/Linux touch support is more important than the Corsair's greater width and finished enclosure.
+
+| Characteristic | Waveshare 12.3inch HDMI LCD |
+| --- | --- |
+| Panel | 12.3-inch IPS, 1920 × 720 |
+| Approximate size | 301.2 × 123.35 × 12.4 mm |
+| Active area | 293.1 × 110.2 mm |
+| Video | HDMI |
+| Touch | USB capacitive touch |
+| Raspberry Pi OS/Raspbian | Driver-free 10-point touch |
+| Ubuntu/Kali | Driver-free single-point touch |
+| Brightness | Approximately 600 cd/m² |
+| Power | Separate 12 V supply |
+
+The same dimensions and compatibility claims are listed by independent suppliers including [Kiwi Electronics](https://www.kiwi-electronics.com/en/12-3inch-capacitive-touch-display-1920x720-20597) and [Malina314](https://malina314.com/proizvod/12-3inch-capacitive-touch-screen-lcd-1920x720-hdmi-ips-toughened-glass-panel/).
+
+The Waveshare retains the full 720-pixel vertical resolution needed by the carousel, transport controls and swipe-up queue, but provides 25% fewer horizontal pixels than the Corsair. Validate both Shelf and Fan modes, the chosen displayed-album count, minimum spine width, queue gestures, long-press menus and Chromium kiosk operation at a 1920 × 720 viewport with 100% display scaling.
+
+This is an embedded-style assembly rather than a finished consumer monitor. Its controller/button board, 12 V supply, cabling and wall mounting must be incorporated into the final enclosure.
+
+The application-level black sleep overlay remains the supported initial sleep method and preserves touch-to-wake. Do not assume that Linux DPMS will switch off the Waveshare backlight. Waveshare documents an optional hardware PWM modification involving removal of an onboard resistor and connection to a PWM pad; verify the exact controller-board revision and electrical requirements before considering GPIO control. Cutting the 12 V supply turns the display off but also removes USB touch, so it cannot provide touch-to-wake.
 
 ## Current interaction
 
@@ -79,6 +103,7 @@ For the Raspberry Pi deployment:
 ## Hardware acceptance checks
 
 - Verify the native 2560 × 720 mode and stable 60 Hz output on Raspberry Pi OS.
+- If the Waveshare alternative is selected, repeat visual, performance and touch checks at its native 1920 × 720 resolution.
 - Verify touch enumeration, coordinate mapping and reconnect behaviour.
 - Confirm that the chosen USB topology supplies adequate power while preserving touch data.
 - Run `ddcutil detect` and record any exposed VCP features.
