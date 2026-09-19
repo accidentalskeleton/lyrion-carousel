@@ -73,7 +73,7 @@ export async function runTests(sources) {
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,updateMeta,draw,skipTrack,
+    return {connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,updateMeta,draw,skipTrack,openQueue,closeQueue,
       set(values){if('playerId' in values)playerId=values.playerId;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -131,6 +131,9 @@ export async function runTests(sources) {
   await api.skipTrack(-1);await api.skipTrack(1);
   assert(rpcCalls.some(c=>c[0]==='playlist'&&c[1]==='index'&&c[2]==='-1'),'previous track command');
   assert(rpcCalls.some(c=>c[0]==='playlist'&&c[1]==='index'&&c[2]==='+1'),'next track command');
+  await api.openQueue();
+  assert(element('.bf-queue-drawer').classList.contains('is-open')&&element('.bf-queue-list').children.length===1,'queue drawer loads playlist');
+  api.closeQueue();assert(!element('.bf-queue-drawer').classList.contains('is-open'),'queue drawer closes');
   const random=api.playRandomAlbum();await Promise.resolve();await Promise.resolve();
   const randomTarget=api.state().target;api.centreAlbumIndex(2);
   assert(api.state().target===randomTarget,'search cannot redirect random animation');

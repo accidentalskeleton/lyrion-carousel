@@ -23,6 +23,7 @@ Current application version: **0.9.0**. The canonical version is stored in [`VER
 - current track, track number and locally advancing progress display;
 - compact previous, play/pause and next-track controls;
 - configurable application screen sleep with touch-to-wake protection against accidental commands;
+- swipe-up play queue with current-track highlighting and direct track selection;
 - configurable idle return that scrolls to and opens the playing album, bounded by the maximum scroll duration;
 - keep-playing-cover-open setting, enabled by default; the cover moves with its album when scrolling;
 - saved player selection across browser sessions;
