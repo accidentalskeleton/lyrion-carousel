@@ -674,7 +674,7 @@ body {
     color:var(--bf-muted);
     font-size:11px
 }
-.bf-play,.bf-random {
+.bf-random {
     position:absolute;
     z-index:95;
     bottom:9px;
@@ -687,11 +687,40 @@ body {
     box-shadow:0 7px 20px rgba(0,0,0,.38);
     cursor:pointer
 }
-.bf-play {
+.bf-transport {
+    position:absolute;
+    z-index:95;
     right:16px;
+    bottom:9px;
+    display:flex;
+    align-items:center;
+    gap:6px
+}
+.bf-transport button {
+    width:38px;
+    height:38px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid rgba(255,255,255,.16);
+    border-radius:50%;
+    padding:0;
+    background:rgba(20,25,20,.94);
+    color:#d8d8d3;
+    box-shadow:0 7px 20px rgba(0,0,0,.38);
+    font:inherit;
+    cursor:pointer
+}
+.bf-transport .bf-play {
+    width:44px;
+    height:44px;
     border:0;
     background:rgba(242,238,230,.94);
     color:#121212
+}
+.bf-transport button:disabled {
+    opacity:.35;
+    cursor:default
 }
 .bf-random {
     left:16px;
