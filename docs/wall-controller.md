@@ -1,47 +1,79 @@
 # Wall Controller / Display
 
-Status: **future hardware/deployment work**. The interaction below describes the original carousel concept; the current experimental branch uses a spine shelf with a cover that travels with its album. See the repository README for current software behaviour.
+Status: **hardware selected; deployment and on-device validation remain**.
 
 ## Purpose
 
-Lyrion Carousel is intended to become the dedicated visual browser/controller for the hi-fi system's Lyrion Music Server library. It restores the feel of browsing a physical CD collection while keeping playback on the π5 streamer; the controller does not enter the audio signal path.
+Lyrion Carousel is the dedicated visual browser and controller for the hi-fi system's Lyrion Music Server library. It restores the feel of browsing a physical CD collection while keeping playback on the existing Raspberry Pi CM5 streamer. The wall controller communicates with Lyrion Music Server over the local network and does not enter the audio signal path.
 
-The defining interaction is a continuous circular carousel of CD jewel cases. As an album approaches the centre it opens towards the viewer like a rigid page in a book, while neighbouring cases remain angled in depth. The motion follows drag/swipe/trackpad input continuously rather than behaving as a conventional sliding card carousel.
+The defining interaction is a continuous circular shelf of CD jewel cases. As an album approaches the centre, its cover travels with it and opens towards the viewer like a rigid page in a book. Drag, swipe, trackpad and wheel input move the shelf continuously rather than stepping through conventional cards.
 
 ## Architecture
 
 ```text
-Lyrion Carousel display/controller
-               │
-               │ local network
-               ▼
-π5 CM5 streamer / Lyrion Music Server
-               │
-               ▼
+Corsair XENEON EDGE + dedicated Raspberry Pi 5
+                         │
+                         │ local network
+                         ▼
+Raspberry Pi CM5 streamer / Lyrion Music Server
+                         │
+                         ▼
 HiFiBerry Digi2 Pro → DSP/room correction → Δ BogDAC → α24 → β24
 ```
 
-The interface is locally hosted and does not depend on a proprietary cloud service. CometD is used for event-driven player and library state rather than periodic status polling.
+The controller and streamer are deliberately separate computers. The interface is hosted locally, with CometD providing event-driven player and library state instead of periodic status polling.
 
-## Target wall hardware
+## Selected wall hardware
 
-The intended final form factor remains approximately 760 mm wide by 180 mm high and 35–45 mm deep, with a black aluminium enclosure, anti-glare front and hidden wall bracket. A stretched-bar display around 1920 × 360 remains the target class; exact panel, touch overlay and compute hardware should be selected after software performance has been measured on representative Raspberry Pi hardware.
+| Component | Selection |
+| --- | --- |
+| Display | Corsair XENEON EDGE, black |
+| Corsair part | CC-9011306-WW |
+| Panel | 14.5-inch, 2560 × 720 touchscreen |
+| Approximate size | 372 × 120 × 22 mm |
+| Controller | Dedicated Raspberry Pi 5 |
+| Operating system | Raspberry Pi OS Desktop, 64-bit |
+| Browser/session | Chromium kiosk mode under the default labwc desktop session |
+| Network | Wired Ethernet preferred; Wi-Fi is a fallback |
 
-## Interaction requirements
+The display connection must carry video and touch, while the controller needs a stable power arrangement suitable for unattended startup. Exact cabling, mounting and enclosure details will be finalized after the display has been tested with the Raspberry Pi.
 
-- Direct drag/swipe/trackpad/wheel response.
-- Continuous circular browsing.
-- Gentle inertial movement followed by alignment on one centred album.
-- One fully open, square-on selected album.
-- Neighbouring jewel cases fan away like book pages rather than simply sliding sideways.
-- Tap/click an album to select/play it.
-- Keyboard navigation for development/accessibility.
-- Restrained now-playing indication and uncluttered normal screen.
+The CM5 streamer's own Raspberry Pi display and LMS interface remain independent of this wall controller.
 
-## Remaining hardware/deployment decisions
+## Current interaction
 
-- Exact stretched display and controller.
-- Touch technology and supplier.
-- Dedicated wall-controller compute platform.
-- Final enclosure construction, ventilation and power arrangement.
-- Ambient-light brightness control and reliable screen sleep/wake behaviour.
+- Direct drag, touch swipe, trackpad, mouse-wheel and keyboard navigation.
+- Continuous circular browsing with inertial movement and centre alignment.
+- A selected album cover that travels with its shelf position and opens square-on at the centre.
+- Tap/click selection and playback.
+- Previous, play/pause and next transport controls.
+- Swipe-up queue with current-track indication and direct queue selection.
+- Configurable inactivity sleep and tap-to-wake.
+
+The current sleep implementation is an application-level black overlay. It hides the interface and consumes the first touch to wake safely, but it does **not** claim to switch off the panel or its backlight.
+
+## Startup and kiosk deployment
+
+The Raspberry Pi should boot into the desktop session and launch the repository's Chromium wrapper. The wrapper waits for the local application endpoint, starts Chromium with the kiosk flags documented in the README, and is registered as a labwc autostart command.
+
+Keep the application service and kiosk wrapper separate: systemd supervises the server, while the graphical desktop session owns Chromium. This avoids starting the browser before Wayland is available and makes server/browser failures independently recoverable.
+
+## Display power-management validation
+
+Before replacing the software blackout with physical display sleep, validate all of the following on the production display and cable arrangement:
+
+- Whether the XENEON EDGE advertises DDC/CI and accepts the VESA power-mode VCP command.
+- Whether removal of the HDMI/DisplayPort signal enters a true low-power standby state.
+- Whether touch remains available as a wake source while the panel is in standby.
+- Whether USB power can be switched without also losing the required touch or video data path.
+- Reconnection behaviour after display power or video is restored.
+
+Until those checks pass, application-level blackout is the supported sleep mode.
+
+## Remaining deployment work
+
+- Verify the native 2560 × 720 mode, touch mapping and reconnect behaviour on Raspberry Pi OS.
+- Confirm the physical display-off method, if any, from manufacturer documentation and hardware tests.
+- Measure browser performance and thermals during long-running kiosk use.
+- Finalize the wall mount, enclosure, ventilation, cable routing and service access.
+- Decide whether ambient-light brightness control is useful after installation.
