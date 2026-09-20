@@ -61,6 +61,18 @@ export async function searchSpotifyAlbums(playerId,query){
   return spottyLoop(result).map(normalizeSpottyAlbum);
 }
 
+export async function saveSpotifyAlbum(playerId,album){
+  const itemId=typeof album==='string'?album:album?.spottyItemId;
+  if(!itemId)throw new Error('Spotify album has no Spotty item id');
+  // Opening an album through Spotty exposes its native "Add Album to Library"
+  // action. Invoke that action rather than maintaining separate Spotify OAuth.
+  const detail=spottyLoop(await browseSpotty(playerId,['spotty','items',0,200,'item_id:'+itemId]));
+  const save=detail.find(item=>/add\s+album\s+to\s+library/i.test(String(item?.name||item?.text||'')));
+  if(!save?.id)throw new Error('Spotty did not expose Add Album to Library for this album');
+  await browseSpotty(playerId,['spotty','items',0,20,'item_id:'+save.id]);
+  return true;
+}
+
 export async function playSpotifyAlbum(playerId,album){
   // Compact XMLBrowser album rows do not expose spotify:album URIs. LMS does,
   // however, expose each as a playable XMLBrowser node, so use Spotty's playlist
