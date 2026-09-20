@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
-import io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sys, threading
+import time, io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sys, threading
 from concurrent.futures import ThreadPoolExecutor
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlsplit, parse_qs
 from urllib.request import Request, urlopen
-from PIL import Image, ImageStat
+from PIL import Image, ImageStat, ImageOps
 
+# Architecture: HTTP threads serve static files and a small set of LMS proxy APIs.
+# Image processing and catalogue ordering happen here, leaving the browser to
+# render and interact. Disk caches survive restarts; job progress does not.
+# The pool below is shared across metadata requests; the optional artwork warmer
+# has its own single daemon thread so it does not occupy this foreground pool.
 METADATA_WORKERS=ThreadPoolExecutor(max_workers=6,thread_name_prefix="album-metadata")
+# Bound incoming JSON, upstream responses and stored image bytes separately.
 MAX_RPC_BYTES=1_000_000
 MAX_UPSTREAM_BYTES=8_000_000
 MAX_ARTWORK_BYTES=10_000_000
 MAX_ARTWORK_CACHE_BYTES=512_000_000
+MAX_ARTWORK_CACHE_HARD_BYTES=2_000_000_000
 # Local font stacks keep the controller usable without external font downloads.
 SPINE_FONTS=(
     'Arial, "Liberation Sans", sans-serif',
@@ -23,6 +30,7 @@ SPINE_FONTS=(
     'Georgia, "DejaVu Serif", serif',
     '"Palatino Linotype", "Book Antiqua", "Liberation Serif", serif',
 )
+# Accept LMS identifiers, but never path separators supplied in an artwork URL.
 ARTWORK_ID=re.compile(r"^[A-Za-z0-9._:@%-]+$")
 def colour_sort_index(colour:str)->int:
     """Hue runs red through violet; near-neutral colours follow dark to light."""
@@ -34,13 +42,94 @@ def colour_sort_index(colour:str)->int:
 class UpstreamPayloadTooLarge(Exception):
     pass
 def positive_int(value:str)->int:
+    """Parse CLI counts/durations that must be greater than zero."""
     parsed=int(value)
     if parsed<1: raise argparse.ArgumentTypeError("must be at least 1")
     return parsed
 def non_negative_int(value:str)->int:
+    """Parse CLI durations for which zero means disabled."""
     parsed=int(value)
     if parsed<0: raise argparse.ArgumentTypeError("must be zero or greater")
     return parsed
+
+class CacheFull(Exception):
+    pass
+
+class ArtworkWarmer:
+    """One server-wide, cancellable worker; cached files make subsequent runs resumable."""
+    def __init__(self):
+        # Progress and start/stop operations share a lock; start calls snapshot,
+        # so it must be re-entrant. io_lock only coordinates warming with clearing.
+        self.lock=threading.RLock()
+        self.io_lock=threading.Lock()
+        self.cancel=threading.Event()
+        self.thread=None
+        self.last_foreground=0
+        self.state={'status':'idle','completed':0,'total':0,'failed':0}
+
+    def snapshot(self):
+        """Copy progress under the lock so HTTP clients see a consistent snapshot."""
+        with self.lock: return dict(self.state)
+
+    def stop(self):
+        """Request cancellation; the current network request or image operation may finish."""
+        with self.lock:
+            self.cancel.set()
+            if self.thread and self.thread.is_alive(): self.state['status']='cancelling'
+
+    def start(self,handler,size):
+        """Start one job, or return the existing job when another browser already started it."""
+        with self.lock:
+            if self.thread and self.thread.is_alive(): return self.snapshot()
+            self.cancel.clear()
+            self.state={'status':'running','completed':0,'total':0,'failed':0,'size':size}
+            # Do not retain a request socket after its HTTP handler finishes.
+            worker=object.__new__(LyrionCarouselHandler)
+            worker.lms_url=handler.lms_url
+            worker.cache_dir=handler.cache_dir
+            worker.runtime_config=getattr(handler,'runtime_config',{})
+            worker.background_warming=True
+            self.thread=threading.Thread(target=self.run,args=(worker,size),daemon=True,name='artwork-warmer')
+            self.thread.start()
+            return self.snapshot()
+
+    def run(self,worker,size):
+        """Walk unique artwork IDs, recording attempted items and failures for Settings."""
+        status='complete'
+        try:
+            ids=[]
+            for page in worker._catalogue_pages():
+                if self.cancel.is_set(): break
+                ids.extend(str(a['artwork_track_id']) for a in page if a.get('artwork_track_id'))
+            # Multiple albums can share one artwork ID; prepare that image once.
+            ids=list(dict.fromkeys(ids))
+            with self.lock: self.state['total']=len(ids)
+            for artwork_id in ids:
+                # Event.wait keeps throttling interruptible. Foreground cover requests
+                # postpone the next item; they do not interrupt an in-flight download.
+                if self.cancel.wait(.15): break
+                while time.monotonic()-self.last_foreground<1:
+                    if self.cancel.wait(.25): break
+                if self.cancel.is_set(): break
+                try:
+                    with self.io_lock:
+                        if self.cancel.is_set(): break
+                        worker._ensure_artwork(artwork_id)
+                        if worker._artwork_metadata(artwork_id) is None: raise ValueError('Metadata unavailable')
+                        worker._prepare_sized_artwork(artwork_id,size,case=True)
+                # Warming must stop rather than evict the images it just prepared.
+                except CacheFull:
+                    status='cache_full'; break
+                except (OSError,ValueError,URLError,UpstreamPayloadTooLarge):
+                    with self.lock: self.state['failed']+=1
+                # Completed counts attempts, including those recorded as failed.
+                with self.lock: self.state['completed']+=1
+        except Exception:
+            status='error'
+        finally:
+            with self.lock: self.state['status']='cancelled' if self.cancel.is_set() else status
+
+ARTWORK_WARMER=ArtworkWarmer()
 
 class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     server_version="LyrionCarousel/1.0"
@@ -48,14 +137,18 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         self.lms_url=lms_url.rstrip('/'); self.cache_dir=cache_dir; self.runtime_config=runtime_config
         super().__init__(*args,directory=directory,**kwargs)
     def end_headers(self)->None:
-        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/cache/clear'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
+        """Revalidate application assets; image endpoints supply their own cache policy."""
+        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
             self.send_header('Cache-Control','no-cache')
         super().end_headers()
     def do_POST(self)->None:
+        """Dispatch state-changing/cache APIs or forward bounded JSON to LMS."""
         path=urlsplit(self.path).path
+        if path=='/api/cache/warm': self._warm_cache(); return
         if path=='/api/art-meta': self._serve_metadata_batch(); return
         if path=='/api/cache/clear': self._clear_cache(); return
         if path=='/api/config/lms': self._update_lms_url(); return
+        if path=='/api/config/cache': self._update_cache_limit(); return
         if path not in {'/api/lms','/api/cometd'}: self.send_error(404); return
         try: length=int(self.headers.get('Content-Length','0'))
         except ValueError: self.send_error(400,'Invalid Content-Length'); return
@@ -63,10 +156,35 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         body=self.rfile.read(length)
         try: payload=json.loads(body)
         except (UnicodeDecodeError,json.JSONDecodeError): self.send_error(400,'Request body must be JSON'); return
+        # CometD long polling needs a longer timeout than ordinary LMS RPCs.
         if path=='/api/cometd':
             self._log_cometd(payload); self._relay(Request(f'{self.lms_url}/cometd',data=body,headers={'Content-Type':'application/json'},method='POST'),70); return
         self._log_lms_rpc(payload); self._relay(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'},method='POST'))
+    def _warm_cache(self)->None:
+        """Validate a start/cancel command and return job progress plus cache usage."""
+        try:
+            length=int(self.headers.get('Content-Length','0'))
+            if not 0<length<=1024: raise ValueError
+            payload=json.loads(self.rfile.read(length))
+            if not isinstance(payload,dict): raise ValueError
+            if payload.get('action')=='cancel':
+                ARTWORK_WARMER.stop(); state=ARTWORK_WARMER.snapshot()
+            elif payload.get('action')=='start':
+                size=payload.get('size',512)
+                if type(size) is not int or size not in (128,256,384,512,768,1024): raise ValueError
+                state=ARTWORK_WARMER.start(self,size)
+            else: raise ValueError
+        except (ValueError,UnicodeError): self.send_error(400,'Invalid warming request'); return
+        state['cache']=self._cache_usage()
+        self._send_payload(200,json.dumps(state).encode(),'application/json; charset=utf-8',cache_control='no-store')
+
     def _clear_cache(self)->None:
+        """Stop warming and wait for its current write before deleting cached files."""
+        ARTWORK_WARMER.stop()
+        with ARTWORK_WARMER.io_lock: self._clear_cache_files()
+
+    def _clear_cache_files(self)->None:
+        """Delete cache files and report the number removed to the Settings UI."""
         removed=0
         try:
             for path in self.cache_dir.rglob('*'):
@@ -74,6 +192,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             self._send_payload(200,json.dumps({'removed':removed}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except OSError as error: self._send_upstream_error(error)
     def _update_lms_url(self)->None:
+        """Update the shared proxy target; subsequent HTTP handlers use the new URL."""
         try:
             length=int(self.headers.get('Content-Length','0'))
             if length<1 or length>MAX_RPC_BYTES: self.send_error(413,'Invalid request size'); return
@@ -82,21 +201,65 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             lms_url=str(value).strip().rstrip('/')
             parsed=urlsplit(lms_url)
             if parsed.scheme not in {'http','https'} or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment: raise ValueError
+            ARTWORK_WARMER.stop()
             self.runtime_config['lms_url']=lms_url
             self.lms_url=lms_url
             self._send_payload(200,json.dumps({'lms_url':lms_url}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError): self.send_error(400,'Invalid LMS URL')
+    def _update_cache_limit(self)->None:
+        """Update the soft artwork-cache limit without exceeding the server ceiling."""
+        try:
+            length=int(self.headers.get('Content-Length','0'))
+            if length<1 or length>1024: raise ValueError
+            payload=json.loads(self.rfile.read(length))
+            limit=payload.get('cache_limit_bytes') if isinstance(payload,dict) else None
+            if type(limit) is not int or limit<1 or limit>self._cache_hard_limit_bytes(): raise ValueError
+            self.runtime_config['cache_limit_bytes']=limit
+            self._prune_artwork_cache()
+            self._send_payload(200,json.dumps({'cache_limit_bytes':limit,'cache_hard_limit_bytes':self._cache_hard_limit_bytes(),'cache':self._cache_usage()}).encode(),'application/json; charset=utf-8',cache_control='no-store')
+        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError): self.send_error(400,'Invalid cache size')
     def _log_lms_rpc(self,payload:object)->None:
+        """Log the player and LMS command without failing on malformed request shapes."""
         try:
             params=payload.get('params') if isinstance(payload,dict) else None
             if not isinstance(params,list) or len(params)<2 or not isinstance(params[1],list) or not params[1]: raise ValueError
             print(f"LMS RPC [{params[0] or 'server'}] -> {' '.join(str(p) for p in params[1])}",flush=True)
         except (AttributeError,TypeError,ValueError): print('LMS RPC -> <unrecognised request>',flush=True)
     def _log_cometd(self,payload:object)->None:
+        """Log CometD channel names without dumping full event payloads."""
         messages=payload if isinstance(payload,list) else [payload]; channels=[str(m.get('channel','?')) for m in messages if isinstance(m,dict)]
         print(f"LMS CometD -> {', '.join(channels) or '<unrecognised request>'}",flush=True)
+    def _cache_usage(self):
+        """Count committed cache files; image bytes alone are subject to the cache limit."""
+        image_bytes=metadata_bytes=files=0
+        for path in self.cache_dir.iterdir():
+            if path.suffix not in ('.img','.meta','.type'): continue
+            try:
+                if not path.is_file() or path.is_symlink(): continue
+                size=path.stat().st_size
+            except OSError: continue  # Files may be pruned while counting.
+            files+=1
+            if path.suffix=='.img': image_bytes+=size
+            else: metadata_bytes+=size
+        return {'image_bytes':image_bytes,'metadata_bytes':metadata_bytes,'total_bytes':image_bytes+metadata_bytes,'limit_bytes':self._cache_limit_bytes(),'files':files}
+
+    def _cache_limit_bytes(self)->int:
+        """Read the current soft cache limit, retaining the established default."""
+        configured=getattr(self,'runtime_config',{}).get('cache_limit_bytes',MAX_ARTWORK_CACHE_BYTES)
+        return configured if type(configured) is int and 0<configured<=self._cache_hard_limit_bytes() else MAX_ARTWORK_CACHE_BYTES
+
+    def _cache_hard_limit_bytes(self)->int:
+        """Read the server-configured cache ceiling; clients cannot change this value."""
+        configured=getattr(self,'runtime_config',{}).get('cache_hard_limit_bytes',MAX_ARTWORK_CACHE_HARD_BYTES)
+        return configured if type(configured) is int and configured>0 else MAX_ARTWORK_CACHE_HARD_BYTES
+
     def do_GET(self)->None:
+        """Serve status, prepared catalogues and artwork, or fall through to static files."""
         path=urlsplit(self.path).path
+        if path=='/api/cache/warm':
+            self._send_payload(200,json.dumps({**ARTWORK_WARMER.snapshot(),'cache':self._cache_usage()}).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
+        if path.startswith('/api/art/'):
+            ARTWORK_WARMER.last_foreground=time.monotonic()
         if path=='/api/catalogue': self._serve_catalogue(); return
         if path=='/api/config': self._send_payload(200,json.dumps(self.runtime_config).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
         if path.startswith('/api/art-meta/'):
@@ -112,28 +275,44 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     size=int(size)
                     if size not in (128,256,384,512,768,1024): raise ValueError
                 except ValueError: self.send_error(400,'Invalid cover size'); return
-                self._serve_sized_artwork(artwork_id,size)
+                self._serve_sized_artwork(artwork_id,size,case=parse_qs(urlsplit(self.path).query).get('case',[''])[0]=='realistic-v1')
             else: self._serve_artwork(artwork_id)
             return
+        # SimpleHTTPRequestHandler serves index.html, scripts, styles and assets.
         super().do_GET()
+    def _catalogue_pages(self,genre_id:int|None=None):
+        """Yield bounded LMS album pages; callers decide how to process the full library."""
+        start=0
+        while True:
+            command=['albums',start,200,'sort:artflow','tags:ajlys']
+            if genre_id is not None: command.append(f'genre_id:{genre_id}')
+            body=json.dumps({'id':1,'method':'slim.request','params':['0',command]}).encode()
+            with urlopen(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'}),timeout=10) as response:
+                result=json.loads(self._read_limited(response,MAX_UPSTREAM_BYTES))['result']
+            page=result.get('albums_loop',[])
+            yield page
+            start+=len(page)
+            if start>=int(result.get('count',start)): return
+            if not page: raise ValueError('Incomplete catalogue')
+
     def _serve_catalogue(self)->None:
-        mode=parse_qs(urlsplit(self.path).query).get('order',['artistAlbum'])[0]
+        """Fetch a fresh catalogue and return the requested order, prepared on the server."""
+        query=parse_qs(urlsplit(self.path).query)
+        mode=query.get('order',['artistAlbum'])[0]
+        excluded_genre_ids={int(genre_id) for genre_id in query.get('exclude_genre_id',[]) if genre_id.isdecimal() and int(genre_id)>0}
         if mode not in ('artistAlbum','album','colour','random'):
             self.send_error(400,'Invalid album order'); return
         try:
-            albums=[]
-            while True:
-                body=json.dumps({'id':1,'method':'slim.request','params':['0',['albums',len(albums),200,'sort:artflow','tags:ajlys']]}).encode()
-                with urlopen(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'}),timeout=10) as response:
-                    result=json.loads(self._read_limited(response,MAX_UPSTREAM_BYTES))['result']
-                page=result.get('albums_loop',[])
-                albums.extend(page)
-                if len(albums)>=int(result.get('count',len(albums))): break
-                if not page: raise ValueError('Incomplete catalogue')
+            albums=[album for page in self._catalogue_pages() for album in page]
+            library_count=len(albums)
+            if excluded_genre_ids:
+                excluded_album_ids={str(album.get('id')) for genre_id in excluded_genre_ids for page in self._catalogue_pages(genre_id) for album in page}
+                albums=[album for album in albums if str(album.get('id')) not in excluded_album_ids]
             if mode=='colour':
                 ids=list(dict.fromkeys(str(a['artwork_track_id']) for a in albums if a.get('artwork_track_id')))
                 metadata=dict(zip(ids,METADATA_WORKERS.map(self._artwork_metadata,ids)))
                 for album in albums: album['spine_metadata']=metadata.get(str(album.get('artwork_track_id')))
+            # Album IDs break name ties deterministically; missing colours sort last.
             def key(album):
                 artist=str(album.get('artist','')).casefold(); title=str(album.get('album',album.get('title',''))).casefold()
                 tie=(artist,title,str(album.get('id','')))
@@ -141,29 +320,53 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 return tie if mode=='artistAlbum' else (title,artist,tie[2])
             if mode=='random': random.shuffle(albums)
             else: albums.sort(key=key)
-            self._send_payload(200,json.dumps({'count':len(albums),'albums_loop':albums}).encode(),'application/json; charset=utf-8',cache_control='no-store')
+            self._send_payload(200,json.dumps({'count':len(albums),'library_count':library_count,'albums_loop':albums}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
 
-    def _serve_sized_artwork(self,artwork_id:str,size:int)->None:
-        key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest()
-        variant=self.cache_dir/f'{key}-{size}.img'
+    def _serve_sized_artwork(self,artwork_id:str,size:int,case:bool=False)->None:
+        """Serve a cached resized/composited image, preparing it on the first request."""
         try:
-            if not variant.exists():
-                self._ensure_artwork(artwork_id)
-                with Image.open(self.cache_dir/f'{key}.img') as image:
-                    image=image.convert('RGB')
-                    image.thumbnail((size,size),getattr(Image,'Resampling',Image).LANCZOS)
-                    output=io.BytesIO(); image.save(output,format='JPEG',quality=85)
-                self._store_artwork(variant,variant.with_suffix('.type'),output.getvalue(),'image/jpeg')
-                self._prune_artwork_cache()
-            self._send_payload(200,variant.read_bytes(),'image/jpeg',cache_control='public, max-age=86400')
+            variant,content_type=self._prepare_sized_artwork(artwork_id,size,case)
+            self._send_payload(200,variant.read_bytes(),content_type,cache_control='public, max-age=86400')
         except (OSError,ValueError,URLError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
 
+    def _prepare_sized_artwork(self,artwork_id:str,size:int,case:bool=False):
+        """Return a cache path and MIME type without writing to an HTTP connection."""
+        key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest()
+        # Variant names include both resolution and template revision, so original
+        # artwork, plain thumbnails and photographic cases never overwrite each other.
+        variant=self.cache_dir/f'{key}-{size}{"-case-v1" if case else ""}.img'
+        content_type='image/png' if case else 'image/jpeg'
+        if not variant.exists():
+            self._ensure_artwork(artwork_id)
+            with Image.open(self.cache_dir/f'{key}.img') as image:
+                image=image.convert('RGB')
+                if case:
+                    with Image.open(Path(__file__).resolve().parent/'assets'/'jewel-case-realistic-v1.png') as texture:
+                        # Coordinates of the booklet aperture beneath the moulded rim.
+                        overlay=texture.convert('RGBA')
+                    # Fill the template aperture, then retain the shell alpha outside it.
+                    canvas=Image.new('RGBA',overlay.size)
+                    booklet=ImageOps.fit(image,(1110,1090),method=getattr(Image,'Resampling',Image).LANCZOS)
+                    canvas.paste(booklet,(175,45))
+                    image=Image.alpha_composite(canvas,overlay)
+                # Preserve aspect ratio; PNG retains case transparency, JPEG saves space
+                # for plain covers. Resampling fallback supports older Pillow releases.
+                image.thumbnail((size,size),getattr(Image,'Resampling',Image).LANCZOS)
+                output=io.BytesIO()
+                if case: image.save(output,format='PNG')
+                else: image.save(output,format='JPEG',quality=85)
+            self._store_artwork(variant,variant.with_suffix('.type'),output.getvalue(),content_type)
+            self._prune_artwork_cache()
+        return variant,content_type
+
     def _serve_artwork_meta(self,artwork_id:str)->None:
+        """Return cached/generated spine metadata, or a non-cacheable 404 when unavailable."""
         metadata=self._artwork_metadata(artwork_id)
         self._send_payload(200 if metadata else 404,json.dumps(metadata or {'error':'Artwork metadata unavailable'}).encode(),'application/json; charset=utf-8',cache_control='public, max-age=86400' if metadata else 'no-store')
 
     def _serve_metadata_batch(self)->None:
+        """Prepare at most 64 requested artwork IDs using the shared worker pool."""
         try:
             length=int(self.headers.get('Content-Length','0'))
             if not 0<length<=MAX_RPC_BYTES: raise ValueError
@@ -177,7 +380,10 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         self._send_payload(200,json.dumps({'metadata':metadata}).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
     def _artwork_metadata(self,artwork_id:str):
+        """Reuse or upgrade cached spine metadata; return None for unavailable artwork."""
         key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest();meta_path=self.cache_dir/f'{key}.meta'
+        # Hash the artwork ID for a repeatable local font choice, not a new random
+        # choice on each load. Cache keys also include LMS to isolate servers.
         font=SPINE_FONTS[int(hashlib.sha256(artwork_id.encode()).hexdigest()[:8],16)%len(SPINE_FONTS)]
         try:
             metadata=json.loads(meta_path.read_bytes())
@@ -191,6 +397,8 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if metadata is None:
                 self._ensure_artwork(artwork_id)
                 with Image.open(self.cache_dir/f'{key}.img') as image:
+                    # A one-pixel filtered sample approximates the overall cover colour;
+                    # use the original cover, not the dark plastic case composition.
                     sample=image.convert('RGB').resize((1,1),getattr(Image,'Resampling',Image).BILINEAR)
                     red,green,blue=ImageStat.Stat(sample).mean
                 spine_color=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'
@@ -199,6 +407,8 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             metadata['spine_font']=font
             metadata['colour_index']=colour_sort_index(metadata['spine_color'])
             payload=json.dumps(metadata).encode()
+            # Per-thread temporary names avoid collisions; readers see a whole JSON
+            # document after replace, rather than a partially written cache entry.
             meta_temp=meta_path.with_name(meta_path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
             try:
                 meta_temp.write_bytes(payload); meta_temp.replace(meta_path)
@@ -218,6 +428,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         self._prune_artwork_cache()
 
     def _serve_artwork(self,artwork_id:str)->None:
+        """Serve original LMS artwork from disk, fetching it only on a cache miss."""
         key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest(); cache_path=self.cache_dir/f'{key}.img'; type_path=self.cache_dir/f'{key}.type'
         try: payload=cache_path.read_bytes(); content_type=type_path.read_text(encoding='ascii').strip() or 'image/jpeg'
         except (FileNotFoundError,OSError,UnicodeError): payload=None
@@ -229,25 +440,35 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         except UpstreamPayloadTooLarge as error: self._send_upstream_error(error)
         except (URLError,TimeoutError,OSError) as error: self._send_upstream_error(error)
     def _store_artwork(self,cache_path:Path,type_path:Path,payload:bytes,content_type:str)->None:
+        """Publish image bytes and their MIME sidecar via temporary-file replacements."""
+        if getattr(self,'background_warming',False):
+            used=sum(path.stat().st_size for path in self.cache_dir.glob('*.img') if path.exists())
+            if used+len(payload)>self._cache_limit_bytes(): raise CacheFull()
+        # Each file replacement is atomic; image and MIME sidecar are separate files.
         suffix=f'.{os.getpid()}.{threading.get_ident()}.tmp'; image_temp=cache_path.with_name(cache_path.name+suffix); type_temp=type_path.with_name(type_path.name+suffix)
         try: image_temp.write_bytes(payload); type_temp.write_text(content_type,encoding='ascii'); image_temp.replace(cache_path); type_temp.replace(type_path)
         finally: image_temp.unlink(missing_ok=True); type_temp.unlink(missing_ok=True)
     def _prune_artwork_cache(self)->None:
+        """Evict oldest-written images and matching sidecars until within the byte limit."""
+        if getattr(self,'background_warming',False): return
         entries=[]; total=0
         for path in self.cache_dir.glob('*.img'):
             try:
                 size=path.stat().st_size; entries.append((path.stat().st_mtime,path,size)); total+=size
             except OSError: continue
+        # This is oldest-write eviction, not LRU: cache hits do not touch mtime.
         for _,path,size in sorted(entries):
-            if total<=MAX_ARTWORK_CACHE_BYTES: break
+            if total<=self._cache_limit_bytes(): break
             try:
                 path.unlink(); path.with_suffix('.type').unlink(missing_ok=True); path.with_suffix('.meta').unlink(missing_ok=True); total-=size
             except OSError: continue
     def _read_limited(self,response,limit:int)->bytes:
+        """Bound buffered response bytes even when Content-Length is absent or incorrect."""
         content_length=response.headers.get('Content-Length')
         try:
             if content_length is not None and int(content_length)>limit: raise UpstreamPayloadTooLarge(f'Upstream response exceeds {limit} bytes')
         except ValueError: pass
+        # Read at most one byte past the limit to detect an oversized streamed body.
         chunks=[]; total=0
         while True:
             chunk=response.read(min(65536,limit-total+1))
@@ -256,32 +477,42 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if total>limit: raise UpstreamPayloadTooLarge(f'Upstream response exceeds {limit} bytes')
         return b''.join(chunks)
     def _relay(self,request:Request,timeout:int=10)->None:
+        """Forward an LMS response with a size bound and no browser response caching."""
         try:
             with urlopen(request,timeout=timeout) as response: self._send_payload(response.status,self._read_limited(response,MAX_UPSTREAM_BYTES),response.headers.get('Content-Type','application/octet-stream'),cache_control='no-store')
         except HTTPError as error: self._send_http_error(error)
         except UpstreamPayloadTooLarge as error: self._send_upstream_error(error)
         except (URLError,TimeoutError,OSError) as error: self._send_upstream_error(error)
     def _send_http_error(self,error:HTTPError)->None:
+        """Preserve an upstream HTTP status and body, subject to the response size limit."""
         try: payload=self._read_limited(error,MAX_UPSTREAM_BYTES)
         except UpstreamPayloadTooLarge as too_large: self._send_upstream_error(too_large); return
         self._send_payload(error.code,payload,error.headers.get('Content-Type','text/plain'),cache_control='no-store')
+    # Network/processing failures become a gateway error; upstream HTTP errors above
+    # keep their original status instead.
     def _send_upstream_error(self,error:Exception)->None: self._send_payload(502,f'Could not contact LMS: {error}'.encode('utf-8','replace'),'text/plain; charset=utf-8',cache_control='no-store')
     def _send_payload(self,status:int,payload:bytes,content_type:str,*,cache_control:str,extra_headers:dict[str,str]|None=None)->None:
+        """Write a complete buffered HTTP response with explicit length, type and caching."""
         self.send_response(status); self.send_header('Content-Type',content_type); self.send_header('Content-Length',str(len(payload))); self.send_header('Cache-Control',cache_control)
         for name,value in (extra_headers or {}).items(): self.send_header(name,value)
         self.end_headers(); self.wfile.write(payload)
 
 def main()->int:
+    """Read configuration, initialise the cache and run the threaded HTTP server."""
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--lms',default='http://mrlazy:9000',help='LMS base URL'); parser.add_argument('--bind',default='127.0.0.1',help='Address to listen on'); parser.add_argument('--port',type=int,default=8088,help='HTTP port')
     parser.add_argument('--batch-size',type=positive_int,default=40,help='Albums per LMS batch'); parser.add_argument('--idle-return-seconds',type=non_negative_int,default=30,help='Idle time before returning to the playing album; 0 disables')
-    parser.add_argument('--reconnect-max-seconds',type=positive_int,default=30,help='Maximum reconnect backoff'); parser.add_argument('--random-scroll-max-seconds',type=positive_int,default=3,help='Maximum random and idle-return scroll duration'); parser.add_argument('--search-limit',type=positive_int,default=100,help='Maximum albums returned by a search'); parser.add_argument('--cache-dir',help='Persistent artwork cache directory (default: .cache/album-art)'); parser.add_argument('--clear-cache',action='store_true',help='Clear the persistent artwork cache before starting'); args=parser.parse_args()
+    parser.add_argument('--reconnect-max-seconds',type=positive_int,default=30,help='Maximum reconnect backoff'); parser.add_argument('--random-scroll-max-seconds',type=positive_int,default=3,help='Maximum random and idle-return scroll duration'); parser.add_argument('--search-limit',type=positive_int,default=100,help='Maximum albums returned by a search'); parser.add_argument('--cache-dir',help='Persistent artwork cache directory (default: .cache/album-art)'); parser.add_argument('--cache-limit-mb',type=positive_int,default=MAX_ARTWORK_CACHE_BYTES//1_000_000,help='Default artwork cache limit in MB'); parser.add_argument('--cache-hard-limit-mb',type=positive_int,default=MAX_ARTWORK_CACHE_HARD_BYTES//1_000_000,help='Maximum artwork cache limit clients may select in MB'); parser.add_argument('--clear-cache',action='store_true',help='Clear the persistent artwork cache before starting'); args=parser.parse_args()
+    if args.cache_limit_mb>args.cache_hard_limit_mb: parser.error('--cache-limit-mb must not exceed --cache-hard-limit-mb')
     static_dir=Path(__file__).resolve().parent; cache_dir=Path(args.cache_dir).expanduser().resolve() if args.cache_dir else static_dir/'.cache'/'album-art'
     if args.clear_cache and cache_dir.exists():
         removed=sum(1 for path in cache_dir.rglob('*') if path.is_file()); shutil.rmtree(cache_dir); print(f"Cleared artwork cache: {removed} file{'s' if removed!=1 else ''} removed from {cache_dir}")
     cache_dir.mkdir(parents=True,exist_ok=True)
-    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'lms_url':args.lms.rstrip('/')}
+    # Shared mutable defaults are exposed to the browser. UI durations use ms;
+    # CLI durations use seconds. The handler factory reads the current LMS target.
+    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'cache_limit_bytes':args.cache_limit_mb*1_000_000,'cache_hard_limit_bytes':args.cache_hard_limit_mb*1_000_000,'lms_url':args.lms.rstrip('/')}
     def handler(*handler_args,**handler_kwargs): return LyrionCarouselHandler(*handler_args,directory=str(static_dir),lms_url=runtime_config['lms_url'],cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
+    # Long-poll connections must not block ordinary artwork and control requests.
     server=ThreadingHTTPServer((args.bind,args.port),handler)
     if args.bind in {'0.0.0.0','::'}: print('Lyrion Carousel listening on all network interfaces.'); print(f'Open: http://{socket.gethostname()}:{args.port}/ or http://<server-ip>:{args.port}/')
     else: print(f'Lyrion Carousel: http://{args.bind}:{args.port}/')
