@@ -54,10 +54,10 @@ export async function searchSpotifyAlbums(playerId,query){
   const root=await spottyRoot(playerId);
   const searchNode=root.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='search');
   if(!searchNode)throw new Error('Spotty Search section not available');
-  const categories=spottyLoop(await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+searchNode.id,'search:'+query]));
-  const albumsNode=categories.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='albums');
-  if(!albumsNode)return [];
-  const result=await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+albumsNode.id,'search:'+query]);
+  // Spotty's Search node accepts the query and result type directly. Asking the
+  // Search node for type:album returns album rows; there is no intermediate
+  // "Albums" category to traverse when a type is supplied.
+  const result=await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+searchNode.id,'search:'+query,'type:album']);
   return spottyLoop(result).map(normalizeSpottyAlbum);
 }
 
