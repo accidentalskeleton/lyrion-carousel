@@ -191,14 +191,24 @@ function syncShelfDom(){
 }
 let KEEP_PLAYING_OPEN=true,pinnedRequest=0;
 let frontTimer=0,followingNowPlaying=false,followRequest=0,followAnimation=null;
-function isPlayingCoverPinned(){return KEEP_PLAYING_OPEN&&playing&&!!playingAlbumId&&!frontPreview.hidden&&String(frontPreviewAlbum?.[6])===String(playingAlbumId)}
+function playingCarouselIndex(){
+    if(!playing)return -1;
+    if(playingAlbumId){const i=albums.findIndex(album=>album&&String(album[6])===String(playingAlbumId));if(i>=0)return i}
+    if(catalogueSource==='spotify'&&nowAlbumTitle){
+        const norm=v=>String(v||'').trim().toLocaleLowerCase();
+        return albums.findIndex(album=>album?.[13]==='spotify'&&norm(album[0])===norm(nowAlbumTitle)&&(!nowAlbumArtist||norm(album[1])===norm(nowAlbumArtist)));
+    }
+    return -1;
+}
+function isPlayingCoverPinned(){if(!KEEP_PLAYING_OPEN||!playing||frontPreview.hidden)return false;const i=playingCarouselIndex();return i>=0&&frontPreviewAlbum===albums[i]}
 async function ensurePlayingCover(){
     const request=++pinnedRequest,id=playingAlbumId,generation=catalogueGeneration;
     frontPreview.dataset.pinned=String(isPlayingCoverPinned());
-    if(!KEEP_PLAYING_OPEN||!playing||!id)return;
+    if(!KEEP_PLAYING_OPEN||!playing)return;
     try{
-        const index=await locateAlbum(id,false);
-        if(request===pinnedRequest&&generation===catalogueGeneration&&KEEP_PLAYING_OPEN&&playing&&String(playingAlbumId)===String(id)&&index>=0)openFrontPreview(albums[index],index);
+        let index=playingCarouselIndex();
+        if(index<0&&id)index=await locateAlbum(id,false);
+        if(request===pinnedRequest&&generation===catalogueGeneration&&KEEP_PLAYING_OPEN&&playing&&index>=0)openFrontPreview(albums[index],index);
     }catch(_){/* A later playback update can retry when the catalogue is available. */}
 }
 function closeFrontPreview(){if(isPlayingCoverPinned())return;cancelFrontPress();clearTimeout(frontTimer);frontTimer=0;frontPreviewIndex=-1;frontPreviewAlbum=null;frontPreview.hidden=true;frontPreview.dataset.visible='false';frontPreview.setAttribute('aria-hidden','true');syncShelfDom();if(KEEP_PLAYING_OPEN&&playing&&playingAlbumId)ensurePlayingCover()}
