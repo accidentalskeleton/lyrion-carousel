@@ -50,6 +50,17 @@ export async function savedSpotifyAlbums(playerId){
   return spottyLoop(result).map(normalizeSpottyAlbum);
 }
 
+export async function searchSpotifyAlbums(playerId,query){
+  const root=await spottyRoot(playerId);
+  const searchNode=root.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='search');
+  if(!searchNode)throw new Error('Spotty Search section not available');
+  const categories=spottyLoop(await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+searchNode.id,'search:'+query]));
+  const albumsNode=categories.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='albums');
+  if(!albumsNode)return [];
+  const result=await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+albumsNode.id,'search:'+query]);
+  return spottyLoop(result).map(normalizeSpottyAlbum);
+}
+
 export async function playSpotifyAlbum(playerId,album){
   // Compact XMLBrowser album rows do not expose spotify:album URIs. LMS does,
   // however, expose each as a playable XMLBrowser node, so use Spotty's playlist
