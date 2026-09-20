@@ -23,10 +23,10 @@ export function normalizeSpottyAlbum(item){
   };
 }
 
-// LMS BrowseLibrary is the stable boundary used by Spotty's OPML integration.
-// menu:spotty asks LMS for the Spotty root. Subsequent navigation replays the
-// action supplied by LMS rather than hard-coding Spotify Web API endpoints.
-export async function browseSpotty(playerId, command=['browselibrary','items',0,200,'menu:spotty']){
+// Spotty registers its own LMS XMLBrowser/CLI tag (`spotty`) via initPlugin.
+// Query that tag directly; subsequent navigation replays actions supplied by LMS
+// rather than hard-coding Spotify Web API endpoints.
+export async function browseSpotty(playerId, command=['spotty','items',0,200]){
   return rpc(playerId,command);
 }
 
