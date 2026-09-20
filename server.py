@@ -262,6 +262,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             ARTWORK_WARMER.last_foreground=time.monotonic()
         if path=='/api/catalogue': self._serve_catalogue(); return
         if path=='/api/diagnostics/spotty': self._serve_spotty_diagnostic(); return
+        if path=='/api/spotty-art': self._serve_spotty_art(); return
         if path=='/api/config': self._send_payload(200,json.dumps(self.runtime_config).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
         if path.startswith('/api/art-meta/'):
             artwork_id=unquote(path.removeprefix('/api/art-meta/'))
@@ -286,6 +287,25 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         with urlopen(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'}),timeout=15) as response:
             payload=json.loads(self._read_limited(response,MAX_UPSTREAM_BYTES))
         return payload.get('result',{}) if isinstance(payload,dict) else {}
+
+    def _serve_spotty_art(self)->None:
+        """Proxy Spotty artwork through LMS so controller browsers never contact Spotify directly."""
+        try:
+            raw=parse_qs(urlsplit(self.path).query).get('path',[''])[0]
+            if not raw.startswith('/imageproxy/') or len(raw)>4096: raise ValueError('Invalid Spotty artwork path')
+            key=hashlib.sha256(f'{self.lms_url}\\0spotty\\0{raw}'.encode()).hexdigest()
+            cache_path=self.cache_dir/f'{key}.img'; type_path=self.cache_dir/f'{key}.type'
+            try:
+                payload=cache_path.read_bytes(); content_type=type_path.read_text(encoding='ascii').strip() or 'image/png'
+                self._send_payload(200,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'HIT'}); return
+            except (FileNotFoundError,OSError,UnicodeError): pass
+            with urlopen(Request(self.lms_url+raw,method='GET'),timeout=15) as response:
+                payload=self._read_limited(response,MAX_ARTWORK_BYTES); content_type=response.headers.get_content_type() or 'image/png'
+            self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache()
+            self._send_payload(200,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'MISS'})
+        except ValueError as error: self.send_error(400,str(error))
+        except HTTPError as error: self._send_http_error(error)
+        except (URLError,TimeoutError,OSError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
 
     def _serve_spotty_diagnostic(self)->None:
         """Discover a player and return the real LMS BrowseLibrary/Spotty payload."""
