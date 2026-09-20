@@ -299,9 +299,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             else:
                 player_id=str(player.get('playerid') or player.get('id') or '')
                 if not player_id: raise ValueError('LMS player has no playerid')
+                # Spotty registers tag='spotty', menu='radios' with LMS's
+                # XMLBrowser plugin API. Query its CLI tag directly; the previous
+                # BrowseLibrary menu guesses could wait on an unrelated handler.
                 commands=[
-                    ['browselibrary','items',0,200,'menu:spotty'],
-                    ['browselibrary','items',0,200,'menu:plugins/Spotty'],
+                    ['spotty','items',0,200],
                 ]
                 attempts=[]; chosen=None
                 for command in commands:
@@ -317,7 +319,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     except Exception as error:
                         attempts.append({'command':command,'error':str(error)})
                 result={'available':chosen is not None,'lms':self.lms_url,'player':{'playerid':player_id,'name':player.get('name','')},'attempts':attempts}
-                if chosen is None: result['error']='No Spotty BrowseLibrary menu was returned by the tested LMS menu identifiers'
+                if chosen is None: result['error']='No Spotty menu was returned by the registered LMS 'spotty' CLI endpoint'
             self._send_payload(200,json.dumps(result,indent=2,default=str).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
             payload={'available':False,'stage':'request','lms':self.lms_url,'error':str(error)}
