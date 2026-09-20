@@ -319,7 +319,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     except Exception as error:
                         attempts.append({'command':command,'error':str(error)})
                 result={'available':chosen is not None,'lms':self.lms_url,'player':{'playerid':player_id,'name':player.get('name','')},'attempts':attempts}
-                if chosen is None: result['error']='No Spotty menu was returned by the registered LMS 'spotty' CLI endpoint'
+                if chosen is None: result['error']="No Spotty menu was returned by the registered LMS 'spotty' CLI endpoint"
             self._send_payload(200,json.dumps(result,indent=2,default=str).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
             payload={'available':False,'stage':'request','lms':self.lms_url,'error':str(error)}
