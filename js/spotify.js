@@ -52,11 +52,21 @@ export async function savedSpotifyAlbums(playerId){
 
 export async function searchSpotifyAlbums(playerId,query){
   const root=await spottyRoot(playerId);
-  const searchNode=root.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='search');
+  let searchNode=root.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='search');
   if(!searchNode)throw new Error('Spotty Search section not available');
-  // Spotty's Search node accepts the query and result type directly. Asking the
-  // Search node for type:album returns album rows; there is no intermediate
-  // "Albums" category to traverse when a type is supplied.
+
+  // When Spotty has recent searches, its root Search item is a link to the
+  // recent-searches menu, not the actual search handler. Resolve the "New
+  // Search" child first. Without this step LMS returns the recent-search menu
+  // itself (eg. "New Search" plus previous query strings) as fake albums.
+  if(String(searchNode.type||'').toLocaleLowerCase()!=='search'){
+    const recent=spottyLoop(await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+searchNode.id]));
+    const newSearch=recent.find(item=>String(item?.type||'').toLocaleLowerCase()==='search')
+      ||recent.find(item=>/new\s+search/i.test(String(item?.name||item?.text||'')));
+    if(!newSearch?.id)throw new Error('Spotty New Search action not available');
+    searchNode=newSearch;
+  }
+
   const result=await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+searchNode.id,'search:'+query,'type:album']);
   return spottyLoop(result).map(normalizeSpottyAlbum);
 }
