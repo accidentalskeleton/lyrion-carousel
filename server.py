@@ -304,6 +304,9 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 # BrowseLibrary menu guesses could wait on an unrelated handler.
                 commands=[
                     ['spotty','items',0,200],
+                    # Item 7 is the Albums node in the root response. Query it too so
+                    # one diagnostic captures the album payload needed by Carousel.
+                    ['spotty','items',0,200,'item_id:7'],
                 ]
                 attempts=[]; chosen=None
                 for command in commands:
@@ -312,7 +315,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                         attempts.append({'command':command,'result':response})
                         loops=[]
                         if isinstance(response,dict):
-                            for key in ('item_loop','items_loop','items'):
+                            for key in ('loop_loop','item_loop','items_loop','items'):
                                 value=response.get(key)
                                 if isinstance(value,list): loops.extend(value)
                         if loops and chosen is None: chosen=response
