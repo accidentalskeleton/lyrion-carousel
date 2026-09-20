@@ -2,6 +2,27 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased — realistic case experiment
+
+- Show current artwork cache usage and its limit in Settings, with total metadata usage in the detail tooltip.
+
+- Rename Artist / Album ordering and match spine label order to the selected sorting mode.
+
+- Add server-side background artwork preparation with progress, cancellation, foreground-request backoff and cache-capacity handling.
+
+- Preload nearby covers with bounded background requests to reduce delays when navigating album previews.
+
+- Move an open album preview to the neighbouring album with Left/Right keys, including repeated keys and catalogue wraparound.
+
+- Group Settings into accessible Display, Playback, Connection and About tabs.
+
+- Close the playing album preview when playback pauses or stops.
+
+- Refine shelf spines with narrow moulded plastic rails, recessed paper labels and tighter contact shadows, preserving label typography and padding.
+
+- Composite album artwork beneath a photographic-style transparent jewel-case shell on the server, caching resolution-specific PNGs.
+- Use the composition in the fan and open shelf covers, with lightweight reflections and a fan case edge.
+
 ## [0.9.0] - 2026-09-18
 
 ### Displays and playback

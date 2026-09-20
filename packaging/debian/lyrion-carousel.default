@@ -7,6 +7,9 @@ PORT=8088
 
 # Persistent artwork cache owned automatically by the systemd service.
 CACHE_DIR=/var/cache/lyrion-carousel/artwork
+# Soft limit controlled from the browser, capped by this server-only ceiling.
+CACHE_LIMIT_MB=512
+CACHE_HARD_LIMIT_MB=2000
 
 BATCH_SIZE=40
 IDLE_RETURN_SECONDS=30
