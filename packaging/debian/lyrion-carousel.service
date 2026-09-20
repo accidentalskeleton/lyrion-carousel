@@ -14,8 +14,10 @@ Environment=IDLE_RETURN_SECONDS=30
 Environment=RECONNECT_MAX_SECONDS=30
 Environment=RANDOM_SCROLL_MAX_SECONDS=3
 Environment=SEARCH_LIMIT=100
+Environment=CACHE_LIMIT_MB=512
+Environment=CACHE_HARD_LIMIT_MB=2000
 EnvironmentFile=-/etc/default/lyrion-carousel
-ExecStart=/usr/bin/python3 /opt/lyrion-carousel/server.py --lms ${LMS_URL} --bind ${BIND_ADDRESS} --port ${PORT} --cache-dir ${CACHE_DIR} --batch-size ${BATCH_SIZE} --idle-return-seconds ${IDLE_RETURN_SECONDS} --reconnect-max-seconds ${RECONNECT_MAX_SECONDS} --random-scroll-max-seconds ${RANDOM_SCROLL_MAX_SECONDS} --search-limit ${SEARCH_LIMIT}
+ExecStart=/usr/bin/python3 /opt/lyrion-carousel/server.py --lms ${LMS_URL} --bind ${BIND_ADDRESS} --port ${PORT} --cache-dir ${CACHE_DIR} --cache-limit-mb ${CACHE_LIMIT_MB} --cache-hard-limit-mb ${CACHE_HARD_LIMIT_MB} --batch-size ${BATCH_SIZE} --idle-return-seconds ${IDLE_RETURN_SECONDS} --reconnect-max-seconds ${RECONNECT_MAX_SECONDS} --random-scroll-max-seconds ${RANDOM_SCROLL_MAX_SECONDS} --search-limit ${SEARCH_LIMIT}
 WorkingDirectory=/opt/lyrion-carousel
 DynamicUser=yes
 CacheDirectory=lyrion-carousel

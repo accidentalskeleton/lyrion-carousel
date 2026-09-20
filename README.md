@@ -74,6 +74,8 @@ python3 server.py --bind 0.0.0.0
 | `--bind` | `127.0.0.1` | Controller listening address |
 | `--port` | `8088` | Controller HTTP port |
 | `--cache-dir` | `.cache/album-art` | Persistent album cache location |
+| `--cache-limit-mb` | `512` | Initial soft artwork-cache limit, adjustable from the browser |
+| `--cache-hard-limit-mb` | `2000` | Server-only ceiling for browser cache-limit changes |
 | `--clear-cache` | off | Delete cached artwork, resized covers and metadata before starting |
 | `--batch-size` | `40` | Albums per browser fallback/index request (server ordering uses 200) |
 | `--idle-return-seconds` | `30` | Default inactivity before returning to now playing; `0` disables |
@@ -81,7 +83,7 @@ python3 server.py --bind 0.0.0.0
 | `--random-scroll-max-seconds` | `3` | Maximum random/startup/idle-return scroll duration |
 | `--search-limit` | `100` | Maximum albums returned by a search |
 
-Settings apply immediately and are saved in this browser. They include LMS URL, player, idle return, menu/preview timeouts, maximum scroll duration, displayed albums, display style, cover resolution and keeping the playing cover open. The obsolete carousel-density control has been removed; use Displayed albums to set spine width and spacing.
+Settings are grouped into Display, Playback, Connection, Cache and About tabs. Changes apply immediately and are saved in this browser. They include LMS URL, player, idle return, menu/preview timeouts, maximum scroll duration, displayed albums, display style, cover resolution and keeping the playing cover open. The Cache tab can adjust the soft artwork-cache limit up to the server-configured hard limit. The obsolete carousel-density control has been removed; use Displayed albums to set spine width and spacing.
 
 The server URL is shared runtime state on the proxy. Set `LMS_URL` in `/etc/default/lyrion-carousel` for a persistent machine-wide default. Saved browser choices override server defaults; the saved LMS URL is applied before initial discovery.
 
@@ -101,7 +103,7 @@ The detail area shows the album under the pointer; outside the shelf it shows th
 
 **Settings → Album cover size** selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls image resolution, not the displayed case size. Server-generated JPEG variants preserve aspect ratio and never upscale. Originals remain available for spine-colour calculation.
 
-**Settings → Status / About → Clear album cache** uses an inline confirmation and removes artwork, resized covers and derived colours, fonts and colour indexes. Metadata rebuilds as needed; colour ordering prepares it for the whole library.
+**Settings → Cache → Clear album cache** uses an inline confirmation and removes artwork, resized covers and derived colours, fonts and colour indexes. Metadata rebuilds as needed; colour ordering prepares it for the whole library. The Cache tab starts at a 512 MB soft limit by default; the browser may raise or lower it, but never above the server-only 2 GB hard limit. Set `CACHE_LIMIT_MB` and `CACHE_HARD_LIMIT_MB` in `/etc/default/lyrion-carousel` (or pass the corresponding command-line options) before starting the service to change those defaults.
 
 ## Colour ordering
 
@@ -234,3 +236,15 @@ Node is needed only for the JavaScript regression runner. It uses DOM/event doub
 ## Upgrading to 0.9.0
 
 Restart the Python server (or the Debian service) and refresh the browser. The updated client requires the prepared-catalogue and resized-artwork endpoints. Existing spine metadata upgrades automatically; clearing the cache is optional.
+
+## Realistic case experiment
+
+On this branch, resized cover requests include `case=realistic-v1`. The server composites artwork beneath `assets/jewel-case-realistic-v1.png`, an AI-generated transparent plastic shell, and caches a PNG at the selected resolution. Both fan covers and opened shelf covers use this composition. The browser adds a restrained reflection and a thin fan case edge; no Three.js or continuous lighting loop is used. Original artwork still supplies spine colours. Restart the server and refresh the browser to try this experiment. Application version remains 0.9.0.
+
+The browser preloads the focused cover and up to four neighbours on each side, with two low-priority image requests at a time. Queued work follows the latest browsing position, and at most 24 loaded images are retained by the preloader. This also warms server-composited cases at the selected cover resolution.
+
+### Background artwork preparation
+
+Settings → About → Prepare all artwork starts a server-wide background job at the selected cover resolution. It fetches missing original artwork, calculates spine metadata and caches photographic case images for every distinct artwork ID. One album is processed at a time, with a short pause between albums and a pause after foreground cover requests. Progress, unavailable items and cancellation are shown in Settings. The job continues when the browser closes; it is not automatically resumed after restarting the server. Starting it again reuses completed cached files. Changing the cover resolution requires starting another run for that resolution.
+
+The worker stops at the existing 512 MB image-cache limit instead of evicting earlier prepared artwork. It can therefore stop before completing a large library. Foreground cache pruning still applies. Clearing the cache or changing LMS cancels the job; an in-flight request may take up to its normal timeout to finish. This prepares server files, not an offline browser library. `/api/cache/warm` exposes progress (GET) and start/cancel actions (POST). Restart the server after installing this feature.

@@ -1,0 +1,43 @@
+/* Photographic shell and booklet are composited and cached by the server. */
+.bf-stage.bf-fan-active .bf-jewel-front {
+    box-shadow: none!important;
+}
+.bf-stage.bf-fan-active .bf-jewel-art {
+    inset: 0!important;
+    width: 100%!important;
+    height: 100%!important;
+    box-shadow: none!important;
+}
+.bf-stage.bf-fan-active .bf-jewel-gloss {
+    background: linear-gradient(115deg,transparent 14%,rgba(255,255,255,var(--case-light,.05)) 34%,transparent 49%)!important;
+    inset: 4% 4% 4% 13.5%!important;
+}
+/* A narrow moulded edge keeps angled covers from looking paper-thin. */
+.bf-stage.bf-fan-active .bf-album::after {
+    content: "";
+    display: block!important;
+    position: absolute;
+    inset: 2% auto 2% 1%;
+    width: 7px;
+    background: repeating-linear-gradient(0deg,#15191b 0 2px,#485052 2px 3px,#23292c 3px 5px);
+    border: 1px solid #788184;
+    transform-origin: left center;
+    transform: rotateY(-90deg);
+    backface-visibility: visible;
+}
+.bf-front-case {
+    aspect-ratio: 1337 / 1176;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: 0 20px 35px rgba(0,0,0,.35);
+}
+.bf-front-art { background-size: contain!important; }
+.bf-front-case::after {
+    content: "";
+    position: absolute;
+    inset: 4% 4% 4% 13.5%;
+    pointer-events: none;
+    background: linear-gradient(115deg,transparent 18%,rgba(255,255,255,.055) 33%,transparent 48%);
+}
