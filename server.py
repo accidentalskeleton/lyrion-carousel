@@ -262,6 +262,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             ARTWORK_WARMER.last_foreground=time.monotonic()
         if path=='/api/catalogue': self._serve_catalogue(); return
         if path=='/api/diagnostics/spotty': self._serve_spotty_diagnostic(); return
+        if path=='/api/diagnostics/now-playing': self._serve_now_playing_diagnostic(); return
         if path=='/api/spotty-art': self._serve_spotty_art(); return
         if path=='/api/spotty-art-meta': self._serve_spotty_art_meta(); return
         if path=='/api/config': self._send_payload(200,json.dumps(self.runtime_config).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
@@ -339,6 +340,23 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 finally: temp.unlink(missing_ok=True)
             self._send_payload(200,json.dumps(metadata).encode(),'application/json; charset=utf-8',cache_control='public, max-age=86400')
         except ValueError as error: self.send_error(400,str(error))
+        except HTTPError as error: self._send_http_error(error)
+        except (URLError,TimeoutError,OSError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
+
+    def _serve_now_playing_diagnostic(self)->None:
+        """Return the raw LMS status payload needed to map Spotty now-playing metadata."""
+        try:
+            players_result=self._lms_rpc('', ['players',0,100])
+            players=players_result.get('players_loop',[]) if isinstance(players_result,dict) else []
+            connected=[p for p in players if str(p.get('connected','1')) not in ('0','false','False')]
+            player=(connected or players or [None])[0]
+            if not player: raise ValueError('LMS returned no players')
+            player_id=str(player.get('playerid') or player.get('id') or '')
+            if not player_id: raise ValueError('LMS player has no playerid')
+            status=self._lms_rpc(player_id,['status','-',5,'tags:alJenKNR'])
+            result={'lms':self.lms_url,'player':{'playerid':player_id,'name':player.get('name','')},'status':status}
+            self._send_payload(200,json.dumps(result,indent=2).encode(),'application/json; charset=utf-8',cache_control='no-store')
+        except (ValueError,TypeError,UnicodeError,json.JSONDecodeError) as error: self.send_error(500,str(error))
         except HTTPError as error: self._send_http_error(error)
         except (URLError,TimeoutError,OSError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
 
