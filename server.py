@@ -263,6 +263,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if path=='/api/catalogue': self._serve_catalogue(); return
         if path=='/api/diagnostics/spotty': self._serve_spotty_diagnostic(); return
         if path=='/api/spotty-art': self._serve_spotty_art(); return
+        if path=='/api/spotty-art-meta': self._serve_spotty_art_meta(); return
         if path=='/api/config': self._send_payload(200,json.dumps(self.runtime_config).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
         if path.startswith('/api/art-meta/'):
             artwork_id=unquote(path.removeprefix('/api/art-meta/'))
@@ -303,6 +304,40 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 payload=self._read_limited(response,MAX_ARTWORK_BYTES); content_type=response.headers.get_content_type() or 'image/png'
             self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache()
             self._send_payload(200,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'MISS'})
+        except ValueError as error: self.send_error(400,str(error))
+        except HTTPError as error: self._send_http_error(error)
+        except (URLError,TimeoutError,OSError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
+
+    def _spotty_artwork(self,raw:str):
+        """Return cached Spotty artwork bytes and content type, fetching through LMS if needed."""
+        if not raw.startswith('/imageproxy/') or len(raw)>4096: raise ValueError('Invalid Spotty artwork path')
+        key=hashlib.sha256(f'{self.lms_url}\\0spotty\\0{raw}'.encode()).hexdigest()
+        cache_path=self.cache_dir/f'{key}.img'; type_path=self.cache_dir/f'{key}.type'
+        try: return key,cache_path.read_bytes(),type_path.read_text(encoding='ascii').strip() or 'image/png'
+        except (FileNotFoundError,OSError,UnicodeError): pass
+        with urlopen(Request(self.lms_url+raw,method='GET'),timeout=15) as response:
+            payload=self._read_limited(response,MAX_ARTWORK_BYTES); content_type=response.headers.get_content_type() or 'image/png'
+        self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache()
+        return key,payload,content_type
+
+    def _serve_spotty_art_meta(self)->None:
+        """Derive shelf-spine colour metadata from the same cached Spotty cover image."""
+        try:
+            raw=parse_qs(urlsplit(self.path).query).get('path',[''])[0]
+            key,payload,_=self._spotty_artwork(raw); meta_path=self.cache_dir/f'{key}.meta'
+            try:
+                metadata=json.loads(meta_path.read_bytes())
+                if not isinstance(metadata,dict) or not re.fullmatch(r'#[0-9a-fA-F]{6}',str(metadata.get('spine_color',''))): raise ValueError
+            except (OSError,ValueError,UnicodeError,json.JSONDecodeError):
+                with Image.open(io.BytesIO(payload)) as image:
+                    red,green,blue=ImageStat.Stat(image.convert('RGB').resize((1,1),getattr(Image,'Resampling',Image).BILINEAR)).mean
+                spine_color=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'; luminance=(.299*red+.587*green+.114*blue)/255
+                font=SPINE_FONTS[int(hashlib.sha256(raw.encode()).hexdigest()[:8],16)%len(SPINE_FONTS)]
+                metadata={'spine_color':spine_color,'text_color':'#111417' if luminance>.62 else '#f5f2ea','spine_font':font,'colour_index':colour_sort_index(spine_color)}
+                temp=meta_path.with_name(meta_path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
+                try: temp.write_bytes(json.dumps(metadata).encode()); temp.replace(meta_path)
+                finally: temp.unlink(missing_ok=True)
+            self._send_payload(200,json.dumps(metadata).encode(),'application/json; charset=utf-8',cache_control='public, max-age=86400')
         except ValueError as error: self.send_error(400,str(error))
         except HTTPError as error: self._send_http_error(error)
         except (URLError,TimeoutError,OSError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
