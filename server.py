@@ -291,20 +291,39 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         return payload.get('result',{}) if isinstance(payload,dict) else {}
 
     def _serve_spotty_art(self)->None:
-        """Proxy Spotty artwork through LMS so controller browsers never contact Spotify directly."""
+        """Proxy/cache Spotty artwork and optionally render the same jewel-case variant as local albums."""
         try:
-            raw=parse_qs(urlsplit(self.path).query).get('path',[''])[0]
-            if not raw.startswith('/imageproxy/') or len(raw)>4096: raise ValueError('Invalid Spotty artwork path')
-            key=hashlib.sha256(f'{self.lms_url}\\0spotty\\0{raw}'.encode()).hexdigest()
-            cache_path=self.cache_dir/f'{key}.img'; type_path=self.cache_dir/f'{key}.type'
-            try:
-                payload=cache_path.read_bytes(); content_type=type_path.read_text(encoding='ascii').strip() or 'image/png'
-                self._send_payload(200,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'HIT'}); return
-            except (FileNotFoundError,OSError,UnicodeError): pass
-            with urlopen(Request(self.lms_url+raw,method='GET'),timeout=15) as response:
-                payload=self._read_limited(response,MAX_ARTWORK_BYTES); content_type=response.headers.get_content_type() or 'image/png'
-            self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache()
-            self._send_payload(200,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'MISS'})
+            query=parse_qs(urlsplit(self.path).query)
+            raw=query.get('path',[''])[0]
+            size_raw=query.get('size',[''])[0]
+            case=query.get('case',[''])[0]=='realistic-v1'
+            key,payload,content_type=self._spotty_artwork(raw)
+            if size_raw or case:
+                size=int(size_raw or 512)
+                if size not in (128,256,384,512,768,1024): raise ValueError('Invalid cover size')
+                variant=self.cache_dir/f'{key}-{size}{"-case-v1" if case else ""}.img'
+                type_path=variant.with_suffix('.type')
+                if variant.exists():
+                    payload=variant.read_bytes()
+                    try: content_type=type_path.read_text(encoding='ascii').strip() or ('image/png' if case else 'image/jpeg')
+                    except (OSError,UnicodeError): content_type='image/png' if case else 'image/jpeg'
+                else:
+                    with Image.open(io.BytesIO(payload)) as source:
+                        image=source.convert('RGB')
+                        if case:
+                            with Image.open(Path(__file__).resolve().parent/'assets'/'jewel-case-realistic-v1.png') as texture:
+                                overlay=texture.convert('RGBA')
+                            canvas=Image.new('RGBA',overlay.size)
+                            booklet=ImageOps.fit(image,(1110,1090),method=getattr(Image,'Resampling',Image).LANCZOS)
+                            canvas.paste(booklet,(175,45))
+                            image=Image.alpha_composite(canvas,overlay)
+                        image.thumbnail((size,size),getattr(Image,'Resampling',Image).LANCZOS)
+                        output=io.BytesIO()
+                        if case: image.save(output,format='PNG')
+                        else: image.save(output,format='JPEG',quality=85)
+                        payload=output.getvalue(); content_type='image/png' if case else 'image/jpeg'
+                    self._store_artwork(variant,type_path,payload,content_type); self._prune_artwork_cache()
+            self._send_payload(200,payload,content_type,cache_control='public, max-age=86400')
         except ValueError as error: self.send_error(400,str(error))
         except HTTPError as error: self._send_http_error(error)
         except (URLError,TimeoutError,OSError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
