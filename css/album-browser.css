@@ -959,3 +959,9 @@ body {
     border-radius:50%;
     background:conic-gradient(#e45b52,#e6cd54,#68b969,#56bdc8,#6773d8,#bc6cce,#e45b52);
 }
+
+/* Experimental Library / Spotify catalogue selector */
+.bf-source-switch{display:inline-flex;align-items:center;padding:2px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:rgba(0,0,0,.24);margin-right:10px}
+.bf-source-button{appearance:none;border:0;background:transparent;color:rgba(255,255,255,.62);font:inherit;font-size:12px;line-height:1;padding:7px 11px;border-radius:999px;cursor:pointer}
+.bf-source-button.is-active{background:rgba(255,255,255,.14);color:#fff}
+.bf-source-button:disabled{opacity:.4;cursor:default}
