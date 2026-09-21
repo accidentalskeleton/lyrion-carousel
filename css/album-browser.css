@@ -554,6 +554,7 @@ body {
     letter-spacing:.04em;
     text-transform:uppercase
 }
+.bf-spotify-logo { width:16px; height:16px; display:block }
 .bf-now-source-icon {
     display:inline-flex;
     align-items:center;
