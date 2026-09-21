@@ -16,6 +16,7 @@ esac
 rm -rf -- "$STAGE"
 mkdir -p "$STAGE/DEBIAN" "$PROJECT_DIR/dist"
 install -Dm0644 "$PROJECT_DIR/index.html" "$STAGE/opt/$PACKAGE/index.html"
+install -Dm0644 "$PROJECT_DIR/spotty-diagnostic.html" "$STAGE/opt/$PACKAGE/spotty-diagnostic.html"
 install -Dm0644 "$PROJECT_DIR/VERSION" "$STAGE/opt/$PACKAGE/VERSION"
 install -Dm0644 "$PROJECT_DIR/manifest.webmanifest" "$STAGE/opt/$PACKAGE/manifest.webmanifest"
 install -Dm0755 "$PROJECT_DIR/server.py" "$STAGE/opt/$PACKAGE/server.py"

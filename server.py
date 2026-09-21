@@ -394,25 +394,27 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 # Spotty registers tag='spotty', menu='radios' with LMS's
                 # XMLBrowser plugin API. Query its CLI tag directly; the previous
                 # BrowseLibrary menu guesses could wait on an unrelated handler.
-                commands=[
-                    ['spotty','items',0,200],
-                    # Item 7 is the Albums node in the root response. Query it too so
-                    # one diagnostic captures the album payload needed by Carousel.
-                    ['spotty','items',0,200,'item_id:7'],
-                ]
+                root_command=['spotty','items',0,200]
                 attempts=[]; chosen=None
-                for command in commands:
-                    try:
-                        response=self._lms_rpc(player_id,command)
-                        attempts.append({'command':command,'result':response})
-                        loops=[]
-                        if isinstance(response,dict):
-                            for key in ('loop_loop','item_loop','items_loop','items'):
-                                value=response.get(key)
-                                if isinstance(value,list): loops.extend(value)
-                        if loops and chosen is None: chosen=response
-                    except Exception as error:
-                        attempts.append({'command':command,'error':str(error)})
+                try:
+                    root_response=self._lms_rpc(player_id,root_command)
+                    attempts.append({'command':root_command,'result':root_response})
+                    root_items=[]
+                    if isinstance(root_response,dict):
+                        for key in ('loop_loop','item_loop','items_loop','items'):
+                            value=root_response.get(key)
+                            if isinstance(value,list): root_items.extend(value)
+                    if root_items: chosen=root_response
+                    albums_node=next((item for item in root_items if str(item.get('name') or item.get('text') or '').strip().casefold()=='albums'),None)
+                    if albums_node is not None and albums_node.get('id') is not None:
+                        albums_command=['spotty','items',0,200,f"item_id:{albums_node['id']}"]
+                        try:
+                            albums_response=self._lms_rpc(player_id,albums_command)
+                            attempts.append({'command':albums_command,'result':albums_response})
+                        except Exception as error:
+                            attempts.append({'command':albums_command,'error':str(error)})
+                except Exception as error:
+                    attempts.append({'command':root_command,'error':str(error)})
                 result={'available':chosen is not None,'lms':self.lms_url,'player':{'playerid':player_id,'name':player.get('name','')},'attempts':attempts}
                 if chosen is None: result['error']="No Spotty menu was returned by the registered LMS 'spotty' CLI endpoint"
             self._send_payload(200,json.dumps(result,indent=2,default=str).encode(),'application/json; charset=utf-8',cache_control='no-store')
