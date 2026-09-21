@@ -282,3 +282,31 @@
 .bf-cache-warming p { color:#aeb5af; font-size:12px; line-height:1.5; }
 .bf-cache-warming button[hidden] { display:none; }
 .bf-cache-warming button:disabled { opacity:.5; cursor:wait; }
+
+.bf-coffee-panel {
+    min-height:220px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:16px;
+    padding:28px;
+    text-align:center
+}
+.bf-coffee-panel .bf-settings-copy { align-items:center; }
+.bf-coffee-icon { font-size:38px; line-height:1; }
+.bf-coffee-button {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:40px;
+    padding:0 18px;
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:8px;
+    background:#233127;
+    color:#e8f2e9;
+    font-weight:600;
+    text-decoration:none
+}
+.bf-coffee-button:hover { background:#2d4032; }
+.bf-coffee-button:focus-visible { outline:2px solid #8fba91; outline-offset:2px; }
