@@ -29,7 +29,26 @@ async function loadSpotifyCatalogue(){
 async function setCatalogueSource(source){
     if(source===catalogueSource||orderBusy||libraryRefreshing)return;
     const previous=catalogueSource;catalogueSource=source==='spotify'?'spotify':'library';updateSourceButtons();sourceButtons.forEach(b=>b.disabled=true);
-    try{if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();try{localStorage.setItem('albumBrowserSource',catalogueSource)}catch(_){}}
+    try{
+        if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();
+        try{localStorage.setItem('albumBrowserSource',catalogueSource)}catch(_){}
+        // A source switch replaces the catalogue, so resolve Now Playing again
+        // against the newly loaded source. If that album exists here, move
+        // straight to it and open/pin its jewel case.
+        if(playing){
+            let i=playingCarouselIndex();
+            if(i<0&&catalogueSource==='library'&&playingAlbumId)i=await locateAlbum(playingAlbumId,false);
+            if(i>=0){
+                followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;
+                closeFrontPreview(true);
+                const arrived=await scrollToAlbumIndex(i);
+                if(arrived){
+                    position=target=nearestPositionForIndex(i);
+                    renderAlbums();draw();openFrontPreview(albums[i],i);
+                }
+            }
+        }
+    }
     catch(error){catalogueSource=previous;updateSourceButtons();setConnection(error.message||'Could not change music source',false)}
     finally{sourceButtons.forEach(b=>b.disabled=false);updateBusyState()}
 }
