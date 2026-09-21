@@ -233,11 +233,53 @@ export async function runTests(sources) {
   assert(api.coverCache().active===0&&api.coverCache().cached<=24,'preloader drains and bounds retained images');
   const warmedCount=imageRequests.length;api.prefetchCoverWindow(30);
   assert(imageRequests.length===warmedCount,'unchanged window does not refetch covers');
+
+  // 0.10.0 Spotify/Spotty regression coverage.
+  if (sources.spotify) {
+    const spottyCalls=[];
+    const spottyRpc=async (player,cmd)=>{
+      spottyCalls.push(cmd);
+      if(cmd[0]==='spotty'&&cmd[1]==='playlist')return {ok:1};
+      if(cmd.includes('item_id:9'))return {items_loop:[]};
+      if(cmd.includes('item_id:album-1'))return {items_loop:[
+        {id:'track-1',type:'audio',line1:'1 First track',duration:61,genre:'Rock',year:'2020'},
+        {id:'9',name:'Add Album to Library'}
+      ]};
+      if(cmd.includes('item_id:3'))return {items_loop:[{id:'album-search',type:'playlist',name:'Search Album by Search Artist',image:'/imageproxy/search'}]};
+      if(cmd.some(x=>String(x).startsWith('search:')))return {items_loop:[{id:'3',name:'Albums',passthrough:[{type:'album',query:'needle'}]}]};
+      if(cmd.includes('item_id:7'))return {items_loop:[{id:'album-1',name:'Saved Album by Saved Artist',image:'/imageproxy/saved'}]};
+      return {items_loop:[{id:'2',name:'Search',type:'search'},{id:'7',name:'Albums'}]};
+    };
+    const spotty=new Function('rpc',plain(sources.spotify)+';return {normalizeSpottyAlbum,savedSpotifyAlbums,searchSpotifyAlbums,playSpotifyAlbum,saveSpotifyAlbum,spotifyAlbumInformation};')(spottyRpc);
+    const normalized=spotty.normalizeSpottyAlbum({id:'x',name:'Title by Artist',image:'/imageproxy/x'});
+    assert(normalized.source==='spotify'&&normalized.title==='Title'&&normalized.artist==='Artist'&&normalized.spottyItemId==='x','Spotty album normalization');
+    const saved=await spotty.savedSpotifyAlbums('player');
+    assert(saved.length===1&&saved[0].title==='Saved Album'&&spottyCalls.some(c=>c.includes('item_id:7')),'saved Spotify albums use discovered Albums node');
+    const searched=await spotty.searchSpotifyAlbums('player','needle');
+    assert(searched.length===1&&searched[0].title==='Search Album','Spotify full-catalogue album search');
+    await spotty.playSpotifyAlbum('player','album-1');
+    assert(spottyCalls.some(c=>c[0]==='spotty'&&c[1]==='playlist'&&c.includes('item_id:album-1')),'Spotify playback stays in Spotty/LMS');
+    await spotty.saveSpotifyAlbum('player','album-1');
+    assert(spottyCalls.some(c=>c.includes('item_id:9')),'Spotify searched album save follows Spotty action');
+    const info=await spotty.spotifyAlbumInformation('player','album-1');
+    assert(info.tracks.length===1&&info.genre==='Rock'&&info.year==='2020','Spotify Album Information parses tracks and metadata');
+  }
+  if (sources.index) {
+    assert(sources.index.includes('data-source="library"')&&sources.index.includes('data-source="spotify"'),'Library and Spotify source controls present');
+    assert(sources.index.includes('settings-panel-coffee')&&sources.index.includes('https://buymeacoffee.com/stuliet'),'Coffee settings panel present');
+  }
+  if (sources.albumBrowserCss) {
+    for(const selector of ['.bf-source-switch','.bf-previous','.bf-next','.bf-queue-open'])
+      assert(sources.albumBrowserCss.includes('#book-fan-browser.is-starting '+selector),'startup hides '+selector);
+  }
+  assert(sources.app.includes("'tags:altng'")&&sources.app.includes('trackGenres'),'LMS Album Information requests and aggregates track genre metadata');
   return checks;
 }
 
 if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.mjs')) {
   const {readFile}=await import('node:fs/promises');
-  const sources={};for(const name of ['app','browser','catalogue','lms','settings'])sources[name]=await readFile(new URL('../js/'+name+'.js',import.meta.url),'utf8');
+  const sources={};for(const name of ['app','browser','catalogue','lms','settings','spotify'])sources[name]=await readFile(new URL('../js/'+name+'.js',import.meta.url),'utf8');
+  sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
+  sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }

@@ -256,6 +256,39 @@ class ServerTests(unittest.TestCase):
             self.handler.end_headers()
             self.assertEqual(headers, [])
 
+
+    def test_spotty_diagnostic_discovers_album_node_dynamically(self):
+        calls=[]
+        def rpc(player, command):
+            calls.append(command)
+            if command == ['players',0,100]:
+                return {'players_loop':[{'playerid':'p1','name':'Test','connected':1}]}
+            if command == ['spotty','items',0,200]:
+                return {'items_loop':[{'id':42,'name':'Albums'},{'id':2,'name':'Search'}]}
+            if command == ['spotty','items',0,200,'item_id:42']:
+                return {'items_loop':[{'id':'a1','name':'Album by Artist'}]}
+            raise AssertionError(command)
+        with patch.object(self.handler,'_lms_rpc',side_effect=rpc):
+            self.handler._serve_spotty_diagnostic()
+        payload=json.loads(self.responses[-1][1])
+        self.assertTrue(payload['available'])
+        self.assertIn(['spotty','items',0,200,'item_id:42'],calls)
+        self.assertNotIn(['spotty','items',0,200,'item_id:7'],calls)
+
+    def test_spotty_artwork_metadata_is_cached_from_remote_cover(self):
+        image=io.BytesIO()
+        Image.new('RGB',(8,8),'red').save(image,format='PNG')
+        self.handler.path='/api/spotty-art-meta?path=%2Fimageproxy%2Fcover'
+        key='spotty-test'
+        with patch.object(self.handler,'_spotty_artwork',return_value=(key,image.getvalue(),'image/png')):
+            self.handler._serve_spotty_art_meta()
+            first=json.loads(self.responses[-1][1])
+            self.handler._serve_spotty_art_meta()
+            second=json.loads(self.responses[-1][1])
+        self.assertEqual(first['spine_color'],'#ff0000')
+        self.assertEqual(first,second)
+        self.assertTrue((self.handler.cache_dir/f'{key}.meta').exists())
+
     def test_malformed_rpc_log_does_not_crash_handler(self):
         with patch('builtins.print'):
             self.handler._log_lms_rpc([])
