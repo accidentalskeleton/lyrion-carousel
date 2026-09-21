@@ -34,6 +34,8 @@ async function loadSpotifyCatalogue(){
     position=target=0;hoveredAlbumIndex=-1;lastSelected=-1;closeFrontPreview();renderAlbums();draw();setConnection(albumCountLabel()+' · Spotify',true);
 }
 
+function updateSourceButtons(){sourceButtons.forEach(button=>{const active=button.dataset.source===catalogueSource;button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active))})}
+
 async function setCatalogueSource(source){
     if(source===catalogueSource||orderBusy||libraryRefreshing)return;
     const previous=catalogueSource;catalogueSource=source==='spotify'?'spotify':'library';updateSourceButtons();sourceButtons.forEach(b=>b.disabled=true);
