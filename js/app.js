@@ -558,7 +558,7 @@ function updateMeta(force=false){
             source.setAttribute('role','img');
             source.setAttribute('aria-label',playingSource==='spotify'?'Playing from Spotify':'Playing from LMS Library');
             source.title=source.getAttribute('aria-label');
-            source.textContent=playingSource==='spotify'?'♫':'▤';
+            source.innerHTML=playingSource==='spotify'?'<svg class="bf-spotify-logo" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#1ED760"/><path d="M17.45 17.27a.75.75 0 0 1-1.03.25c-2.82-1.72-6.37-2.11-10.55-1.16a.75.75 0 1 1-.33-1.46c4.57-1.04 8.5-.59 11.66 1.34.35.21.46.67.25 1.03Zm1.47-3.27a.94.94 0 0 1-1.29.31c-3.23-1.98-8.16-2.55-11.98-1.4a.94.94 0 1 1-.54-1.8c4.37-1.32 9.8-.68 13.5 1.59.44.27.58.85.31 1.3Zm.13-3.4C15.17 8.3 8.77 8.08 5.06 9.2a1.13 1.13 0 1 1-.65-2.16c4.26-1.29 11.33-1.03 15.79 1.61a1.13 1.13 0 0 1-1.15 1.95Z" fill="#000"/></svg>':'▤';
             now.prepend(source);
         }
         content.push(now);
