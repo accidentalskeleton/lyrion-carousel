@@ -155,7 +155,7 @@ export async function runTests(sources) {
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
   });
   window.fetch=async()=>{};
-  const settingsFetch=async url=>url==='/api/config'?{ok:true,json:async()=>({lms_url:'http://test:9000',idle_return_ms:45000,random_scroll_max_ms:2000})}:{ok:true,text:async()=> '0.9.0'};
+  const settingsFetch=async url=>url==='/api/config'?{ok:true,json:async()=>({lms_url:'http://test:9000',idle_return_ms:45000,random_scroll_max_ms:2000})}:{ok:true,text:async()=> '0.10.0'};
   new Function('document','window','localStorage','fetch','setTimeout','Event','CustomEvent','rpc',plain(sources.settings))(document,window,localStorage,settingsFetch,setTimeout,class{},class{constructor(type,options){this.type=type;this.detail=options.detail;}},async()=>({genres_loop:[]}));
   await window.__lyrionLmsConfigReady;
   tabs[2].listeners.click[0]();
