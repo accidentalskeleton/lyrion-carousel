@@ -1,5 +1,4 @@
 import { rpc } from '../lms.js?v=display-choice-1';
-import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from '../catalogue.js?v=display-choice-1';
 
 export function createLmsProvider({
   mapAlbum,
@@ -38,21 +37,6 @@ export function createLmsProvider({
       const playerId=getPlayerId();
       if(!playerId||!album?.[6])return;
       await rpc(playerId,['playlistcontrol','cmd:load','album_id:'+album[6]]);
-    },
-
-    async locate(id,{fetchBatch}={}){
-      if(!id)return -1;
-      let index=getPositionIndex()?.get(String(id));
-      if(index==null){
-        const positionIndex=await buildAlbumPositionIndex(getLibraryCount(),getPageSize(),(offset,limit)=>
-          rpc('0',['albums',offset,limit,'sort:artflow','tags:ajlysg',...genreArgs()])
-        );
-        setPositionIndex(positionIndex);
-        index=positionIndex.get(String(id));
-      }
-      if(index==null)return -1;
-      if(fetchBatch)await fetchBatch(Math.floor(index/getPageSize()),false);
-      return index;
     },
 
     matchesNowPlaying(album,state){
