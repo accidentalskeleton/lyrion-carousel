@@ -547,12 +547,21 @@ function updateMeta(force=false){
     detail.textContent=' — '+album[1]+(isThisPlaying?' · Playing':'');
     const heading=document.createElement('div');heading.className='bf-album-detail';heading.append(title,detail);
     const content=[heading];
-    if(playing&&hoveredAlbumIndex<0&&playingSource!=='unknown'&&playingSource!==catalogueSource){
-        const source=document.createElement('span');source.className='bf-now-source';source.textContent=playingSource==='spotify'?'Spotify':'LMS Library';content.push(source);
-    }
-    if(isThisPlaying&&nowTrackTitle){
+    const showingNowPlaying=playing&&hoveredAlbumIndex<0&&!!nowAlbumTitle;
+    const differentLibrary=showingNowPlaying&&playingSource!=='unknown'&&playingSource!==catalogueSource;
+    if(showingNowPlaying&&nowTrackTitle){
         const now=document.createElement('span');now.className='bf-now-track';
-        now.dataset.prefix=(nowTrackNumber?'Track '+nowTrackNumber+' · ':'')+nowTrackTitle;content.push(now);
+        now.dataset.prefix=(nowTrackNumber?'Track '+nowTrackNumber+' · ':'')+nowTrackTitle;
+        if(differentLibrary){
+            const source=document.createElement('span');
+            source.className='bf-now-source-icon';
+            source.setAttribute('role','img');
+            source.setAttribute('aria-label',playingSource==='spotify'?'Playing from Spotify':'Playing from LMS Library');
+            source.title=source.getAttribute('aria-label');
+            source.textContent=playingSource==='spotify'?'♫':'▤';
+            now.prepend(source);
+        }
+        content.push(now);
         if(trackDuration>0){
             const progress=document.createElement('div');progress.className='bf-progress';
             const fill=document.createElement('div');fill.className='bf-progress-fill';progress.append(fill);content.push(progress);
