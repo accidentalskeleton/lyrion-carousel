@@ -2,6 +2,8 @@
 
 [Watch the short feature tour](assets/lyrion-carousel-feature-tour.mp4)
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/stuliet)
+
 # Lyrion Carousel
 
 Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines or a fan of jewel-case covers. Both displays use CSS transforms; no WebGL renderer or remote font downloads are required.
