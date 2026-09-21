@@ -99,6 +99,25 @@ export async function searchSpotifyAlbums(playerId,query){
     })
     .map(normalizeSpottyAlbum);
 }
+export async function spotifyAlbumInformation(playerId,album){
+  const itemId=typeof album==='string'?album:album?.spottyItemId;
+  if(!itemId)throw new Error('Spotify album has no Spotty item id');
+  const detail=spottyLoop(await browseSpotty(playerId,['spotty','items',0,500,'item_id:'+itemId]));
+  const rows=detail.filter(item=>!/^add\s+album\s+to\s+library$/i.test(String(item?.name||item?.text||'')));
+  const tracks=rows.filter(item=>{
+    const type=String(item?.type||'').toLocaleLowerCase();
+    const name=String(item?.line1||item?.name||item?.text||'');
+    return type==='audio'||type==='track'||/^\s*\d+[.\s-]/.test(name);
+  }).map((item,index)=>{
+    const raw=String(item?.line1||item?.name||item?.text||'Untitled');
+    const match=raw.match(/^\s*(\d+)[.\s-]+(.+)$/);
+    return {tracknum:item?.tracknum||match?.[1]||index+1,title:match?.[2]||raw,duration:Number(item?.duration)||0};
+  });
+  const meta=rows.find(item=>item?.genre||item?.genres||item?.year||item?.album)||{};
+  const genres=[meta.genre,meta.genres].flat().filter(Boolean).join(', ');
+  return {tracks,genre:genres,year:meta.year||''};
+}
+
 export async function saveSpotifyAlbum(playerId,album){
   const itemId=typeof album==='string'?album:album?.spottyItemId;
   if(!itemId)throw new Error('Spotify album has no Spotty item id');
