@@ -2,7 +2,36 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
-## Unreleased — realistic case experiment
+## [0.10.0] - 2026-09-21
+
+### Spotify / Spotty integration
+
+- Add Spotify as a second catalogue source alongside the local LMS library, while keeping LMS as the playback authority.
+- Add Spotify saved-album browsing, full-catalogue album search, temporary search-result insertion into the carousel and Spotty-based album saving.
+- Add Spotify playback, now-playing matching, source-aware carousel navigation and source indicators, including the Spotify logo when browsing the opposite library.
+- Add Spotify artwork proxying, caching and realistic jewel-case composition so Spotify albums match the local-library presentation.
+- Add Spotify album information support through Spotty and keep album playback inside the existing LMS/Squeezelite path.
+- Refactor catalogue access behind LMS and Spotify provider modules and add Spotty diagnostics/documentation.
+
+### Album information
+
+- Add album genre to the Album Information view for LMS albums, collecting genre metadata from the album's tracks when LMS does not expose it at album level.
+- Populate Album Information for Spotify albums using Spotty metadata and track listings.
+
+### Interface and polish
+
+- Add Library / Spotify source controls and follow the currently playing album when switching sources where possible.
+- Hide previous, next, queue and source controls during startup so they appear consistently with the other controls once the app is ready.
+- Improve Spotify search selection so choosing a result scrolls to, centres and opens that album in the carousel.
+- Preserve the current-track text while showing a compact source icon in the now-playing area.
+- Add a Coffee tab in Settings and a Buy Me a Coffee link for project support.
+
+### Maintenance
+
+- Merge the Spotify/Spotty development branch into main.
+- Bump the application version to 0.10.0.
+
+## Unreleased
 
 - Show current artwork cache usage and its limit in Settings, with total metadata usage in the detail tooltip.
 
