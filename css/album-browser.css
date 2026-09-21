@@ -541,6 +541,19 @@ body {
     color:var(--bf-muted);
     font-size:12px
 }
+.bf-now-source {
+    display:inline-flex;
+    align-items:center;
+    align-self:flex-start;
+    margin-top:4px;
+    padding:3px 7px;
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:999px;
+    color:var(--bf-muted);
+    font-size:10px;
+    letter-spacing:.04em;
+    text-transform:uppercase
+}
 .bf-now-track {
     display:block;
     margin-top:3px;
