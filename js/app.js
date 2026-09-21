@@ -529,7 +529,7 @@ async function playRandomAlbum(){
         }
     }
 }
-function formatTime(seconds){const v=Math.max(0,Math.floor(Number(seconds)||0));return Math.floor(v/60)+':'+String(v%60).padStart(2,'0')}function currentPlaybackTime(){const elapsed=playing?(performance.now()-statusUpdatedAt)/1000:0;return trackDuration?Math.min(trackDuration,playbackSeconds+elapsed):playbackSeconds+elapsed}function updateProgressDisplay(){const line=meta.querySelector('.bf-now-track'),fill=meta.querySelector('.bf-progress-fill');if(!line)return;const current=currentPlaybackTime(),prefix=line.dataset.prefix||'';line.textContent=prefix+(trackDuration?' · '+formatTime(current)+' / '+formatTime(trackDuration):'');if(fill)fill.style.width=trackDuration?Math.min(100,current/trackDuration*100)+'%':'0'}
+function formatTime(seconds){const v=Math.max(0,Math.floor(Number(seconds)||0));return Math.floor(v/60)+':'+String(v%60).padStart(2,'0')}function currentPlaybackTime(){const elapsed=playing?(performance.now()-statusUpdatedAt)/1000:0;return trackDuration?Math.min(trackDuration,playbackSeconds+elapsed):playbackSeconds+elapsed}function updateProgressDisplay(){const line=meta.querySelector('.bf-now-track'),text=line?.querySelector('.bf-now-track-text'),fill=meta.querySelector('.bf-progress-fill');if(!line)return;const current=currentPlaybackTime(),prefix=line.dataset.prefix||'',value=prefix+(trackDuration?' · '+formatTime(current)+' / '+formatTime(trackDuration):'');if(text)text.textContent=value;else line.textContent=value;if(fill)fill.style.width=trackDuration?Math.min(100,current/trackDuration*100)+'%':'0'}
 function updateMeta(force=false){
     const selected=selectedIndex();
     if(stage.classList.contains('bf-shelf-active')&&selected!==renderedWindowAnchor)renderAlbums();
@@ -552,6 +552,7 @@ function updateMeta(force=false){
     if(showingNowPlaying&&nowTrackTitle){
         const now=document.createElement('span');now.className='bf-now-track';
         now.dataset.prefix=(nowTrackNumber?'Track '+nowTrackNumber+' · ':'')+nowTrackTitle;
+        const nowText=document.createElement('span');nowText.className='bf-now-track-text';
         if(differentLibrary){
             const source=document.createElement('span');
             source.className='bf-now-source-icon';
@@ -559,8 +560,9 @@ function updateMeta(force=false){
             source.setAttribute('aria-label',playingSource==='spotify'?'Playing from Spotify':'Playing from LMS Library');
             source.title=source.getAttribute('aria-label');
             source.innerHTML=playingSource==='spotify'?'<svg class="bf-spotify-logo" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#1ED760"/><path d="M17.45 17.27a.75.75 0 0 1-1.03.25c-2.82-1.72-6.37-2.11-10.55-1.16a.75.75 0 1 1-.33-1.46c4.57-1.04 8.5-.59 11.66 1.34.35.21.46.67.25 1.03Zm1.47-3.27a.94.94 0 0 1-1.29.31c-3.23-1.98-8.16-2.55-11.98-1.4a.94.94 0 1 1-.54-1.8c4.37-1.32 9.8-.68 13.5 1.59.44.27.58.85.31 1.3Zm.13-3.4C15.17 8.3 8.77 8.08 5.06 9.2a1.13 1.13 0 1 1-.65-2.16c4.26-1.29 11.33-1.03 15.79 1.61a1.13 1.13 0 0 1-1.15 1.95Z" fill="#000"/></svg>':'▤';
-            now.prepend(source);
+            now.append(source);
         }
+        now.append(nowText);
         content.push(now);
         if(trackDuration>0){
             const progress=document.createElement('div');progress.className='bf-progress';
