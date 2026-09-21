@@ -63,11 +63,9 @@ export async function searchSpotifyAlbums(playerId,query){
     searchNode=newSearch;
   }
 
-  // XMLBrowser stores the Spotty search handler's fixed parameters in the
-  // item's action. Supplying "type:album" beside item_id does not override
-  // those fixed parameters reliably; LMS was therefore returning the generic
-  // search menu plus track results. Follow the Albums action produced by the
-  // search handler instead, preserving the query encoded by Spotty itself.
+  // First submit the user's free-form query. It may be an artist, album or
+  // track name. Spotty responds with typed result-category actions whose
+  // passthrough data already contains both the query and the required type.
   const searchMenu=spottyLoop(await browseSpotty(playerId,[
     'spotty','items',0,50,'item_id:'+searchNode.id,'search:'+query
   ]));
@@ -77,10 +75,28 @@ export async function searchSpotifyAlbums(playerId,query){
     const fixed=item?.actions?.go?.params||{};
     return String(pass.type||fixed.type||'').toLocaleLowerCase()==='album'||label==='albums';
   });
-  if(!albumsAction?.id)throw new Error('Spotty album-search action not available');
-  const result=await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+albumsAction.id]);
+  if(!albumsAction)throw new Error('Spotty album-search action not available');
+
+  // XMLBrowser item IDs are navigation-state identifiers. Replaying only the
+  // ID can lose the passthrough query/type, so explicitly carry Spotty's own
+  // parameters into the Albums request.
+  const pass=asArray(albumsAction?.passthrough)[0]||{};
+  const fixed=albumsAction?.actions?.go?.params||{};
+  const albumQuery=pass.query||fixed.query||query;
+  const command=['spotty','items',0,50];
+  if(albumsAction.id!=null&&albumsAction.id!=='')command.push('item_id:'+albumsAction.id);
+  command.push('search:'+albumQuery,'query:'+albumQuery,'type:album');
+  const result=await browseSpotty(playerId,command);
+
+  // At this point Spotty's albumList() rows are type=playlist. Do not require
+  // favorites_url/spotify:album URI because XMLBrowser's compact response can
+  // omit it; reject known category/search rows instead.
   return spottyLoop(result)
-    .filter(item=>String(item?.type||'').toLocaleLowerCase()==='playlist'&&/^spotify:album:/i.test(spotifyUri(item)))
+    .filter(item=>{
+      const type=String(item?.type||'').toLocaleLowerCase();
+      const label=String(item?.name||item?.text||'').toLocaleLowerCase();
+      return type==='playlist'&&!['artists','albums','playlists','songs','podcasts','podcast episodes','users','new search'].includes(label);
+    })
     .map(normalizeSpottyAlbum);
 }
 export async function saveSpotifyAlbum(playerId,album){
