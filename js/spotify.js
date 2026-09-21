@@ -55,10 +55,6 @@ export async function searchSpotifyAlbums(playerId,query){
   let searchNode=root.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='search');
   if(!searchNode)throw new Error('Spotty Search section not available');
 
-  // When Spotty has recent searches, its root Search item is a link to the
-  // recent-searches menu, not the actual search handler. Resolve the "New
-  // Search" child first. Without this step LMS returns the recent-search menu
-  // itself (eg. "New Search" plus previous query strings) as fake albums.
   if(String(searchNode.type||'').toLocaleLowerCase()!=='search'){
     const recent=spottyLoop(await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+searchNode.id]));
     const newSearch=recent.find(item=>String(item?.type||'').toLocaleLowerCase()==='search')
@@ -67,10 +63,26 @@ export async function searchSpotifyAlbums(playerId,query){
     searchNode=newSearch;
   }
 
-  const result=await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+searchNode.id,'search:'+query,'type:album']);
-  return spottyLoop(result).map(normalizeSpottyAlbum);
+  // XMLBrowser stores the Spotty search handler's fixed parameters in the
+  // item's action. Supplying "type:album" beside item_id does not override
+  // those fixed parameters reliably; LMS was therefore returning the generic
+  // search menu plus track results. Follow the Albums action produced by the
+  // search handler instead, preserving the query encoded by Spotty itself.
+  const searchMenu=spottyLoop(await browseSpotty(playerId,[
+    'spotty','items',0,50,'item_id:'+searchNode.id,'search:'+query
+  ]));
+  const albumsAction=searchMenu.find(item=>{
+    const label=String(item?.name||item?.text||'').toLocaleLowerCase();
+    const pass=asArray(item?.passthrough)[0]||{};
+    const fixed=item?.actions?.go?.params||{};
+    return String(pass.type||fixed.type||'').toLocaleLowerCase()==='album'||label==='albums';
+  });
+  if(!albumsAction?.id)throw new Error('Spotty album-search action not available');
+  const result=await browseSpotty(playerId,['spotty','items',0,50,'item_id:'+albumsAction.id]);
+  return spottyLoop(result)
+    .filter(item=>String(item?.type||'').toLocaleLowerCase()==='playlist'&&/^spotify:album:/i.test(spotifyUri(item)))
+    .map(normalizeSpottyAlbum);
 }
-
 export async function saveSpotifyAlbum(playerId,album){
   const itemId=typeof album==='string'?album:album?.spottyItemId;
   if(!itemId)throw new Error('Spotify album has no Spotty item id');
