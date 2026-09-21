@@ -494,12 +494,13 @@ async function showTrackList(album){
             tracks=info.tracks||[];genre=info.genre||'';year=info.year||year;
         }else{
             const [trackResult,albumResult]=await Promise.all([
-                rpc('0',['tracks',0,1000,'album_id:'+album[6],'tags:altn']),
+                rpc('0',['tracks',0,1000,'album_id:'+album[6],'tags:altng']),
                 rpc('0',['albums',0,1,'album_id:'+album[6],'tags:ajlyg'])
             ]);
             tracks=(trackResult.titles_loop||[]).slice().sort((x,y)=>Number(x.tracknum||0)-Number(y.tracknum||0));
             const detail=(albumResult.albums_loop||[])[0]||{};
-            genre=detail.genre||detail.genres||'';
+            const trackGenres=[...new Set(tracks.flatMap(track=>[track.genre,track.genres]).flat().filter(Boolean).flatMap(value=>String(value).split(/\s*,\s*/)).filter(Boolean))];
+            genre=detail.genre||detail.genres||trackGenres.join(', ');
             year=detail.year||year;
         }
         if(request!==trackRequest||trackOverlay.hidden)return;
