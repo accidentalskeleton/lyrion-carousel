@@ -992,3 +992,12 @@ body {
 .bf-source-button{appearance:none;border:0;background:transparent;color:rgba(255,255,255,.62);font:inherit;font-size:12px;line-height:1;padding:7px 11px;border-radius:999px;cursor:pointer}
 .bf-source-button.is-active{background:rgba(255,255,255,.14);color:#fff}
 .bf-source-button:disabled{opacity:.4;cursor:default}
+
+/* Keep all interactive playback/library controls hidden until startup has completed. */
+#book-fan-browser.is-starting .bf-source-switch,
+#book-fan-browser.is-starting .bf-previous,
+#book-fan-browser.is-starting .bf-next,
+#book-fan-browser.is-starting .bf-queue-open {
+    visibility:hidden;
+    pointer-events:none
+}
