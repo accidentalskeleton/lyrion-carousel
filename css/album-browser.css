@@ -554,6 +554,19 @@ body {
     letter-spacing:.04em;
     text-transform:uppercase
 }
+.bf-now-source-icon {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:18px;
+    height:18px;
+    margin-right:6px;
+    border:1px solid rgba(255,255,255,.16);
+    border-radius:50%;
+    font-size:11px;
+    line-height:1;
+    vertical-align:middle
+}
 .bf-now-track {
     display:block;
     margin-top:3px;
