@@ -4,7 +4,7 @@ Status: **primary hardware selected; Linux-supported alternative evaluated; depl
 
 ## Purpose
 
-Lyrion Carousel is the dedicated visual browser and controller for the hi-fi system's Lyrion Music Server library. It restores the feel of browsing a physical CD collection while keeping playback on the existing Raspberry Pi CM5 streamer. The wall controller communicates with Lyrion Music Server over the local network and does not enter the audio signal path.
+Lyrion Carousel is the dedicated visual browser and controller for the hi-fi system's local Lyrion Music Server library and Spotify catalogue exposed through the LMS Spotty plugin. It restores the feel of browsing a physical CD collection while keeping playback on the existing Raspberry Pi CM5 streamer. The wall controller communicates with Lyrion Music Server over the local network and does not enter the audio signal path.
 
 The defining interaction is a continuous circular shelf of CD jewel cases. As an album approaches the centre, its cover travels with it and opens towards the viewer like a rigid page in a book. Drag, swipe, trackpad and wheel input move the shelf continuously rather than stepping through conventional cards.
 
@@ -73,7 +73,8 @@ The application-level black sleep overlay remains the supported initial sleep me
 - Direct drag, touch swipe, trackpad, mouse-wheel and keyboard navigation.
 - Continuous circular browsing with inertial movement and centre alignment.
 - A selected album cover that travels with its shelf position and opens square-on at the centre.
-- Tap/click selection and playback.
+- Library / Spotify source switching, with local-library and Spotty album search.
+- Tap/click selection and playback through the selected LMS player.
 - Previous, play/pause and next transport controls.
 - Swipe-up queue with current-track indication and direct queue selection.
 - Configurable inactivity sleep and tap-to-wake.

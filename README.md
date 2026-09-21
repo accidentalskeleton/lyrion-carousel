@@ -36,6 +36,10 @@ Current application version: **0.10.0**. The canonical version is stored in [`VE
 - live configurable display count, preview/menu timeouts, idle return and maximum scroll duration;
 - Settings panel with explicit LMS, CometD/live-update, player, library, cache and application status;
 - automatic LMS reconnection;
+- Library / Spotify source switching with Spotify saved albums supplied through LMS Spotty;
+- full Spotify album search through Spotty, with searched albums playable and savable to the Spotify library;
+- source-aware now-playing navigation and Spotify artwork rendered with the same jewel-case presentation as local albums;
+- Album Information for local and Spotify albums, including genre when the upstream metadata provides it;
 - installable/fullscreen-friendly web-app metadata and application icon;
 - zero-idle-loop long-task performance diagnostics.
 
@@ -49,9 +53,12 @@ lyrion-carousel/
 ├── assets/
 ├── css/
 ├── docs/
+│   ├── spotify-spotty.md
 │   └── wall-controller.md
 ├── js/
 ├── packaging/debian/
+├── spotty-diagnostic.html
+├── tests/
 ├── server.py
 └── README.md
 ```
@@ -92,7 +99,7 @@ python3 server.py --bind 0.0.0.0
 | `--random-scroll-max-seconds` | `3` | Maximum random/startup/idle-return scroll duration |
 | `--search-limit` | `100` | Maximum albums returned by a search |
 
-Settings are grouped into Display, Playback, Connection, Cache and About tabs. Changes apply immediately and are saved in this browser. They include LMS URL, player, idle return, menu/preview timeouts, maximum scroll duration, displayed albums, display style, cover resolution and keeping the playing cover open. The Cache tab can adjust the soft artwork-cache limit up to the server-configured hard limit. The obsolete carousel-density control has been removed; use Displayed albums to set spine width and spacing.
+Settings are grouped into Display, Playback, Connection, Genres, Cache, About and Coffee tabs. Changes apply immediately and are saved in this browser. They include LMS URL, player, idle return, menu/preview timeouts, maximum scroll duration, displayed albums, display style, cover resolution and keeping the playing cover open. The Cache tab can adjust the soft artwork-cache limit up to the server-configured hard limit. The obsolete carousel-density control has been removed; use Displayed albums to set spine width and spacing.
 
 The server URL is shared runtime state on the proxy. Set `LMS_URL` in `/etc/default/lyrion-carousel` for a persistent machine-wide default. Saved browser choices override server defaults; the saved LMS URL is applied before initial discovery.
 
@@ -299,7 +306,13 @@ sudo systemctl disable --now lyrion-carousel.service
 - `/api/art-meta` → prepare metadata for up to 64 artwork IDs (POST);
 - `/api/config` → runtime defaults;
 - `/api/config/lms` → change the proxy LMS URL (POST);
-- `/api/cache/clear` → clear persistent artwork and metadata (POST).
+- `/api/cache/clear` → clear persistent artwork and metadata (POST);
+- `/api/cache/warm` → start/cancel background artwork preparation (POST);
+- `/api/config/cache` → change the runtime soft artwork-cache limit (POST);
+- `/api/spotty-art` → proxy/cache Spotty artwork and optional jewel-case composition;
+- `/api/spotty-art-meta` → derive shelf metadata from Spotty artwork;
+- `/api/diagnostics/spotty` → inspect the live LMS Spotty menu payload;
+- `/api/diagnostics/now-playing` → inspect the raw LMS status used for source-aware now-playing matching.
 
 ## Current limitations
 
@@ -319,15 +332,17 @@ node tests/regressions.mjs
 
 Node is needed only for the JavaScript regression runner. It uses DOM/event doubles and mocked LMS responses; it does not start playback. It checks catalogue paging, scan events, server-switch isolation, display ordering, startup, pinned covers and details. These checks do not replace real-browser visual/touch checks or the live LMS reconnect acceptance sequence above.
 
-## Upgrading to 0.9.0
+## Upgrading to 0.10.0
 
-Restart the Python server (or the Debian service) and refresh the browser. The updated client requires the prepared-catalogue and resized-artwork endpoints. Existing spine metadata upgrades automatically; clearing the cache is optional.
+Restart the Python server (or the Debian service) and refresh the browser. Version 0.10.0 adds the Spotify/Spotty catalogue source, source-aware now playing, Spotify search and album information, genre controls, and the production realistic jewel-case artwork path. Existing artwork/spine metadata remains reusable; clearing the cache is optional.
 
-## Realistic case experiment
+Spotify support requires the Spotty plugin to be installed and authenticated in LMS. Carousel does not hold Spotify credentials or stream Spotify directly: playback remains LMS → Spotty → the selected LMS/Squeezelite player.
 
-On this branch, resized cover requests include `case=realistic-v1`. The server composites artwork beneath `assets/jewel-case-realistic-v1.png`, an AI-generated transparent plastic shell, and caches a PNG at the selected resolution. Both fan covers and opened shelf covers use this composition. The browser adds a restrained reflection and a thin fan case edge; no Three.js or continuous lighting loop is used. Original artwork still supplies spine colours. Restart the server and refresh the browser to try this experiment. Application version remains 0.9.0.
+## Realistic jewel-case rendering
 
-The browser preloads the focused cover and up to four neighbours on each side, with two low-priority image requests at a time. Queued work follows the latest browsing position, and at most 24 loaded images are retained by the preloader. This also warms server-composited cases at the selected cover resolution.
+Resized cover requests use `case=realistic-v1`. The server composites artwork beneath `assets/jewel-case-realistic-v1.png` and caches a PNG at the selected resolution. Both local and Spotify fan/open-shelf covers use this presentation. Original artwork still supplies spine colours. The browser adds restrained reflections without a Three.js/WebGL rendering loop.
+
+The browser preloads the focused cover and up to four neighbours on each side, with two low-priority image requests at a time. Queued work follows the latest browsing position, and at most 24 loaded images are retained by the preloader.
 
 ### Background artwork preparation
 
