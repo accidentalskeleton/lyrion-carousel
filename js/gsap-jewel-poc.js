@@ -17,10 +17,6 @@ if(preview&&caseEl){
   caseEl.setAttribute('aria-expanded','false');
   // Scans live inside the physical case; no detached image strip.
   const disc=tray.querySelector('.gsap-disc');
-  const inlay=document.createElement('div');
-  inlay.className='gsap-rear-inlay';
-  tray.prepend(inlay);
-  inlay.remove(); // Rear-cover scans do not belong behind the disc.
   let requestToken=0;
   let bookletPages=[],bookletIndex=0;
   function setBookletPage(index){
