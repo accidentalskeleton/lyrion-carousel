@@ -54,3 +54,35 @@
 .bf-front-case[aria-expanded="true"] .gsap-tray::after{
   content:"";position:absolute;inset:9px;z-index:0;background:#121417;pointer-events:none;
 }
+
+
+/* Open jewel case: full-width left booklet + right moulded CD tray.
+   The hinge is the left edge of the right tray; opening exposes both panels. */
+.bf-front-preview{overflow:visible!important;perspective:1600px!important}
+.bf-front-case{transform-style:preserve-3d!important;transition:translate .45s ease;isolation:isolate}
+.bf-front-case[aria-expanded="true"]{translate:42% 0}
+.gsap-tray{box-sizing:border-box;overflow:hidden}
+.bf-front-case[aria-expanded="true"] .gsap-tray{
+  border:5px solid rgba(203,215,224,.82)!important;
+  border-left:10px solid rgba(184,198,210,.92)!important;
+  border-right:7px solid rgba(158,171,181,.85)!important;
+  border-radius:3px!important;
+  box-shadow:inset 0 0 0 3px #363a3f,0 18px 30px #0008,0 0 0 1px #f7fbff55!important;
+}
+.gsap-flap{overflow:visible;transform-origin:left center;will-change:transform}
+.gsap-flap::before{content:"";position:absolute;inset:0;border:5px solid #dce5ec88;box-shadow:inset 0 0 0 2px #ffffff60;pointer-events:none;z-index:4}
+.gsap-flap::after{content:"";position:absolute;left:-3px;top:2%;bottom:2%;width:8px;background:linear-gradient(90deg,#596773a6,#e3edf5aa 40%,#53616c88);pointer-events:none;z-index:5}
+.gsap-booklet{
+  background-color:#ddd9ca!important;
+  background-size:contain!important;
+  border:7px solid #c5d1d9!important;
+  box-shadow:inset 0 0 0 2px #ffffffb0,0 8px 18px #0005!important;
+}
+.gsap-booklet:empty::before{content:"BOOKLET";font:600 11px/1.4 sans-serif;letter-spacing:.22em;color:#77766f}
+.gsap-disc{background-color:#aeb6bd;background-image:repeating-radial-gradient(circle,#c7cbd0 0 2px,#a9b0b8 3px 6px,#d9dee2 7px 8px)}
+.gsap-disc-hub{pointer-events:none}
+@media(max-width:680px){
+  .bf-front-case[aria-expanded="true"]{translate:30% 0}
+  .gsap-flap::after{width:5px}
+}
+@media(prefers-reduced-motion:reduce){.bf-front-case{transition:none}}
