@@ -156,3 +156,32 @@
 @media(prefers-reduced-motion:reduce){
   .bf-front-case{transition:none!important}
 }
+
+
+/* Disc overlay: translucent circular turn control, paired with Play. */
+.bf-front-case .gsap-turn-case{
+  position:absolute!important;
+  top:auto!important;bottom:8px!important;
+  left:auto!important;right:70px!important;
+  transform:none!important;
+  width:52px!important;height:52px!important;
+  display:grid!important;place-items:center!important;
+  padding:0!important;
+  border-radius:50%!important;
+  border:1px solid #ffffff70!important;
+  background:#10161c91!important;
+  color:#fff!important;
+  font:400 32px/1 sans-serif!important;
+  backdrop-filter:blur(5px);
+  -webkit-backdrop-filter:blur(5px);
+  box-shadow:0 2px 12px #0008!important;
+  z-index:30!important;
+  cursor:pointer;
+}
+.bf-front-case .gsap-turn-case[hidden]{display:none!important}
+.bf-front-case .gsap-turn-case:hover,
+.bf-front-case .gsap-turn-case:focus-visible{background:#24323bcb!important;border-color:#fff!important}
+.bf-front-case.gsap-turned .gsap-turn-case{
+  transform:rotateY(180deg)!important;
+  z-index:35!important;
+}
