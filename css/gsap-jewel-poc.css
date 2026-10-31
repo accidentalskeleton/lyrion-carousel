@@ -185,3 +185,34 @@
   transform:rotateY(180deg)!important;
   z-index:35!important;
 }
+
+
+/* Rear inlay uses its own front-facing plane. CSS backface culling on
+   nested 3D surfaces previously left the flipped case completely blank. */
+.bf-front-preview>.gsap-case-rear{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;height:100%!important;
+  box-sizing:border-box!important;
+  transform:scale(.92)!important;
+  transform-origin:center center!important;
+  z-index:25!important;
+  opacity:0!important;
+  visibility:hidden!important;
+  pointer-events:none!important;
+  backface-visibility:visible!important;
+  background-position:center!important;
+  background-repeat:no-repeat!important;
+  background-size:contain!important;
+  transition:opacity .25s ease,visibility 0s linear .25s!important;
+}
+.bf-front-preview.gsap-show-rear>.gsap-case-rear{
+  opacity:1!important;visibility:visible!important;
+  transition:opacity .25s ease .55s,visibility 0s!important;
+}
+.bf-front-preview.gsap-show-rear .bf-front-case{
+  transform:scale(.92) rotateY(180deg)!important;
+}
+.bf-front-case.gsap-turned .gsap-turn-case{
+  transform:rotateY(180deg) translateZ(5px)!important;
+}
