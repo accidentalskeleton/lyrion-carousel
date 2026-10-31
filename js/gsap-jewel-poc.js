@@ -17,12 +17,39 @@ if(preview&&caseEl){
   caseEl.setAttribute('aria-expanded','false');
   // Scans live inside the physical case; no detached image strip.
   const disc=tray.querySelector('.gsap-disc');
+  const rear=document.createElement('div');
+  rear.className='gsap-case-rear';
+  rear.setAttribute('aria-hidden','true');
+  caseEl.insertBefore(rear,tray);
+  const turnButton=document.createElement('button');
+  turnButton.type='button';
+  turnButton.className='gsap-turn-case';
+  turnButton.textContent='Turn over';
+  turnButton.setAttribute('aria-label','Turn jewel case over to view rear artwork');
+  preview.append(turnButton);
+  const pageIndicator=document.createElement('span');
+  pageIndicator.className='gsap-booklet-page-indicator';
+  booklet.append(pageIndicator);
+  let turned=false;
+  let rearScan=null;
+  function updateTurnControl(){
+    turnButton.hidden=!opened;
+    turnButton.textContent=turned?'Turn to front':'Turn over';
+    caseEl.classList.toggle('gsap-turned',turned);
+  }
+  turnButton.addEventListener('click',event=>{
+    event.stopPropagation();
+    if(!opened)return;
+    turned=!turned;
+    updateTurnControl();
+  });
   let requestToken=0;
   let bookletPages=[],bookletIndex=0;
   function setBookletPage(index){
     if(!bookletPages.length)return;
     bookletIndex=(index+bookletPages.length)%bookletPages.length;
     booklet.style.backgroundImage='url("'+bookletPages[bookletIndex].url+'")';
+    pageIndicator.textContent=bookletPages.length>1?(bookletIndex+1)+' / '+bookletPages.length:'';
     booklet.setAttribute('aria-label','Booklet: '+bookletPages[bookletIndex].caption);
   }
   booklet.addEventListener('click',event=>{
@@ -67,7 +94,9 @@ if(preview&&caseEl){
   async function loadArtwork(albumId){
     const token=++requestToken;
     bookletPages=[];bookletIndex=0;
-    booklet.textContent='';booklet.style.backgroundImage='';booklet.removeAttribute('aria-label');
+    booklet.style.backgroundImage='';booklet.removeAttribute('aria-label');
+    pageIndicator.textContent='';
+    rearScan=null;rear.style.backgroundImage='';rear.classList.remove('has-artwork');
     disc.style.backgroundImage='';
     if(disc.dataset.objectUrl){URL.revokeObjectURL(disc.dataset.objectUrl);delete disc.dataset.objectUrl;}
     if(!albumId||String(albumId).startsWith('spotify:'))return;
@@ -84,6 +113,8 @@ if(preview&&caseEl){
       if(!images.length)return;
       const find=(pattern)=>images.find(item=>pattern.test(item.caption));
 
+      rearScan=find(/^(?:back|rear|backcover|back-cover|rear-cover|traycard|tray-card|inlay)(?:[-_. 0-9]|$)/i);
+      if(rearScan){rear.style.backgroundImage='url("'+rearScan.url+'")';rear.classList.add('has-artwork');}
       const discScan=find(/^(?:disc|disk|cd|medium|media)(?:[-_. 0-9]|$)/i);
       if(discScan)applyDiscScan(discScan.url,token);
       bookletPages=images.filter(item=>/^(?:booklet|inside|front[-_. ]0[2-9]|page)(?:[-_. 0-9]|$)/i.test(item.caption));
@@ -95,7 +126,10 @@ if(preview&&caseEl){
   let opened=false;
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function setOpen(value){
-    opened=value;caseEl.setAttribute('aria-expanded',String(opened));caseEl.setAttribute('aria-label',opened?'Close album jewel case':'Open album jewel case');
+    opened=value;
+    if(!opened)turned=false;
+    updateTurnControl();
+    caseEl.setAttribute('aria-expanded',String(opened));caseEl.setAttribute('aria-label',opened?'Close album jewel case':'Open album jewel case');
     if(gsap)gsap.to(flap,{rotationY:opened?-175:0,duration:reduced?0:0.85,ease:'power2.inOut',overwrite:true});
     else flap.style.transform='rotateY('+(opened?-175:0)+'deg)';
   }
@@ -117,7 +151,7 @@ if(preview&&caseEl){
     setOpen(!opened);
   });
   caseEl.addEventListener('click',event=>{
-    if(event.target.closest('button'))return;
+    if(event.target.closest('button')||event.target.closest('.gsap-booklet'))return;
     if(performance.now()-lastToggleAt<350)return;
     if(pressStartedAt&&(performance.now()-pressStartedAt>550||pressMoved))return;
     lastToggleAt=performance.now();
