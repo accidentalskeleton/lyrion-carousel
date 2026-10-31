@@ -21,6 +21,9 @@ if(preview&&caseEl){
   rear.className='gsap-case-rear';
   rear.setAttribute('aria-hidden','true');
   caseEl.insertBefore(rear,tray);
+  const rearArtwork=document.createElement('div');
+  rearArtwork.className='gsap-rear-artwork';
+  rear.append(rearArtwork);
   const turnButton=document.createElement('button');
   turnButton.type='button';
   turnButton.className='gsap-turn-case';
@@ -102,7 +105,7 @@ if(preview&&caseEl){
     bookletPages=[];bookletIndex=0;
     booklet.style.backgroundImage='';booklet.removeAttribute('aria-label');
     pageIndicator.textContent='';
-    rearScan=null;rear.style.backgroundImage='';rear.classList.remove('has-artwork');
+    rearScan=null;rearArtwork.style.backgroundImage='';rear.classList.remove('has-artwork');
     disc.style.backgroundImage='';
     if(disc.dataset.objectUrl){URL.revokeObjectURL(disc.dataset.objectUrl);delete disc.dataset.objectUrl;}
     if(!albumId||String(albumId).startsWith('spotify:'))return;
@@ -120,7 +123,7 @@ if(preview&&caseEl){
       const find=(pattern)=>images.find(item=>pattern.test(item.caption));
 
       rearScan=find(/^(?:back|rear|backcover|back-cover|rear-cover|traycard|tray-card|inlay)(?:[-_. 0-9]|$)/i);
-      if(rearScan){rear.style.backgroundImage='url("'+rearScan.url+'")';rear.classList.add('has-artwork');}
+      if(rearScan){rearArtwork.style.backgroundImage='url("'+rearScan.url+'")';rear.classList.add('has-artwork');}
       const discScan=find(/^(?:disc|disk|cd|medium|media)(?:[-_. 0-9]|$)/i);
       if(discScan)applyDiscScan(discScan.url,token);
       bookletPages=images.filter(item=>/^(?:booklet|inside|front[-_. ]0[2-9]|page)(?:[-_. 0-9]|$)/i.test(item.caption));
