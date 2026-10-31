@@ -11,18 +11,23 @@ if(preview&&caseEl){
   front.parentNode.insertBefore(tray,front);
   flap.append(front,booklet);
   caseEl.insertBefore(flap,caseEl.querySelector('.bf-front-play'));
-  const toggle=document.createElement('button');toggle.type='button';toggle.className='gsap-open-toggle';toggle.textContent='Open case';toggle.setAttribute('aria-expanded','false');
-  caseEl.append(toggle);
+  caseEl.tabIndex=0;
+  caseEl.setAttribute('role','button');
+  caseEl.setAttribute('aria-label','Open album jewel case');
+  caseEl.setAttribute('aria-expanded','false');
   const gsap=window.gsap;
   let opened=false;
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function setOpen(value){
-    opened=value;toggle.textContent=opened?'Close case':'Open case';toggle.setAttribute('aria-expanded',String(opened));
+    opened=value;caseEl.setAttribute('aria-expanded',String(opened));caseEl.setAttribute('aria-label',opened?'Close album jewel case':'Open album jewel case');
     if(gsap)gsap.to(flap,{rotationY:opened?-155:0,duration:reduced?0:0.85,ease:'power2.inOut',overwrite:true});
     else flap.style.transform='rotateY('+(opened?-155:0)+'deg)';
   }
-  toggle.addEventListener('pointerdown',event=>event.stopPropagation());
-  toggle.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();setOpen(!opened)});
+  preview.addEventListener('carousel:toggle-jewel-case',()=>setOpen(!opened));
+  caseEl.addEventListener('keydown',event=>{
+    if(event.target!==caseEl||!['Enter',' '].includes(event.key))return;
+    event.preventDefault();setOpen(!opened);
+  });
   const observer=new MutationObserver(()=>{
     if(preview.hidden||preview.dataset.visible==='false')setOpen(false);
   });
