@@ -47,50 +47,25 @@ if(preview&&caseEl){
         return valid?{caption:item.caption,url:'/api/local-artwork/'+parts[3]}:null;
       }).filter(Boolean);
   }
-  // Find the outer CD edge in a scan using circular radial contrast.
-  // A conservative fallback preserves the source image if no reliable circle is found.
+  // The Pi extracts the disc once and caches it; browser only displays the PNG.
   async function applyDiscScan(url,token){
+    const match=url.match(/^\\/api\\/local-artwork\\/([a-f0-9]{32})$/i);
+    if(!match)return;
+    const processed='/api/processed-disc/'+match[1];
     try{
-      const image=new Image();
-      image.src=url;
-      await image.decode();
+      const response=await fetch(processed);
+      if(!response.ok)throw Error('Disc detection unavailable');
+      const blob=await response.blob();
       if(token!==requestToken)return;
-      const size=256,canvas=document.createElement('canvas');
-      canvas.width=canvas.height=size;
-      const ctx=canvas.getContext('2d',{willReadFrequently:true});
-      ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);
-      const scale=Math.min(size/image.naturalWidth,size/image.naturalHeight);
-      const w=image.naturalWidth*scale,h=image.naturalHeight*scale;
-      ctx.drawImage(image,(size-w)/2,(size-h)/2,w,h);
-      const data=ctx.getImageData(0,0,size,size).data;
-      function luminance(x,y){
-        const i=(Math.round(y)*size+Math.round(x))*4;
-        return data[i]*.2126+data[i+1]*.7152+data[i+2]*.0722;
-      }
-      let best={score:0,x:128,y:128,r:112};
-      // Search for a continuous circular rim, not the centre hub.
-      for(let y=64;y<=192;y+=8)for(let x=64;x<=192;x+=8)
-        for(let r=52;r<=Math.min(122,x-6,y-6,249-x,249-y);r+=4){
-          let sum=0,valid=0;
-          for(let a=0;a<48;a++){
-            const theta=a*Math.PI/24,dx=Math.cos(theta),dy=Math.sin(theta);
-            const inside=luminance(x+(r-5)*dx,y+(r-5)*dy);
-            const outside=luminance(x+(r+5)*dx,y+(r+5)*dy);
-            sum+=Math.abs(inside-outside);valid++;
-          }
-          const score=sum/valid*Math.sqrt(r/100);
-          if(score>best.score)best={score,x,y,r};
-        }
-      // Reject weak/implausible edges; avoid inventing a crop.
-      if(best.score<15){disc.style.backgroundImage='url("'+url+'")';return;}
-      const output=document.createElement('canvas'),out=output.getContext('2d');
-      output.width=output.height=512;
-      out.beginPath();out.arc(256,256,254,0,2*Math.PI);out.clip();
-      out.drawImage(canvas,best.x-best.r,best.y-best.r,2*best.r,2*best.r,0,0,512,512);
-      if(token===requestToken)disc.style.backgroundImage='url("'+output.toDataURL('image/png')+'")';
+      const objectUrl=URL.createObjectURL(blob);
+      const previous=disc.dataset.objectUrl;
+      disc.dataset.objectUrl=objectUrl;
+      disc.style.backgroundImage='url("'+objectUrl+'")';
+      if(previous)URL.revokeObjectURL(previous);
     }catch(error){
-      if(token===requestToken)disc.style.backgroundImage='url("'+url+'")';
-      console.debug('Disc scan extraction fallback:',error);
+      // Do not show an unmasked rectangular scan on the circular tray.
+      if(token===requestToken)disc.style.backgroundImage='';
+      console.debug('Processed disc unavailable:',error);
     }
   }
   async function loadArtwork(albumId){
@@ -98,6 +73,7 @@ if(preview&&caseEl){
     bookletPages=[];bookletIndex=0;
     booklet.textContent='';booklet.style.backgroundImage='';booklet.removeAttribute('aria-label');
     disc.style.backgroundImage='';
+    if(disc.dataset.objectUrl){URL.revokeObjectURL(disc.dataset.objectUrl);delete disc.dataset.objectUrl;}
     if(!albumId||String(albumId).startsWith('spotify:'))return;
     try{
       // Discover the Local artwork entry for this album; its item_id is not globally stable.
