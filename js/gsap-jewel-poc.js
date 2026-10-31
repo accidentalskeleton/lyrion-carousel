@@ -96,8 +96,8 @@ if(preview&&caseEl){
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function setOpen(value){
     opened=value;caseEl.setAttribute('aria-expanded',String(opened));caseEl.setAttribute('aria-label',opened?'Close album jewel case':'Open album jewel case');
-    if(gsap)gsap.to(flap,{rotationY:opened?-155:0,duration:reduced?0:0.85,ease:'power2.inOut',overwrite:true});
-    else flap.style.transform='rotateY('+(opened?-155:0)+'deg)';
+    if(gsap)gsap.to(flap,{rotationY:opened?-175:0,duration:reduced?0:0.85,ease:'power2.inOut',overwrite:true});
+    else flap.style.transform='rotateY('+(opened?-175:0)+'deg)';
   }
   // Native click fallback: some browsers lose the app's pointer capture before
   // pointerup, so its custom toggle event never arrives.
