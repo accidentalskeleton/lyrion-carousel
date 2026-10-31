@@ -18,3 +18,11 @@
 .gsap-artwork-viewer img{max-width:75%;max-height:125px;object-fit:contain}
 .gsap-artwork-viewer button{border:0;background:transparent;color:#fff;font-size:28px;cursor:pointer;padding:10px}
 .gsap-art-caption{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:11px;color:#e1e1e1}
+
+/* The preview image already contains the photographic jewel-case surround.
+   Avoid a second grey tray/frame behind the closed case. */
+.bf-front-case{padding:0!important}
+.gsap-tray{border:0;background:transparent;box-shadow:none;visibility:hidden}
+.bf-front-case[aria-expanded="true"] .gsap-tray{visibility:visible;background:linear-gradient(145deg,#31363c,#0b0d10);border:3px solid #a4b1bc9c;box-shadow:0 18px 32px #0009,inset 0 0 0 3px #080b0e}
+.gsap-flap .bf-front-art{border:0;box-shadow:none}
+.bf-front-case::after{display:none!important}
