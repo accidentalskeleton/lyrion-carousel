@@ -7,6 +7,7 @@
 .gsap-flap{position:absolute;inset:0;z-index:1;transform-origin:left center;transform-style:preserve-3d;backface-visibility:visible;pointer-events:none}
 .gsap-flap .bf-front-art{position:absolute;inset:0;width:100%!important;height:100%!important;border:6px solid #d5e1eb91;box-sizing:border-box;backface-visibility:hidden;box-shadow:inset 0 0 0 2px #fff3,0 6px 14px #0008}
 .gsap-booklet{position:absolute;inset:0;display:grid;place-items:center;transform:rotateY(180deg);backface-visibility:hidden;background:#d6d0be;color:#242424;border:6px solid #b8b6a9;box-sizing:border-box;font-size:14px}
-.gsap-open-toggle{position:absolute;z-index:5;left:50%;bottom:-47px;transform:translateX(-50%);padding:7px 12px;border:1px solid #8d9aa5;border-radius:5px;background:#1c252d;color:#fff;cursor:pointer;white-space:nowrap;touch-action:manipulation}
+.bf-front-case{cursor:pointer!important}
+.bf-front-case:focus-visible{outline:2px solid #d6e6f0;outline-offset:5px}
 .bf-front-case .bf-front-play{z-index:6}
 @media(prefers-reduced-motion:reduce){.bf-front-preview{transition:none!important}}
