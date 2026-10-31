@@ -41,9 +41,13 @@ if(preview&&caseEl){
     return (await response.json()).result;
   }
   function localArtworkItems(result){
-    return (result?.data||[]).filter(item=>typeof item.image==='string'&&typeof item.caption==='string')
-      .map(item=>({caption:item.caption,match:item.image.match(/^imageproxy\\/mai\\/localartwork\\/([a-f0-9]{32})\\/image\\.png$/i)}))
-      .filter(item=>item.match).map(item=>({caption:item.caption,url:'/api/local-artwork/'+item.match[1]}));
+    return (result?.data||[])
+      .filter(item=>typeof item.image==='string'&&typeof item.caption==='string')
+      .map(item=>{
+        const parts=item.image.split('/');
+        const valid=parts.length===5&&parts[0]==='imageproxy'&&parts[1]==='mai'&&parts[2]==='localartwork'&&/^[a-f0-9]{32}$/i.test(parts[3])&&parts[4]==='image.png';
+        return valid?{caption:item.caption,url:'/api/local-artwork/'+parts[3]}:null;
+      }).filter(Boolean);
   }
   async function loadArtwork(albumId){
     const token=++requestToken;
