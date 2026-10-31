@@ -260,3 +260,39 @@
 }
 .bf-front-case.gsap-turned>.gsap-tray,
 .bf-front-case.gsap-turned>.gsap-flap{visibility:hidden!important}
+
+
+/* Reliable rear view: avoid browser-dependent nested 3D backface culling.
+   The rear is a front-facing overlay constrained to one case panel. */
+.bf-front-case.gsap-turned{
+  transform:scale(.92)!important;
+  translate:0 0!important;
+}
+.bf-front-case>.gsap-case-rear{
+  transform:none!important;
+  backface-visibility:visible!important;
+  opacity:0!important;
+  visibility:hidden!important;
+  z-index:40!important;
+  pointer-events:none!important;
+  background-color:#202329!important;
+  background-size:contain!important;
+  background-position:center!important;
+  background-repeat:no-repeat!important;
+  transition:opacity .35s ease,visibility 0s linear .35s!important;
+}
+.bf-front-case.gsap-turned>.gsap-case-rear{
+  transform:none!important;
+  opacity:1!important;
+  visibility:visible!important;
+  transition:opacity .35s ease,visibility 0s!important;
+}
+.bf-front-case.gsap-turned>.gsap-turn-case{
+  position:absolute!important;
+  z-index:60!important;
+  transform:none!important;
+  right:70px!important;
+  bottom:8px!important;
+  visibility:visible!important;
+}
+.bf-front-case.gsap-turned>.bf-front-play{visibility:hidden!important}
