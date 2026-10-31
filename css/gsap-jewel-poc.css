@@ -256,3 +256,36 @@
 @media(prefers-reduced-motion:reduce){
   .bf-front-case>.gsap-case-rear{transition:none!important}
 }
+
+
+/* Quiet mid-right edge control, available only with an actual rear scan. */
+.bf-front-case>.gsap-turn-case,
+.bf-front-case.gsap-turned>.gsap-turn-case{
+  position:absolute!important;
+  top:50%!important;
+  bottom:auto!important;
+  right:9px!important;
+  left:auto!important;
+  transform:translateY(-50%)!important;
+  width:38px!important;
+  height:38px!important;
+  padding:0!important;
+  border-radius:50%!important;
+  border:1px solid rgba(255,255,255,.28)!important;
+  background:rgba(12,18,24,.34)!important;
+  color:rgba(255,255,255,.75)!important;
+  font:400 23px/1 sans-serif!important;
+  box-shadow:0 1px 5px rgba(0,0,0,.23)!important;
+  backdrop-filter:blur(3px);
+  -webkit-backdrop-filter:blur(3px);
+  opacity:.6!important;
+  z-index:60!important;
+  visibility:visible!important;
+}
+.bf-front-case>.gsap-turn-case:hover,
+.bf-front-case>.gsap-turn-case:focus-visible{
+  opacity:1!important;
+  background:rgba(12,18,24,.7)!important;
+  border-color:rgba(255,255,255,.7)!important;
+}
+.bf-front-case>.gsap-turn-case[hidden]{display:none!important}
