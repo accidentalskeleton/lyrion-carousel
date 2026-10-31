@@ -263,7 +263,7 @@ frontPreview.addEventListener('pointerdown',event=>{
     if(event.button!==0||!event.target.closest('.bf-front-case')||event.target.closest('button')||!frontPreviewAlbum)return;
     cancelFrontPress();clearTimeout(frontTimer);frontTimer=0;
     const press={id:event.pointerId,x:event.clientX,y:event.clientY,album:frontPreviewAlbum,cancelled:false,long:false};
-    frontPress=press;frontPreview.setPointerCapture(event.pointerId);
+    frontPress=press;event.target.closest('.bf-front-case').setPointerCapture(event.pointerId);
     frontPressTimer=setTimeout(()=>{
         frontPressTimer=0;
         if(frontPress!==press||press.cancelled||frontPreview.hidden)return;
