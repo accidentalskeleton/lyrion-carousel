@@ -86,3 +86,13 @@
   .gsap-flap::after{width:5px}
 }
 @media(prefers-reduced-motion:reduce){.bf-front-case{transition:none}}
+
+.gsap-case-rear{position:absolute;inset:0;z-index:0;background:#272a2d center/contain no-repeat;border:8px solid #d1dce5;opacity:0;pointer-events:none}
+.bf-front-case.gsap-turned .gsap-case-rear{z-index:8;opacity:1}
+.bf-front-case.gsap-turned .gsap-tray,.bf-front-case.gsap-turned .gsap-flap{visibility:hidden!important}
+.bf-front-case.gsap-turned{translate:0 0!important}
+.gsap-case-rear:not(.has-artwork)::after{content:"Rear inlay unavailable";display:grid;place-items:center;height:100%;color:white}
+.gsap-turn-case{position:absolute;left:50%;bottom:-52px;transform:translateX(-50%);z-index:20;cursor:pointer;border:1px solid #c7d3dc;border-radius:20px;background:#1b2229;color:white;padding:8px 16px}
+.gsap-turn-case[hidden]{display:none!important}
+.gsap-booklet-page-indicator{position:absolute;bottom:9px;right:10px;padding:3px 6px;background:#1119;color:white;font:600 11px sans-serif;pointer-events:none}
+.gsap-booklet-page-indicator:empty{display:none}
