@@ -296,3 +296,39 @@
   visibility:visible!important;
 }
 .bf-front-case.gsap-turned>.bf-front-play{visibility:hidden!important}
+
+
+/* Rear of a conventional jewel case: artwork fills the inlay card, with
+   only a thin transparent moulded rim, hinge/spine and glossy lid. */
+.bf-front-case.gsap-turned{
+  transform:scale(1)!important;
+}
+.bf-front-case.gsap-turned>.gsap-case-rear{
+  inset:0!important;
+  width:100%!important;height:100%!important;
+  box-sizing:border-box!important;
+  border:4px solid rgba(217,229,238,.78)!important;
+  border-left:9px solid rgba(205,220,232,.68)!important;
+  border-right:6px solid rgba(195,210,223,.72)!important;
+  border-radius:2px!important;
+  background-color:#111417!important;
+  background-size:100% 100%!important;
+  background-position:center!important;
+  background-repeat:no-repeat!important;
+  box-shadow:inset 0 0 0 2px #ffffff45,0 9px 25px #0008!important;
+  overflow:hidden!important;
+}
+.bf-front-case.gsap-turned>.gsap-case-rear::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  border-left:3px solid #f2f8fc77;
+  border-right:2px solid #dce8f477;
+  background:linear-gradient(112deg,#fff2 0%,transparent 18%,transparent 78%,#fff2 100%);
+}
+.bf-front-case.gsap-turned>.gsap-case-rear::after{
+  content:"";position:absolute;top:2%;bottom:2%;left:1%;width:2px;
+  background:#e6f2fa80;box-shadow:4px 0 5px #0005;pointer-events:none;
+}
+.bf-front-case.gsap-turned>.gsap-turn-case{
+  right:12px!important;bottom:12px!important;
+  background:#10161c91!important;
+}
