@@ -33,3 +33,11 @@
 .gsap-disc{position:relative;z-index:1;background-size:cover;background-position:center;background-repeat:no-repeat}
 .gsap-booklet{background-color:#d8d3c3;background-size:100% auto;background-position:center;background-repeat:no-repeat;border:3px solid #a8a69e;overflow:hidden}
 .gsap-booklet[style*="background-image"]{box-shadow:inset 0 0 0 4px #f2efe7}
+
+/* Physical right-hand tray: moulded recess, disc-sized label and retaining hub. */
+.gsap-tray{border-radius:2px;background:#17191c!important;box-shadow:inset 0 0 0 5px #a9b2b7,inset 0 0 0 10px #292d31!important}
+.bf-front-case[aria-expanded="true"] .gsap-tray{background:#17191c!important}
+.gsap-tray::before{content:"";position:absolute;z-index:1;width:96%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 48% 47%,#090a0c 0 13%,#202329 14% 72%,#050608 73% 100%);box-shadow:inset 0 0 0 3px #060708,0 1px 4px #0008}
+.gsap-disc{width:92%;max-width:none;aspect-ratio:1;z-index:2;border:1px solid #bfc4c8;box-shadow:0 1px 4px #000b,inset 0 0 0 2px #ffffff45;background-position:center;background-size:cover}
+.gsap-disc::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;background:conic-gradient(from 15deg,transparent 0 15%,#ffffff1b 18%,transparent 25% 53%,#ffffff17 57%,transparent 65%);mix-blend-mode:screen}
+.gsap-disc-hub{position:relative;z-index:3;width:15%;background:radial-gradient(circle,#08090b 0 40%,#343940 42% 65%,#a9afb5 67% 81%,#111317 83%);border:2px solid #747b82;box-shadow:0 0 0 3px #0005}
