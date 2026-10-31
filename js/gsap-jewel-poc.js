@@ -20,7 +20,7 @@ if(preview&&caseEl){
   const rear=document.createElement('div');
   rear.className='gsap-case-rear';
   rear.setAttribute('aria-hidden','true');
-  caseEl.insertBefore(rear,tray);
+  preview.append(rear);
   const turnButton=document.createElement('button');
   turnButton.type='button';
   turnButton.className='gsap-turn-case';
@@ -41,6 +41,7 @@ if(preview&&caseEl){
     caseEl.classList.toggle('gsap-turned',turned);
     turnButton.setAttribute('aria-label',turned?'Turn jewel case back to the disc and booklet':'Turn jewel case over to view rear artwork');
     rear.setAttribute('aria-hidden',String(!turned));
+    preview.classList.toggle('gsap-show-rear',turned);
   }
   turnButton.addEventListener('click',event=>{
     event.stopPropagation();
