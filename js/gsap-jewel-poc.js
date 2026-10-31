@@ -99,7 +99,30 @@ if(preview&&caseEl){
     if(gsap)gsap.to(flap,{rotationY:opened?-155:0,duration:reduced?0:0.85,ease:'power2.inOut',overwrite:true});
     else flap.style.transform='rotateY('+(opened?-155:0)+'deg)';
   }
-  preview.addEventListener('carousel:toggle-jewel-case',()=>setOpen(!opened));
+  // Native click fallback: some browsers lose the app's pointer capture before
+  // pointerup, so its custom toggle event never arrives.
+  let lastToggleAt=0;
+  let pressStartedAt=0;
+  let pressMoved=false;
+  caseEl.addEventListener('pointerdown',event=>{
+    if(event.target.closest('button'))return;
+    pressStartedAt=performance.now();
+    pressMoved=false;
+  });
+  caseEl.addEventListener('pointermove',event=>{
+    if(event.buttons&&pressStartedAt&&event.pointerType==='touch')pressMoved=true;
+  });
+  preview.addEventListener('carousel:toggle-jewel-case',()=>{
+    lastToggleAt=performance.now();
+    setOpen(!opened);
+  });
+  caseEl.addEventListener('click',event=>{
+    if(event.target.closest('button'))return;
+    if(performance.now()-lastToggleAt<350)return;
+    if(pressStartedAt&&(performance.now()-pressStartedAt>550||pressMoved))return;
+    lastToggleAt=performance.now();
+    setOpen(!opened);
+  });
   caseEl.addEventListener('keydown',event=>{
     if(event.target!==caseEl||!['Enter',' '].includes(event.key))return;
     event.preventDefault();setOpen(!opened);
