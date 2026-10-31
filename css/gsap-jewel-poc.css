@@ -41,3 +41,16 @@
 .gsap-disc{width:92%;max-width:none;aspect-ratio:1;z-index:2;border:1px solid #bfc4c8;box-shadow:0 1px 4px #000b,inset 0 0 0 2px #ffffff45;background-position:center;background-size:cover}
 .gsap-disc::after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;background:conic-gradient(from 15deg,transparent 0 15%,#ffffff1b 18%,transparent 25% 53%,#ffffff17 57%,transparent 65%);mix-blend-mode:screen}
 .gsap-disc-hub{position:relative;z-index:3;width:15%;background:radial-gradient(circle,#08090b 0 40%,#343940 42% 65%,#a9afb5 67% 81%,#111317 83%);border:2px solid #747b82;box-shadow:0 0 0 3px #0005}
+
+/* Hard isolation: no rear-cover imagery may show through the open tray. */
+.bf-front-case[aria-expanded="true"] .gsap-tray{
+  visibility:visible!important;
+  background:#121417!important;
+  background-image:none!important;
+  opacity:1!important;
+  isolation:isolate;
+}
+.bf-front-case .gsap-rear-inlay{display:none!important;background-image:none!important}
+.bf-front-case[aria-expanded="true"] .gsap-tray::after{
+  content:"";position:absolute;inset:9px;z-index:0;background:#121417;pointer-events:none;
+}
