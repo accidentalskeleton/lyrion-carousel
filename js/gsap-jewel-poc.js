@@ -38,7 +38,7 @@ if(preview&&caseEl){
   let turned=false;
   let rearScan=null;
   function updateTurnControl(){
-    turnButton.hidden=!opened;
+    turnButton.hidden=!opened||!rearScan;
     turnButton.innerHTML=turned?'&#8634;':'&#8635;';
     turnButton.title=turned?'Turn to front':'Turn over';
     caseEl.classList.toggle('gsap-turned',turned);
@@ -48,7 +48,7 @@ if(preview&&caseEl){
   }
   turnButton.addEventListener('click',event=>{
     event.stopPropagation();
-    if(!opened)return;
+    if(!opened||!rearScan)return;
     turned=!turned;
     updateTurnControl();
   });
@@ -105,7 +105,7 @@ if(preview&&caseEl){
     bookletPages=[];bookletIndex=0;
     booklet.style.backgroundImage='';booklet.removeAttribute('aria-label');
     pageIndicator.textContent='';
-    rearScan=null;rearArtwork.style.backgroundImage='';rear.classList.remove('has-artwork');
+    rearScan=null;turned=false;updateTurnControl();rearArtwork.style.backgroundImage='';rear.classList.remove('has-artwork');
     disc.style.backgroundImage='';
     if(disc.dataset.objectUrl){URL.revokeObjectURL(disc.dataset.objectUrl);delete disc.dataset.objectUrl;}
     if(!albumId||String(albumId).startsWith('spotify:'))return;
@@ -124,6 +124,7 @@ if(preview&&caseEl){
 
       rearScan=find(/^(?:back|rear|backcover|back-cover|rear-cover|traycard|tray-card|inlay)(?:[-_. 0-9]|$)/i);
       if(rearScan){rearArtwork.style.backgroundImage='url("'+rearScan.url+'")';rear.classList.add('has-artwork');}
+      updateTurnControl();
       const discScan=find(/^(?:disc|disk|cd|medium|media)(?:[-_. 0-9]|$)/i);
       if(discScan)applyDiscScan(discScan.url,token);
       bookletPages=images.filter(item=>/^(?:booklet|inside|front[-_. ]0[2-9]|page)(?:[-_. 0-9]|$)/i.test(item.caption));
