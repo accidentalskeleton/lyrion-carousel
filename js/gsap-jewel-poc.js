@@ -59,7 +59,7 @@ if(preview&&caseEl){
       const menu=await lms(['albuminfo','items',0,250,'menu:albuminfo','album_id:'+albumId]);
       const candidates=[...(menu?.item_loop||[]),...(menu?.items||[]),...(menu?.data||[])];
       const entry=candidates.find(item=>/local artwork/i.test([item.text,item.title,item.name,item.label].filter(Boolean).join(' ')));
-      const itemId=entry?.params?.item_id??entry?.item_id??entry?.id;
+      const itemId=entry?.actions?.go?.params?.item_id??entry?.params?.item_id??entry?.item_id??entry?.id;
       if(itemId==null||token!==requestToken)return;
       const result=await lms(['albuminfo','items',0,250,'slideshow:1','menu:albuminfo','item_id:'+itemId,'album_id:'+albumId]);
       if(token!==requestToken)return;
