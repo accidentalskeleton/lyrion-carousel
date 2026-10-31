@@ -15,26 +15,23 @@ if(preview&&caseEl){
   caseEl.setAttribute('role','button');
   caseEl.setAttribute('aria-label','Open album jewel case');
   caseEl.setAttribute('aria-expanded','false');
-  // Additional artwork comes from the LMS Album Information slideshow, not a filesystem scan.
-  const artworkViewer=document.createElement('div');
-  artworkViewer.className='gsap-artwork-viewer';
-  artworkViewer.hidden=true;
-  artworkViewer.innerHTML='<button type="button" class="gsap-art-prev" aria-label="Previous artwork">‹</button><img alt="Album artwork"><button type="button" class="gsap-art-next" aria-label="Next artwork">›</button><span class="gsap-art-caption"></span>';
-  caseEl.append(artworkViewer);
-  let images=[],page=0,requestToken=0;
-  const imageElement=artworkViewer.querySelector('img');
-  function showPage(next){
-    if(!images.length)return;
-    page=(next+images.length)%images.length;
-    imageElement.src=images[page].url;
-    imageElement.alt=images[page].caption;
-    artworkViewer.querySelector('.gsap-art-caption').textContent=images[page].caption+' ('+(page+1)+'/'+images.length+')';
+  // Scans live inside the physical case; no detached image strip.
+  const disc=tray.querySelector('.gsap-disc');
+  const inlay=document.createElement('div');
+  inlay.className='gsap-rear-inlay';
+  tray.prepend(inlay);
+  let requestToken=0;
+  let bookletPages=[],bookletIndex=0;
+  function setBookletPage(index){
+    if(!bookletPages.length)return;
+    bookletIndex=(index+bookletPages.length)%bookletPages.length;
+    booklet.style.backgroundImage='url("'+bookletPages[bookletIndex].url+'")';
+    booklet.setAttribute('aria-label','Booklet: '+bookletPages[bookletIndex].caption);
   }
-  for(const [selector,delta] of [['.gsap-art-prev',-1],['.gsap-art-next',1]]){
-    const button=artworkViewer.querySelector(selector);
-    button.addEventListener('pointerdown',event=>event.stopPropagation());
-    button.addEventListener('click',event=>{event.stopPropagation();showPage(page+delta)});
-  }
+  booklet.addEventListener('click',event=>{
+    if(!caseEl.matches('[aria-expanded="true"]')||bookletPages.length<2)return;
+    event.stopPropagation();setBookletPage(bookletIndex+1);
+  });
   async function lms(command){
     const response=await fetch('/api/lms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:1,method:'slim.request',params:['',command]})});
     if(!response.ok)throw Error('LMS HTTP '+response.status);
@@ -51,8 +48,9 @@ if(preview&&caseEl){
   }
   async function loadArtwork(albumId){
     const token=++requestToken;
-    images=[];page=0;artworkViewer.hidden=true;
-    booklet.textContent='';booklet.style.backgroundImage='';
+    bookletPages=[];bookletIndex=0;
+    booklet.textContent='';booklet.style.backgroundImage='';booklet.removeAttribute('aria-label');
+    inlay.style.backgroundImage='';disc.style.backgroundImage='';
     if(!albumId||String(albumId).startsWith('spotify:'))return;
     try{
       // Discover the Local artwork entry for this album; its item_id is not globally stable.
@@ -63,14 +61,15 @@ if(preview&&caseEl){
       if(itemId==null||token!==requestToken)return;
       const result=await lms(['albuminfo','items',0,250,'slideshow:1','menu:albuminfo','item_id:'+itemId,'album_id:'+albumId]);
       if(token!==requestToken)return;
-      images=localArtworkItems(result);
+      const images=localArtworkItems(result);
       if(!images.length)return;
-      artworkViewer.hidden=false;showPage(0);
-      const bookletImage=images.find(item=>/booklet|inside|front-0[2-9]/i.test(item.caption));
-      if(bookletImage){
-        booklet.style.backgroundImage='url("'+bookletImage.url+'")';
-        booklet.textContent='';
-      }
+      const find=(pattern)=>images.find(item=>pattern.test(item.caption));
+      const rear=find(/^(?:back|rear|inlay|tray)(?:[-_. ]|$)/i);
+      if(rear)inlay.style.backgroundImage='url("'+rear.url+'")';
+      const discScan=find(/^(?:disc|disk|cd|medium|media)(?:[-_. 0-9]|$)/i);
+      if(discScan)disc.style.backgroundImage='url("'+discScan.url+'")';
+      bookletPages=images.filter(item=>/^(?:booklet|inside|front[-_. ]0[2-9]|page)(?:[-_. 0-9]|$)/i.test(item.caption));
+      if(bookletPages.length)setBookletPage(0);
     }catch(error){console.debug('Additional LMS artwork unavailable:',error)}
   }
   preview.addEventListener('carousel:album-preview',event=>loadArtwork(event.detail?.albumId));
