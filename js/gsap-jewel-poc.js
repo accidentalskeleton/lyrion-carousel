@@ -70,7 +70,7 @@ if(preview&&caseEl){
       let best={score:0,x:128,y:128,r:112};
       // Search for a continuous circular rim, not the centre hub.
       for(let y=64;y<=192;y+=8)for(let x=64;x<=192;x+=8)
-        for(let r=52;r<=Math.min(122,x-3,y-3,253-x,253-y);r+=4){
+        for(let r=52;r<=Math.min(122,x-6,y-6,249-x,249-y);r+=4){
           let sum=0,valid=0;
           for(let a=0;a<48;a++){
             const theta=a*Math.PI/24,dx=Math.cos(theta),dy=Math.sin(theta);
