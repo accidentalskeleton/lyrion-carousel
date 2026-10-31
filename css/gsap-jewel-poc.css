@@ -216,3 +216,7 @@
 .bf-front-case.gsap-turned .gsap-turn-case{
   transform:rotateY(180deg) translateZ(5px)!important;
 }
+
+/* Keep the rotated return control above the rear-art plane. */
+.bf-front-preview>.gsap-case-rear{z-index:2!important}
+.bf-front-preview>.bf-front-case{position:relative;z-index:3}
