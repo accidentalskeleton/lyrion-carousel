@@ -1,0 +1,12 @@
+/* GSAP POC: preview-only physical jewel case. Existing shelf and playback untouched. */
+.bf-front-preview{perspective:1100px;overflow:visible}
+.bf-front-case{transform-style:preserve-3d;overflow:visible!important;background:transparent!important;border:0!important;box-shadow:none!important;cursor:default!important}
+.gsap-tray{position:absolute;inset:0;background:linear-gradient(145deg,#31363c,#0b0d10);border:5px solid #a4b1bc9c;box-shadow:0 18px 32px #0009,inset 0 0 0 3px #080b0e;display:grid;place-items:center;z-index:0}
+.gsap-disc{width:min(75%,210px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;background:repeating-radial-gradient(circle,#b3bdc6 0 2px,#e3e8ed 3px 4px,#929da7 5px 7px);box-shadow:0 3px 12px #000a}
+.gsap-disc-hub{width:17%;aspect-ratio:1;border-radius:50%;background:#13171b;border:5px solid #a6adb4}
+.gsap-flap{position:absolute;inset:0;z-index:1;transform-origin:left center;transform-style:preserve-3d;backface-visibility:visible;pointer-events:none}
+.gsap-flap .bf-front-art{position:absolute;inset:0;width:100%!important;height:100%!important;border:6px solid #d5e1eb91;box-sizing:border-box;backface-visibility:hidden;box-shadow:inset 0 0 0 2px #fff3,0 6px 14px #0008}
+.gsap-booklet{position:absolute;inset:0;display:grid;place-items:center;transform:rotateY(180deg);backface-visibility:hidden;background:#d6d0be;color:#242424;border:6px solid #b8b6a9;box-sizing:border-box;font-size:14px}
+.gsap-open-toggle{position:absolute;z-index:5;left:50%;bottom:-47px;transform:translateX(-50%);padding:7px 12px;border:1px solid #8d9aa5;border-radius:5px;background:#1c252d;color:#fff;cursor:pointer;white-space:nowrap;touch-action:manipulation}
+.bf-front-case .bf-front-play{z-index:6}
+@media(prefers-reduced-motion:reduce){.bf-front-preview{transition:none!important}}
