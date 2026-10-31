@@ -57,7 +57,7 @@ export async function runTests(sources) {
   root.querySelector=selector=>selector.includes(':not(')?null:element(selector);
   const stage=element('.bf-stage'),preview=element('.bf-front-preview'),frontCase=new Element('case');
   preview.querySelector=()=>frontCase;
-  const document=new Element('document');document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
+  const document=new Element('document');document.querySelectorAll=()=>[];document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
   const window=new Element('window');window.innerWidth=1000;window.innerHeight=600;
   const storage=new Map();const localStorage={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v))};
   let time=0,nextId=0;const frames=new Map(),timers=new Map();
@@ -72,7 +72,8 @@ export async function runTests(sources) {
   let metadataFetch=async()=>({ok:false});
   const env={document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
     ResizeObserver:class{observe(){}},Event:class{},Image:PreloadImage,fetch:(url,...args)=>url.startsWith('/api/catalogue')?Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})}):metadataFetch(url,...args),rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},fanLayout:geometry.fanLayout,clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
-    buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum};
+    buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
+    createLmsProvider:()=>({}),createSpotifyProvider:()=>({}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
     return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,updateMeta,draw,
