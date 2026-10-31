@@ -20,7 +20,7 @@ if(preview&&caseEl){
   const rear=document.createElement('div');
   rear.className='gsap-case-rear';
   rear.setAttribute('aria-hidden','true');
-  preview.append(rear);
+  caseEl.insertBefore(rear,tray);
   const turnButton=document.createElement('button');
   turnButton.type='button';
   turnButton.className='gsap-turn-case';
