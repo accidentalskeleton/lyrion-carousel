@@ -5,7 +5,7 @@ if(preview&&caseEl){
   const front=caseEl.querySelector('.bf-front-art');
   const tray=document.createElement('div');tray.className='gsap-tray';
   tray.innerHTML='<div class="gsap-disc" aria-hidden="true"><span class="gsap-disc-hub"></span></div>';
-  const booklet=document.createElement('div');booklet.className='gsap-booklet';booklet.textContent='Inside booklet';
+  const booklet=document.createElement('div');booklet.className='gsap-booklet';
   const flap=document.createElement('div');flap.className='gsap-flap';
   // Move the existing artwork to the hinged front so LMS artwork updates still work.
   front.parentNode.insertBefore(tray,front);
