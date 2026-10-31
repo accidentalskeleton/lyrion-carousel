@@ -280,7 +280,7 @@ frontPreview.addEventListener('pointerup',event=>{
     if(!frontPress||event.pointerId!==frontPress.id)return;
     const press=frontPress;
     cancelFrontPress();
-    if(!press.long&&!press.cancelled)closeFrontPreview();else resumeFrontTimeout();
+    if(!press.long&&!press.cancelled){frontPreview.dispatchEvent(new CustomEvent('carousel:toggle-jewel-case'));resumeFrontTimeout()}else resumeFrontTimeout();
 });
 function cancelFrontGesture(event){if(frontPress&&event.pointerId===frontPress.id){cancelFrontPress();resumeFrontTimeout()}}
 frontPreview.addEventListener('pointercancel',cancelFrontGesture);
