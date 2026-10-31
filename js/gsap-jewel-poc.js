@@ -26,7 +26,7 @@ if(preview&&caseEl){
   turnButton.className='gsap-turn-case';
   turnButton.textContent='Turn over';
   turnButton.setAttribute('aria-label','Turn jewel case over to view rear artwork');
-  preview.append(turnButton);
+  caseEl.append(turnButton);
   // Separate the front-facing physical surfaces from the rear-facing inlay.
   // The case itself rotates in 3D; the rear scan is not swapped onto the tray.
   const pageIndicator=document.createElement('span');
@@ -36,7 +36,8 @@ if(preview&&caseEl){
   let rearScan=null;
   function updateTurnControl(){
     turnButton.hidden=!opened;
-    turnButton.textContent=turned?'Turn to front':'Turn over';
+    turnButton.innerHTML=turned?'&#8634;':'&#8635;';
+    turnButton.title=turned?'Turn to front':'Turn over';
     caseEl.classList.toggle('gsap-turned',turned);
     turnButton.setAttribute('aria-label',turned?'Turn jewel case back to the disc and booklet':'Turn jewel case over to view rear artwork');
     rear.setAttribute('aria-hidden',String(!turned));
