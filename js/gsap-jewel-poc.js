@@ -45,9 +45,9 @@ if(preview&&caseEl){
   }
   // The Pi extracts the disc once and caches it; browser only displays the PNG.
   async function applyDiscScan(url,token){
-    const match=url.match(/^\\/api\\/local-artwork\\/([a-f0-9]{32})$/i);
-    if(!match)return;
-    const processed='/api/processed-disc/'+match[1];
+    const match=String(url).split('/');
+    if(match.length!==4||match[0]!==''||match[1]!=='api'||match[2]!=='local-artwork'||!/^[a-f0-9]{32}$/i.test(match[3]))return;
+    const processed='/api/processed-disc/'+match[3];
     try{
       const response=await fetch(processed);
       if(!response.ok)throw Error('Disc detection unavailable');
