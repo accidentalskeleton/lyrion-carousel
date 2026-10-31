@@ -187,223 +187,72 @@
 }
 
 
-/* Rear inlay uses its own front-facing plane. CSS backface culling on
-   nested 3D surfaces previously left the flipped case completely blank. */
-.bf-front-preview>.gsap-case-rear{
-  position:absolute!important;
-  inset:0!important;
-  width:100%!important;height:100%!important;
-  box-sizing:border-box!important;
-  transform:scale(.92)!important;
-  transform-origin:center center!important;
-  z-index:25!important;
-  opacity:0!important;
-  visibility:hidden!important;
-  pointer-events:none!important;
-  backface-visibility:visible!important;
-  background-position:center!important;
-  background-repeat:no-repeat!important;
-  background-size:contain!important;
-  transition:opacity .25s ease,visibility 0s linear .25s!important;
-}
-.bf-front-preview.gsap-show-rear>.gsap-case-rear{
-  opacity:1!important;visibility:visible!important;
-  transition:opacity .25s ease .55s,visibility 0s!important;
-}
-.bf-front-preview.gsap-show-rear .bf-front-case{
-  transform:scale(.92) rotateY(180deg)!important;
-}
-.bf-front-case.gsap-turned .gsap-turn-case{
-  transform:rotateY(180deg) translateZ(5px)!important;
-}
-
-/* Keep the rotated return control above the rear-art plane. */
-.bf-front-preview>.gsap-case-rear{z-index:2!important}
-.bf-front-preview>.bf-front-case{position:relative;z-index:3}
-
-
-/* Rear geometry correction: the rear inlay belongs to one closed-size case,
-   never to the two-panel preview. */
+/* Rear case: one authoritative rendering model.
+   The front jewel case is untouched. Rear artwork is a separate, readable
+   printed inlay inside an edge-moulded, transparent plastic shell. */
 .bf-front-preview>.gsap-case-rear{display:none!important}
-.bf-front-case>.gsap-case-rear{
-  display:block!important;
-  position:absolute!important;
-  inset:0!important;
-  width:100%!important;
-  height:100%!important;
-  box-sizing:border-box!important;
-  z-index:1!important;
-  opacity:1!important;
-  visibility:visible!important;
-  pointer-events:none!important;
-  transform:rotateY(180deg) translateZ(2px)!important;
-  backface-visibility:hidden!important;
-  background-color:#1b1d20!important;
-  background-position:center!important;
-  background-size:contain!important;
-  background-repeat:no-repeat!important;
-  border:5px solid #cbd5dd!important;
-  box-shadow:inset 0 0 0 2px #fff6,0 12px 25px #0008!important;
-}
-.bf-front-case.gsap-turned>.gsap-case-rear{
-  z-index:20!important;
-  opacity:1!important;
-  visibility:visible!important;
-}
-.bf-front-case.gsap-turned{
-  transform:scale(.92) rotateY(180deg)!important;
-  translate:0 0!important;
-}
-.bf-front-case.gsap-turned>.gsap-turn-case{
-  transform:rotateY(180deg) translateZ(6px)!important;
-  z-index:35!important;
-}
-.bf-front-case.gsap-turned>.gsap-tray,
-.bf-front-case.gsap-turned>.gsap-flap{visibility:hidden!important}
-
-
-/* Reliable rear view: avoid browser-dependent nested 3D backface culling.
-   The rear is a front-facing overlay constrained to one case panel. */
-.bf-front-case.gsap-turned{
-  transform:scale(.92)!important;
-  translate:0 0!important;
-}
-.bf-front-case>.gsap-case-rear{
-  transform:none!important;
-  backface-visibility:visible!important;
-  opacity:0!important;
-  visibility:hidden!important;
-  z-index:40!important;
-  pointer-events:none!important;
-  background-color:#202329!important;
-  background-size:contain!important;
-  background-position:center!important;
-  background-repeat:no-repeat!important;
-  transition:opacity .35s ease,visibility 0s linear .35s!important;
-}
-.bf-front-case.gsap-turned>.gsap-case-rear{
-  transform:none!important;
-  opacity:1!important;
-  visibility:visible!important;
-  transition:opacity .35s ease,visibility 0s!important;
-}
-.bf-front-case.gsap-turned>.gsap-turn-case{
-  position:absolute!important;
-  z-index:60!important;
-  transform:none!important;
-  right:70px!important;
-  bottom:8px!important;
-  visibility:visible!important;
-}
-.bf-front-case.gsap-turned>.bf-front-play{visibility:hidden!important}
-
-
-/* Rear of a conventional jewel case: artwork fills the inlay card, with
-   only a thin transparent moulded rim, hinge/spine and glossy lid. */
 .bf-front-case.gsap-turned{
   transform:scale(1)!important;
+  translate:0 0!important;
+}
+.bf-front-case>.gsap-case-rear{
+  position:absolute!important;inset:0!important;
+  display:block!important;box-sizing:border-box!important;
+  width:100%!important;height:100%!important;
+  z-index:40!important;opacity:0!important;visibility:hidden!important;
+  pointer-events:none!important;transform:none!important;
+  backface-visibility:visible!important;
+  background:transparent!important;border:0!important;border-radius:2px!important;
+  overflow:hidden!important;
+  box-shadow:0 1px 2px #fff5,0 12px 28px #0009,0 0 0 1px #647782!important;
+  transition:opacity .3s ease,visibility 0s linear .3s!important;
 }
 .bf-front-case.gsap-turned>.gsap-case-rear{
-  inset:0!important;
-  width:100%!important;height:100%!important;
-  box-sizing:border-box!important;
-  border:4px solid rgba(217,229,238,.78)!important;
-  border-left:9px solid rgba(205,220,232,.68)!important;
-  border-right:6px solid rgba(195,210,223,.72)!important;
-  border-radius:2px!important;
-  background-color:#111417!important;
-  background-size:100% 100%!important;
-  background-position:center!important;
-  background-repeat:no-repeat!important;
-  box-shadow:inset 0 0 0 2px #ffffff45,0 9px 25px #0008!important;
-  overflow:hidden!important;
-}
-.bf-front-case.gsap-turned>.gsap-case-rear::before{
-  content:"";position:absolute;inset:0;pointer-events:none;
-  border-left:3px solid #f2f8fc77;
-  border-right:2px solid #dce8f477;
-  background:linear-gradient(112deg,#fff2 0%,transparent 18%,transparent 78%,#fff2 100%);
-}
-.bf-front-case.gsap-turned>.gsap-case-rear::after{
-  content:"";position:absolute;top:2%;bottom:2%;left:1%;width:2px;
-  background:#e6f2fa80;box-shadow:4px 0 5px #0005;pointer-events:none;
-}
-.bf-front-case.gsap-turned>.gsap-turn-case{
-  right:12px!important;bottom:12px!important;
-  background:#10161c91!important;
-}
-
-
-/* Rear inlay is a separate printed card behind a clear jewel-case shell.
-   Correct the horizontal mirroring visible on the previous rear scans. */
-.bf-front-case>.gsap-case-rear{
-  background-image:none!important;
-  background-color:transparent!important;
-  border:0!important;
-  box-shadow:0 12px 26px #0008!important;
-  overflow:visible!important;
+  opacity:1!important;visibility:visible!important;
+  transition:opacity .3s ease,visibility 0s!important;
 }
 .bf-front-case>.gsap-case-rear>.gsap-rear-artwork{
-  position:absolute;
-  inset:7px 8px 7px 13px;
-  background-color:#111;
-  background-position:center;
-  background-repeat:no-repeat;
-  background-size:100% 100%;
-  transform:scaleX(-1);
-  backface-visibility:visible;
-  box-shadow:0 0 0 1px #151b21;
-}
-.bf-front-case>.gsap-case-rear::before{
-  z-index:2;
-  border:4px solid rgba(227,237,244,.42)!important;
-  border-left:12px solid rgba(210,225,237,.56)!important;
-  border-right:6px solid rgba(211,226,239,.47)!important;
-  box-shadow:inset 0 0 0 2px #ffffff2e,0 0 0 1px #71808b88;
-  background:linear-gradient(105deg,#fff2,transparent 18%,transparent 82%,#fff2)!important;
-}
-.bf-front-case>.gsap-case-rear::after{
-  z-index:3;
-  left:7px!important;top:2%!important;bottom:2%!important;
-  width:5px!important;
-  background:linear-gradient(90deg,#73818caa,#e6f2f7a8,#9babb688)!important;
-  box-shadow:2px 0 4px #0004!important;
-}
-
-
-/* Rear shell v2: printed tray card sits just inside the transparent moulding.
-   Keep its original artwork geometry and avoid a thick picture-frame border. */
-.bf-front-case.gsap-turned>.gsap-case-rear{
-  border:0!important;
-  border-radius:2px!important;
-  background:linear-gradient(90deg,#74838d66 0 1%,#d7e2ea55 1.2%,transparent 3%,transparent 97%,#b5c6d255 99%,#61717d77)!important;
-  box-shadow:0 2px 2px #fff4,0 12px 25px #0008,0 0 0 1px #788a9588!important;
-  overflow:hidden!important;
-}
-.bf-front-case.gsap-turned>.gsap-case-rear>.gsap-rear-artwork{
-  inset:5px 7px 5px 9px!important;
+  position:absolute!important;
+  inset:4px 6px 4px 7px!important;
+  background-color:#17191b!important;
+  background-position:center!important;
   background-size:100% 100%!important;
-  box-shadow:none!important;
+  background-repeat:no-repeat!important;
+  transform:scaleX(-1)!important;
+  backface-visibility:visible!important;
+  box-shadow:inset 0 0 0 1px #0d111580!important;
 }
-.bf-front-case.gsap-turned>.gsap-case-rear::before{
-  inset:0!important;
-  border:3px solid #d5e4ee73!important;
-  border-left:8px solid #c4d5e08a!important;
-  border-right:5px solid #c4d5e07a!important;
-  border-radius:2px!important;
-  background:linear-gradient(115deg,#fff3 0%,#fff1 4%,transparent 13%,transparent 84%,#fff2 100%)!important;
-  box-shadow:inset 0 0 0 1px #ffffff77,inset 0 3px 3px #ffffff55!important;
+/* Thin transparent outer lid, moulded edges and subtle specular highlights. */
+.bf-front-case>.gsap-case-rear::before{
+  content:"";position:absolute;inset:0;z-index:2;pointer-events:none;
+  box-sizing:border-box;
+  border:3px solid #dbe8f377;
+  border-left:7px solid #b7c9d7aa;
+  border-right:5px solid #a5b8c7a0;
+  border-radius:2px;
+  background:linear-gradient(115deg,#fff2 0%,transparent 14%,transparent 85%,#fff2 100%);
+  box-shadow:inset 0 0 0 1px #fff8,inset 0 3px 3px #fff4;
 }
-.bf-front-case.gsap-turned>.gsap-case-rear::after{
-  left:6px!important;top:1.5%!important;bottom:1.5%!important;
-  width:3px!important;
-  background:linear-gradient(90deg,#6e7b86aa,#e6f1f8aa)!important;
-  box-shadow:2px 0 2px #1115!important;
+/* Jewel-case spine: slim vertical transparent hinge, not a grey picture frame. */
+.bf-front-case>.gsap-case-rear::after{
+  content:"";position:absolute;z-index:3;pointer-events:none;
+  top:5px;bottom:5px;left:5px;width:4px;
+  background:linear-gradient(90deg,#586b7b9c,#e6f2fac9 50%,#8c9eac99);
+  box-shadow:3px 0 3px #0003;
 }
+.bf-front-case.gsap-turned>.gsap-flap,
+.bf-front-case.gsap-turned>.gsap-tray{visibility:hidden!important}
+.bf-front-case.gsap-turned>.bf-front-play{visibility:hidden!important}
 .bf-front-case.gsap-turned>.gsap-turn-case{
+  position:absolute!important;z-index:60!important;
+  top:auto!important;left:auto!important;
+  right:12px!important;bottom:12px!important;
+  transform:none!important;visibility:visible!important;
   width:52px!important;height:52px!important;
-  bottom:14px!important;right:14px!important;
-  border:1px solid #ffffff75!important;
-  background:#1119229c!important;
-  box-shadow:0 2px 10px #0008!important;
+  background:#10161c9e!important;
+  border:1px solid #ffffff80!important;
+  box-shadow:0 2px 12px #0009!important;
+}
+@media(prefers-reduced-motion:reduce){
+  .bf-front-case>.gsap-case-rear{transition:none!important}
 }
