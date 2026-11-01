@@ -29,8 +29,18 @@ export function createLmsProvider({
     },
 
     async search(query){
-      const result=await rpc('0',['albums',0,getSearchLimit(),'sort:artflow','tags:ajlysg','search:'+query,...genreArgs()]);
-      return {albums:(result.albums_loop||[]).map(mapAlbum),count:Number(result.count)||0};
+      const command=['albums',0,getSearchLimit(),'sort:artflow','tags:ajlysg','search:'+query];
+      const disabled=[...getDisabledGenres()].map(String).filter(id=>/^[1-9]\\d*$/.test(id));
+      // LMS supports genre_id but not exclude_genre_id. Find the excluded
+      // matches with the same sort and limit, then subtract them by album ID.
+      // This also removes albums which have both enabled and disabled genres.
+      const [result,excluded]=await Promise.all([
+        rpc('0',command),
+        disabled.length?rpc('0',[...command,'genre_id:'+disabled.join(',')]):Promise.resolve({albums_loop:[]})
+      ]);
+      const hidden=new Set((excluded.albums_loop||[]).map(album=>String(album.id)));
+      const albums=(result.albums_loop||[]).filter(album=>!hidden.has(String(album.id))).map(mapAlbum);
+      return {albums,count:albums.length};
     },
 
     async play(album){
