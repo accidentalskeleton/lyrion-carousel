@@ -10,7 +10,7 @@
   <title>Lyrion Carousel</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/lyrion-carousel-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/album-browser.css?v=0.10.0-track-play">
+  <link rel="stylesheet" href="css/album-browser.css?v=0.10.0-track-play-header">
   <link rel="stylesheet" href="css/jewel-overlay.css?v=0.10.0">
   <link rel="stylesheet" href="css/shelf.css?v=0.10.0">
   <link rel="stylesheet" href="css/realistic-case.css?v=0.10.0">
@@ -81,7 +81,7 @@
     </div>
     <div class="bf-search-overlay" hidden><div class="bf-search-panel"><div class="bf-search-row"><input class="bf-search-input" type="search" placeholder="Search albums or artists" autocomplete="off" aria-label="Search albums or artists"><button class="bf-search-close" type="button" aria-label="Close search">×</button></div><div class="bf-alphabet" aria-label="Jump by artist initial"></div><div class="bf-search-status">Type to search, or choose an artist initial.</div><div class="bf-search-results"></div></div></div>
     <div class="bf-album-menu" role="menu" aria-label="Album actions" hidden><strong class="bf-album-menu-title"></strong><button class="bf-clear-play" type="button" role="menuitem">Clear playlist and play album</button><button class="bf-play-now" type="button" role="menuitem">Play now</button><button class="bf-play-next" type="button" role="menuitem">Play next</button><button class="bf-add-queue" type="button" role="menuitem">Add to queue</button><button class="bf-track-list-open" type="button" role="menuitem">Album Information</button></div>
-    <div class="bf-track-overlay" role="dialog" aria-modal="true" aria-labelledby="bf-track-title" hidden><div class="bf-track-panel"><div class="bf-track-heading"><div><span class="bf-settings-kicker">Album Information</span><h2 id="bf-track-title"></h2><span class="bf-track-details"></span></div><button class="bf-track-close" type="button" aria-label="Close album information">×</button></div><div class="bf-track-actions"><button class="bf-track-play-now" type="button">Play now</button></div><div class="bf-track-status" role="status" aria-live="polite">Loading tracks…</div><ol class="bf-track-list"></ol></div></div>
+    <div class="bf-track-overlay" role="dialog" aria-modal="true" aria-labelledby="bf-track-title" hidden><div class="bf-track-panel"><div class="bf-track-heading"><div><span class="bf-settings-kicker">Album Information</span><h2 id="bf-track-title"></h2><span class="bf-track-details"></span></div><div class="bf-track-heading-controls"><button class="bf-track-play-now" type="button" aria-label="Play album now" title="Play now">▶</button><button class="bf-track-close" type="button" aria-label="Close album information">×</button></div></div><div class="bf-track-status" role="status" aria-live="polite">Loading tracks…</div><ol class="bf-track-list"></ol></div></div>
     <div class="bf-stage cursor-interaction" role="listbox" aria-label="Albums"></div>
     <div class="bf-front-preview" aria-hidden="true" hidden><div class="bf-front-case"><div class="bf-front-art"></div><button class="bf-front-play" type="button" aria-label="Play opened album" title="Play album">▶</button></div></div>
     <div class="bf-hinge"></div><div class="bf-shelf-line"></div><div class="bf-fade left"></div><div class="bf-fade right"></div><div class="bf-meta" aria-live="polite"></div>
