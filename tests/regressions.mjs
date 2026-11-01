@@ -46,6 +46,7 @@ export async function runTests(sources) {
     getAttribute(k){return this.attributes[k];}
     toggleAttribute(k,v){if(v)this.attributes[k]='';else delete this.attributes[k];}
     addEventListener(k,fn){(this.listeners[k]??=[]).push(fn);}
+    dispatchEvent(event){for(const fn of this.listeners[event.type]||[])fn(event);return true;}
     contains(el){return el===this||this.children.some(n=>n.contains?.(el));}
     focus(){} select(){} setPointerCapture(){}
     getBoundingClientRect(){return {left:0,right:1000,top:0,bottom:400,width:this.name==='case'?(this.coverWidth||300):1000,height:400};}
@@ -71,13 +72,13 @@ export async function runTests(sources) {
   class PreloadImage{set src(url){this.url=url;imageRequests.push(this)}}
   let metadataFetch=async()=>({ok:false});
   const env={document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
-    ResizeObserver:class{observe(){}},Event:class{},Image:PreloadImage,fetch:(url,...args)=>url.startsWith('/api/catalogue')?Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})}):metadataFetch(url,...args),rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},fanLayout:geometry.fanLayout,clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
+    ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>url.startsWith('/api/catalogue')?Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})}):metadataFetch(url,...args),rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},fanLayout:geometry.fanLayout,clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
     return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,updateMeta,draw,
-      set(values){if('playerId' in values)playerId=values.playerId;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
+      set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
@@ -100,7 +101,11 @@ export async function runTests(sources) {
   await api.refreshCatalogue();
   assert(api.state().orderMode==='random'&&api.state().albums.slice(0,95).every((a,i)=>a[6]===previous[i]), 'refresh retains random order');
   api.applySetting('random',1000);
+  // Actual connectLyrion() keeps connecting=true until startup completes;
+  // otherwise applyStatus() launches a competing follow animation.
+  api.set({connecting:true});
   await settle(api.selectStartupAlbum({mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1}));
+  api.set({connecting:false});
   assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden&&api.state().frontTimer===0,'startup opens playing cover without timeout');
   api.stopFollowing();assert(!preview.hidden,'pin survives scrolling');
   const otherIndex=api.state().albums.findIndex(album=>album[6]!==20);
