@@ -1008,6 +1008,7 @@ body {
 
 /* Keep all interactive playback/library controls hidden until startup has completed. */
 #book-fan-browser.is-starting .bf-source-switch,
+#book-fan-browser.is-starting .bf-player-power,
 #book-fan-browser.is-starting .bf-previous,
 #book-fan-browser.is-starting .bf-next,
 #book-fan-browser.is-starting .bf-queue-open {
