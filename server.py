@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlsplit, parse_qs
 from urllib.request import Request, urlopen
 from PIL import Image, ImageStat, ImageOps
+from disc_artwork import extract_disc
 
 # Architecture: HTTP threads serve static files and a small set of LMS proxy APIs.
 # Image processing and catalogue ordering happen here, leaving the browser to
@@ -263,6 +264,10 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if path=='/api/catalogue': self._serve_catalogue(); return
         if path=='/api/diagnostics/spotty': self._serve_spotty_diagnostic(); return
         if path=='/api/diagnostics/now-playing': self._serve_now_playing_diagnostic(); return
+        if path.startswith('/api/processed-disc/'):
+            self._serve_processed_disc(path); return
+        if path.startswith('/api/local-artwork/'):
+            self._serve_local_artwork(path); return
         if path=='/api/spotty-art': self._serve_spotty_art(); return
         if path=='/api/spotty-art-meta': self._serve_spotty_art_meta(); return
         if path=='/api/config': self._send_payload(200,json.dumps(self.runtime_config).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
@@ -289,6 +294,52 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         with urlopen(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'}),timeout=15) as response:
             payload=json.loads(self._read_limited(response,MAX_UPSTREAM_BYTES))
         return payload.get('result',{}) if isinstance(payload,dict) else {}
+
+    def _serve_processed_disc(self,path:str)->None:
+        """Serve a cached, isolated CD label, or 404 when detection is uncertain."""
+        match=re.fullmatch(r'/api/processed-disc/([a-fA-F0-9]{32})',path)
+        if not match:
+            self.send_error(400,'Invalid disc artwork identifier'); return
+        identifier=match.group(1).lower()
+        key=hashlib.sha256((self.lms_url+'\\0disc-v1\\0'+identifier).encode()).hexdigest()
+        cache=self.cache_dir/(key+'.disc.png')
+        try:
+            if cache.is_file():
+                self._send_payload(200,cache.read_bytes(),'image/png',cache_control='public, max-age=86400'); return
+            url=self.lms_url+'/imageproxy/mai/localartwork/'+identifier+'/image.png'
+            with urlopen(Request(url,headers={'Accept':'image/*'}),timeout=12) as response:
+                if response.headers.get_content_type() not in ('image/png','image/jpeg','image/webp'):
+                    raise ValueError('Unsupported image type')
+                payload=self._read_limited(response,MAX_ARTWORK_BYTES)
+            processed=extract_disc(payload)
+            if processed is None:
+                self.send_error(404,'Disc circle not confidently detected'); return
+            temporary=cache.with_name(cache.name+'.'+str(threading.get_ident())+'.tmp')
+            try:
+                temporary.write_bytes(processed)
+                os.replace(temporary,cache)
+            finally:
+                temporary.unlink(missing_ok=True)
+            self._send_payload(200,processed,'image/png',cache_control='public, max-age=86400')
+        except (OSError,URLError,ValueError) as exc:
+            self.send_error(502,'Disc processing unavailable')
+
+    def _serve_local_artwork(self,path:str)->None:
+        """Proxy only LMS Album Information local-artwork image identifiers."""
+        match=re.fullmatch(r'/api/local-artwork/([a-fA-F0-9]{32})',path)
+        if not match:
+            self.send_error(400,'Invalid local artwork identifier'); return
+        try:
+            url=self.lms_url.rstrip('/')+'/imageproxy/mai/localartwork/'+match.group(1)+'/image.png'
+            with urlopen(Request(url,headers={'Accept':'image/*'}),timeout=12) as response:
+                content_type=response.headers.get_content_type()
+                if content_type not in ('image/png','image/jpeg','image/webp','image/gif'):
+                    raise ValueError('Unexpected artwork content type')
+                payload=response.read(MAX_ARTWORK_BYTES+1)
+                if len(payload)>MAX_ARTWORK_BYTES: raise ValueError('Artwork too large')
+            self._send_payload(200,payload,content_type,cache_control='private, max-age=3600')
+        except (OSError,URLError,ValueError) as exc:
+            self.send_error(502,'LMS artwork unavailable')
 
     def _serve_spotty_art(self)->None:
         """Proxy/cache Spotty artwork and optionally render the same jewel-case variant as local albums."""
