@@ -521,6 +521,11 @@ body {
 .bf-track-heading h2 { margin:0; font-size:18px; font-weight:500; }
 .bf-track-details { display:block; margin-top:5px; color:var(--bf-muted); font-size:12px; }
 .bf-track-close { width:32px; height:32px; border:1px solid rgba(255,255,255,.12); border-radius:50%; background:#191c1e; color:#c9c6c0; font-size:20px; line-height:1; cursor:pointer; }
+.bf-track-actions { display:flex; justify-content:flex-end; padding:12px 0 2px; }
+.bf-track-play-now { min-height:38px; padding:8px 18px; border:1px solid rgba(143,186,145,.45); border-radius:8px; background:rgba(83,133,89,.25); color:#d5ecd6; font:inherit; font-size:13px; cursor:pointer; }
+.bf-track-play-now:hover,.bf-track-play-now:focus-visible { background:rgba(83,133,89,.42); outline:none; }
+.bf-track-play-now:disabled { opacity:.45; cursor:default; }
+.bf-track-play-now[hidden] { display:none; }
 .bf-track-status { min-height:18px; padding:12px 0 6px; color:var(--bf-muted); font-size:11px; }
 .bf-track-list { margin:0; padding:0 4px 0 28px; overflow:auto; }
 .bf-track-list li { display:grid; grid-template-columns:28px 1fr auto; gap:8px; padding:7px 8px; border-radius:5px; color:#ddd9d2; font-size:12px; }
