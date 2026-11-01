@@ -521,8 +521,9 @@ body {
 .bf-track-heading h2 { margin:0; font-size:18px; font-weight:500; }
 .bf-track-details { display:block; margin-top:5px; color:var(--bf-muted); font-size:12px; }
 .bf-track-close { width:32px; height:32px; border:1px solid rgba(255,255,255,.12); border-radius:50%; background:#191c1e; color:#c9c6c0; font-size:20px; line-height:1; cursor:pointer; }
-.bf-track-actions { display:flex; justify-content:flex-end; padding:12px 0 2px; }
-.bf-track-play-now { min-height:38px; padding:8px 18px; border:1px solid rgba(143,186,145,.45); border-radius:8px; background:rgba(83,133,89,.25); color:#d5ecd6; font:inherit; font-size:13px; cursor:pointer; }
+.bf-track-heading > div:first-child { min-width:0; }
+.bf-track-heading-controls { display:flex; flex:none; align-items:center; gap:10px; }
+.bf-track-play-now { display:grid; place-items:center; flex:none; width:38px; height:38px; padding:0 0 0 2px; border:1px solid rgba(143,186,145,.45); border-radius:50%; background:rgba(83,133,89,.25); color:#d5ecd6; font:inherit; font-size:18px; line-height:1; cursor:pointer; }
 .bf-track-play-now:hover,.bf-track-play-now:focus-visible { background:rgba(83,133,89,.42); outline:none; }
 .bf-track-play-now:disabled { opacity:.45; cursor:default; }
 .bf-track-play-now[hidden] { display:none; }
