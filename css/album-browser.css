@@ -78,6 +78,12 @@ body {
     width:15px;
     height:15px
 }
+.bf-player-power { display:inline-grid; place-items:center; width:30px; height:30px; padding:0; border:1px solid rgba(255,255,255,.12); border-radius:50%; background:#171717; color:#777b7d; cursor:pointer; transition:color .2s,border-color .2s,background .2s; }
+.bf-player-power svg { width:15px; height:15px; }
+.bf-player-power[data-power="on"] { color:#9bc9a0; border-color:rgba(143,186,145,.36); }
+.bf-player-power[data-power="off"] { color:#aaa69f; }
+.bf-player-power:not(:disabled):hover,.bf-player-power:focus-visible { background:#262b28; border-color:rgba(255,255,255,.32); outline:none; }
+.bf-player-power:disabled { opacity:.48; cursor:default; }
 .bf-settings-open {
     width:19px;
     height:19px;
