@@ -30,7 +30,7 @@ export function createLmsProvider({
 
     async search(query){
       const command=['albums',0,getSearchLimit(),'sort:artflow','tags:ajlysg','search:'+query];
-      const disabled=[...getDisabledGenres()].map(String).filter(id=>/^[1-9]\\d*$/.test(id));
+      const disabled=[...getDisabledGenres()].map(String).filter(id=>/^[1-9]\d*$/.test(id));
       // LMS supports genre_id but not exclude_genre_id. Find the excluded
       // matches with the same sort and limit, then subtract them by album ID.
       // This also removes albums which have both enabled and disabled genres.
