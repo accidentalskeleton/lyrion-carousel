@@ -273,6 +273,28 @@ export async function runTests(sources) {
     for(const selector of ['.bf-source-switch','.bf-previous','.bf-next','.bf-queue-open'])
       assert(sources.albumBrowserCss.includes('#book-fan-browser.is-starting '+selector),'startup hides '+selector);
   }
+  if (sources.lmsProvider) {
+    let disabled=new Set(['7','9']);
+    const calls=[];
+    const fakeRpc=async (_player,command)=>{
+      calls.push(command);
+      if(command.includes('genre_id:7,9'))return {albums_loop:[{id:2},{id:3}],count:2};
+      return {albums_loop:[{id:1},{id:2},{id:3}],count:3};
+    };
+    const createLmsProvider=new Function('rpc',plain(sources.lmsProvider)+';return createLmsProvider;')(fakeRpc);
+    const provider=createLmsProvider({
+      mapAlbum:album=>album,getPlayerId:()=>null,getPageSize:()=>10,getSearchLimit:()=>100,
+      getDisabledGenres:()=>disabled,getOrderMode:()=> 'artistAlbum',getLibraryCount:()=>0,
+      setLibraryCount:()=>{},getPositionIndex:()=>new Map(),setPositionIndex:()=>{}
+    });
+    const filtered=await provider.search('pink');
+    assert(filtered.albums.length===1&&filtered.albums[0].id===1,'local search excludes albums in disabled genres, including mixed-genre albums');
+    assert(calls.length===2&&calls[1].includes('genre_id:7,9')&&!calls.flat().some(arg=>String(arg).startsWith('exclude_genre_id:')),'local search uses supported LMS genre_id filter');
+    disabled=new Set();calls.length=0;
+    const unfiltered=await provider.search('pink');
+    assert(unfiltered.albums.length===3&&calls.length===1,'local search returns all matches when no genres are disabled');
+    assert(sources.app.includes('lmsProvider.search(value)'),'app search uses genre-aware LMS provider');
+  }
   assert(sources.app.includes("'tags:altng'")&&sources.app.includes('trackGenres'),'LMS Album Information requests and aggregates track genre metadata');
   return checks;
 }
@@ -280,6 +302,7 @@ export async function runTests(sources) {
 if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.mjs')) {
   const {readFile}=await import('node:fs/promises');
   const sources={};for(const name of ['app','browser','catalogue','lms','settings','spotify'])sources[name]=await readFile(new URL('../js/'+name+'.js',import.meta.url),'utf8');
+  sources.lmsProvider=await readFile(new URL('../js/providers/lms-provider.js',import.meta.url),'utf8');
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
