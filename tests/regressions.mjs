@@ -126,6 +126,20 @@ export async function runTests(sources) {
   }],time:1});
   assert(element('.bf-meta').children[1]?.dataset.prefix==='Track',
     'single-artist album does not repeat the artist alongside track title');
+
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',albumartist:'Artist',
+    artist:'  ARTIST  ',title:'Same Performer',duration:60
+  }],time:1});
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Same Performer',
+    'artist comparison ignores surrounding whitespace and letter case');
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',albumartist:'Artist',
+    artist:'Various Artists',title:'Different Performer',duration:60
+  }],time:1});
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Different Performer — Various Artists',
+    'a distinct artist is shown without hard-coded performer exclusions');
+
   api.applyStatus({mode:'play',playlist_loop:[{
     album_id:20,album:'Album 020',albumartist:'Artist',
     title:'Instrumental',duration:60
