@@ -157,6 +157,25 @@ export async function runTests(sources) {
   assert(api.state().position===beforeSlide&&api.geometry().jewelGapProgress===0,
     'jewel-case expansion does not alter carousel scroll position');
 
+  // The shelf is circular: wrap neighbours must also move away from an album
+  // at catalogue index zero, and a new preview must collapse the old gap.
+  api.set({position:0});
+  api.openFrontPreview(api.state().albums[0],0);
+  api.draw();
+  preview.dispatchEvent(new env.CustomEvent('carousel:jewel-open-state',{detail:{opened:true}}));
+  advanceGap(38);
+  assert(xFor(total-1)<-frontCase.coverWidth&&xFor(1)>frontCase.coverWidth-width,
+    'wraparound neighbours at the first album clear both open-case panels');
+  api.set({position:beforeSlide});
+  const playingAlbum=api.state().albums.find(a=>a?.[6]===20);
+  api.openFrontPreview(playingAlbum,api.state().albums.indexOf(playingAlbum));
+  assert(api.geometry().jewelGapTo===0,
+    'switching the displayed album collapses the previous open gap');
+  advanceGap(38);
+  assert(api.geometry().jewelGapProgress===0,
+    'switching albums fully restores the normal shelf gap');
+
+
 
   const compilationAlbum=api.state().albums.find(album=>album?.[6]===20);
   const originalAlbumArtist=compilationAlbum[1];
