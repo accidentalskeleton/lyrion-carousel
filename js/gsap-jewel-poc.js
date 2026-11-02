@@ -153,10 +153,12 @@ if(preview&&caseEl){
   let opened=false;
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function setOpen(value){
+    const changed=opened!==value;
     opened=value;
     if(!opened)turned=false;
     updateTurnControl();
     caseEl.setAttribute('aria-expanded',String(opened));caseEl.setAttribute('aria-label',opened?'Close album jewel case':'Open album jewel case');
+    if(changed)preview.dispatchEvent(new CustomEvent('carousel:jewel-open-state',{detail:{opened}}));
     if(gsap)gsap.to(flap,{rotationY:opened?-175:0,duration:reduced?0:0.85,ease:'power2.inOut',overwrite:true});
     else flap.style.transform='rotateY('+(opened?-175:0)+'deg)';
   }
