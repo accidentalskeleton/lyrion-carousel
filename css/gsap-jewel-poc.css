@@ -289,3 +289,12 @@
   border-color:rgba(255,255,255,.7)!important;
 }
 .bf-front-case>.gsap-turn-case[hidden]{display:none!important}
+
+
+/* The closed cover already includes its photographic transparent jewel-case rim.
+   Suppress only the second grey frame drawn over it by the opening flap.
+   Keep the flap's moulded border intact once the case is opened. */
+.bf-front-case:not([aria-expanded="true"]) .gsap-flap::before {
+  border:0!important;
+  box-shadow:none!important;
+}
