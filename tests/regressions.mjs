@@ -374,7 +374,7 @@ export async function runTests(sources) {
     assert(unfiltered.albums.length===3&&calls.length===1,'local search returns all matches when no genres are disabled');
     assert(sources.app.includes('lmsProvider.search(value)'),'app search uses genre-aware LMS provider');
   }
-  assert(sources.app.includes("'tags:altng'")&&sources.app.includes('trackGenres'),'LMS Album Information requests and aggregates track genre metadata');
+  assert(sources.app.includes("'tags:altngidA'")&&sources.app.includes('trackGenres'),'LMS Album Information requests disc, artist and genre metadata');
   return checks;
 }
 
