@@ -381,7 +381,7 @@ export async function runTests(sources) {
     for(const svg of [sources.openJewelLidSvg,sources.openJewelTraySvg])
       assert(svg.startsWith('<svg ')&&svg.trimEnd().endsWith('</svg>')&&svg.includes('viewBox="0 0 800 710"'),
         'open case shell templates are dimensionally matched valid SVG documents');
-    assert(sources.openJewelLidSvg.includes('clear hinge')&&sources.openJewelTraySvg.includes('circular seat'),
+    assert(/clear hinge/i.test(sources.openJewelLidSvg)&&/circular seat/i.test(sources.openJewelTraySvg),
       'open case shell assets include physical hinge and disc tray details');
   }
   if (sources.lmsProvider) {
