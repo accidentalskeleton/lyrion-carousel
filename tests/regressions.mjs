@@ -116,8 +116,8 @@ export async function runTests(sources) {
     album_id:20,album:'Album 020',albumartist:'Various Artists',
     artist:'Cast',title:'Walkaway',duration:215
   }],time:41});
-  assert(element('.bf-meta').children[0]?.children[1]?.textContent.includes('Various Artists'),
-    'compilation heading retains album artist');
+  assert(element('.bf-meta').children[0]?.children[1]?.textContent===' — Various Artists',
+    'album heading retains the artist without a redundant Playing label');
   assert(element('.bf-meta').children[1]?.dataset.prefix==='Walkaway — Cast',
     'compilation now-playing line shows individual track artist');
 
