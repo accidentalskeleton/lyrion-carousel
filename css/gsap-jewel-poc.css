@@ -300,73 +300,69 @@
 }
 
 
-/* Photographic-style open shell: separate reusable case assets sit around the
-   real album booklet and the (optional) scanned disc label. Nothing changes in
-   the closed front-cover rendering or the rear-case turn interaction. */
-.bf-front-case[aria-expanded="true"] .gsap-tray{
-  background-color:#111417!important;
-  background-image:url('../assets/jewel-case-open-tray.svg')!important;
-  background-position:center!important;
-  background-size:100% 100%!important;
-  background-repeat:no-repeat!important;
-  border:0!important;
-  border-radius:2px!important;
-  box-shadow:0 16px 26px rgba(0,0,0,.35)!important;
-}
-.bf-front-case[aria-expanded="true"] .gsap-tray::before,
-.bf-front-case[aria-expanded="true"] .gsap-tray::after{
-  display:none!important;
-}
-.bf-front-case[aria-expanded="true"] .gsap-flap::before{
-  /* The new transparent lid artwork supplies the plastic edge highlights. */
+/* Photographic open shell: one continuous case photograph, carefully masked
+   over the live booklet artwork and scanned disc. In contrast to the previous
+   two SVG frames, this is one realistic transparent plastic object. */
+.bf-front-case[aria-expanded="true"]:not(.gsap-turned)::after{
+  content:"";
+  display:block!important;
+  position:absolute;
+  inset:0 auto auto -100%;
+  width:200%;
+  height:100%;
+  z-index:8;
+  pointer-events:none;
+  background:url('../assets/jewel-case-open-photographic-v1.svg') center / 100% 100% no-repeat;
   border:0!important;
   box-shadow:none!important;
+  transform:translateZ(2px);
+}
+.bf-front-case[aria-expanded="true"].gsap-turned::after{display:none!important}
+.bf-front-case[aria-expanded="true"] .gsap-tray{
+  background:#14181b!important;
+  background-image:none!important;
+  border:0!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+}
+.bf-front-case[aria-expanded="true"] .gsap-tray::before,
+.bf-front-case[aria-expanded="true"] .gsap-tray::after{display:none!important}
+.bf-front-case[aria-expanded="true"] .gsap-flap::before,
+.bf-front-case[aria-expanded="true"] .gsap-flap::after{
+  display:none!important;
 }
 .bf-front-case[aria-expanded="true"] .gsap-booklet{
   border:0!important;
-  border-radius:1px!important;
-  background-color:#e3e0d6!important;
-  background-size:cover!important;
+  border-radius:0!important;
+  background-color:#f0ede6!important;
+  background-size:auto 92%!important;
   background-position:center!important;
   background-repeat:no-repeat!important;
-  box-shadow:inset 0 0 0 8px rgba(239,236,227,.35),0 3px 10px rgba(0,0,0,.3)!important;
-  cursor:default;
+  box-shadow:none!important;
 }
-.bf-front-case[aria-expanded="true"] .gsap-booklet::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  z-index:2;
-  width:auto;
-  height:auto;
-  border:0;
-  border-radius:0;
-  background:url('../assets/jewel-case-open-lid.svg') center / 100% 100% no-repeat;
-  box-shadow:none;
-  pointer-events:none;
-}
+.bf-front-case[aria-expanded="true"] .gsap-booklet::before,
 .bf-front-case[aria-expanded="true"] .gsap-booklet::after{display:none!important}
-.bf-front-case[aria-expanded="true"] .gsap-booklet-page-indicator{z-index:4}
+.bf-front-case[aria-expanded="true"] .gsap-booklet-page-indicator{z-index:9}
 .bf-front-case[aria-expanded="true"] .gsap-disc{
-  width:84%;
+  width:81.5%;
   max-width:none;
-  border:1px solid rgba(246,252,255,.8);
-  background-color:#c9d0d4;
-  /* These gradients are the fallback only. An actual disc scan overrides them
-     with the individually extracted circular disc image inline. */
-  background-image:
-    radial-gradient(circle at 49% 47%,rgba(255,255,255,.28) 0%,transparent 68%),
-    repeating-radial-gradient(circle at center,rgba(255,255,255,.07) 0 1px,rgba(30,38,46,.035) 2px 4px,transparent 5px 11px),
-    conic-gradient(from 24deg at center,#cdd4da 0deg,#f9fcff 36deg,#a8b6c2 80deg,#e6ecf0 137deg,#acb6bb 184deg,#f4f8fb 251deg,#b5bfc5 316deg,#cdd4da 360deg);
-  background-size:cover;
+  border:1px solid rgba(239,247,252,.5);
   background-position:center;
-  box-shadow:0 2px 10px rgba(0,0,0,.8),inset 0 0 0 1px rgba(255,255,255,.37);
-}
-.bf-front-case[aria-expanded="true"] .gsap-disc::after{
-  background:conic-gradient(from 27deg,transparent 0 14%,rgba(255,255,255,.09) 18%,transparent 26% 56%,rgba(255,255,255,.13) 59%,transparent 67%);
+  background-size:cover;
+  box-shadow:0 1px 7px rgba(0,0,0,.75),inset 0 0 0 1px rgba(255,255,255,.22);
 }
 .bf-front-case[aria-expanded="true"] .gsap-disc-hub{
-  background:radial-gradient(circle,#07090b 0 34%,#20252a 36% 50%,#858c90 54% 61%,#323a3e 66% 76%,#090c0f 80%);
-  border:2px solid rgba(180,194,206,.8);
-  box-shadow:0 0 0 2px #12171c88,0 1px 4px #0008;
+  background:radial-gradient(circle,#080a0b 0 35%,#22282b 37% 51%,#9da8ae 56% 63%,#3b4347 67% 78%,#0a0d0f 81%);
+  border:2px solid #929da5;
+  box-shadow:0 0 0 2px rgba(10,13,16,.55);
 }
+.bf-front-case[aria-expanded="true"] .bf-front-play{
+  z-index:40!important;
+  right:4%;
+  bottom:4%;
+  background:rgba(11,15,18,.92)!important;
+  border:1px solid rgba(238,244,249,.66)!important;
+  box-shadow:0 2px 8px rgba(0,0,0,.65)!important;
+}
+/* The turn button remains above the photograph and is only shown when a rear
+   scan exists. Neither the GSAP opening nor the rear-case renderer changes. */
