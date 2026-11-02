@@ -120,6 +120,14 @@ export async function runTests(sources) {
     'compilation heading retains album artist');
   assert(element('.bf-meta').children[1]?.dataset.prefix==='Walkaway — Cast',
     'compilation now-playing line shows individual track artist');
+
+  api.applyStatus({mode:'play',playlist_cur_index:0,playlist_loop:[{
+    'playlist index':0,album_id:20,album:'Album 020',albumartist:'Various Artists',
+    artist:'Various Artists',trackartist:'Cast',title:'Walkaway',duration:215
+  }],time:41});
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Walkaway — Cast',
+    'LMS artist roles use per-track performer instead of generic compilation artist');
+
   compilationAlbum[1]=originalAlbumArtist;
   api.applyStatus({mode:'play',playlist_loop:[{
     album_id:20,album:'Album 020',albumartist:'Artist',
@@ -375,6 +383,9 @@ export async function runTests(sources) {
     assert(sources.app.includes('lmsProvider.search(value)'),'app search uses genre-aware LMS provider');
   }
   assert(sources.app.includes("'tags:altngidA'")&&sources.app.includes('trackGenres'),'LMS Album Information requests disc, artist and genre metadata');
+  assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
+  assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
+
   return checks;
 }
 
