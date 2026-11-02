@@ -484,6 +484,25 @@ async function playAlbumNow(album){closeAlbumMenu();if(!playerId||!album?.[6])re
 async function clearPlaylistAndPlay(album){closeAlbumMenu();if(!playerId||!album?.[6])return;try{await loadAlbum(album);setConnection('Playlist cleared; playing '+album[0]+' from track 1',true)}catch(_){setConnection('Could not clear playlist and play album',false);scheduleReconnect()}}
 let trackRequest=0,trackAlbum=null;
 function closeTrackList(){trackRequest++;trackAlbum=null;trackOverlay.hidden=true;trackList.replaceChildren()}
+// The LMS track query defaults to title order. Keep disc order, then track
+// number, and retain upstream order for missing/ambiguous track numbers.
+function albumTrackNumber(value){
+    const match=String(value??'').trim().match(/^(\d+)(?:\s*\/\s*\d+)?$/);
+    return match&&Number(match[1])>0?Number(match[1]):null;
+}
+function sortAlbumTracks(tracks){
+    return tracks.map((track,index)=>({track,index})).sort((a,b)=>{
+        const ad=albumTrackNumber(a.track.disc)??1,bd=albumTrackNumber(b.track.disc)??1;
+        if(ad!==bd)return ad-bd;
+        const at=albumTrackNumber(a.track.tracknum),bt=albumTrackNumber(b.track.tracknum);
+        if(at!==null&&bt!==null&&at!==bt)return at-bt;
+        return a.index-b.index;
+    }).map(item=>item.track);
+}
+function distinctTrackArtist(track,albumArtist){
+    const artist=String(track?.trackartist||track?.artist||'').trim();
+    return artist&&artist.toLocaleLowerCase()!==String(albumArtist||'').trim().toLocaleLowerCase()?artist:'';
+}
 async function showTrackList(album){
     closeAlbumMenu();if(!album?.[6])return;
     const request=++trackRequest,spotify=album?.[13]==='spotify';trackAlbum=album;trackPlayNow.hidden=spotify;trackPlayNow.disabled=!playerId;
@@ -496,20 +515,39 @@ async function showTrackList(album){
             tracks=info.tracks||[];genre=info.genre||'';year=info.year||year;
         }else{
             const [trackResult,albumResult]=await Promise.all([
-                rpc('0',['tracks',0,1000,'album_id:'+album[6],'tags:altng']),
+                rpc('0',['tracks',0,1000,'album_id:'+album[6],'sort:tracknum','tags:altngidA']),
                 rpc('0',['albums',0,1,'album_id:'+album[6],'tags:ajlyg'])
             ]);
-            tracks=(trackResult.titles_loop||[]).slice().sort((x,y)=>Number(x.tracknum||0)-Number(y.tracknum||0));
+            tracks=sortAlbumTracks(trackResult.titles_loop||[]);
             const detail=(albumResult.albums_loop||[])[0]||{};
             const trackGenres=[...new Set(tracks.flatMap(track=>[track.genre,track.genres]).flat().filter(Boolean).flatMap(value=>String(value).split(/\s*,\s*/)).filter(Boolean))];
             genre=detail.genre||detail.genres||trackGenres.join(', ');
             year=detail.year||year;
         }
+        tracks=sortAlbumTracks(tracks);
         if(request!==trackRequest||trackOverlay.hidden)return;
         const details=[album[1],year,genre].filter(Boolean);trackDetails.textContent=details.join(' · ');
         if(!tracks.length){trackStatus.textContent=spotify?'No track list returned by Spotty.':'No tracks found.';return}
         trackStatus.textContent='';
-        tracks.forEach((track,index)=>{const item=document.createElement('li');const number=document.createElement('span');number.textContent=track.tracknum||index+1;const title=document.createElement('span');title.textContent=track.title||'Untitled';const duration=document.createElement('span');duration.textContent=track.duration?formatTime(track.duration):'';item.append(number,title,duration);trackList.append(item)})
+        const multiDisc=new Set(tracks.map(track=>albumTrackNumber(track.disc)??1)).size>1;
+        let displayedDisc=null;
+        tracks.forEach((track,index)=>{
+            const disc=albumTrackNumber(track.disc)??1;
+            if(multiDisc&&disc!==displayedDisc){
+                const separator=document.createElement('li');
+                separator.className='bf-disc-heading';
+                separator.textContent='Disc '+disc;
+                trackList.append(separator);
+                displayedDisc=disc;
+            }
+            const item=document.createElement('li'),number=document.createElement('span');
+            number.textContent=track.tracknum||index+1;
+            const title=document.createElement('span'),artist=distinctTrackArtist(track,album[1]);
+            title.textContent=(track.title||'Untitled')+(artist?' — '+artist:'');
+            const duration=document.createElement('span');
+            duration.textContent=track.duration?formatTime(track.duration):'';
+            item.append(number,title,duration);trackList.append(item);
+        })
     }catch(_){if(request!==trackRequest)return;trackStatus.textContent=spotify?'Spotify album information is unavailable from Spotty.':'Track list unavailable while LMS reconnects.'}
 }
 const queueScrim=root.querySelector('.bf-queue-scrim'),queueDrawer=root.querySelector('.bf-queue-drawer'),queueGrip=root.querySelector('.bf-queue-grip'),queueClose=root.querySelector('.bf-queue-close'),queueStatus=root.querySelector('.bf-queue-status'),queueList=root.querySelector('.bf-queue-list');let queueRequest=0,queueGesture=null;
