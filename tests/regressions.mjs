@@ -360,6 +360,13 @@ export async function runTests(sources) {
     for(const selector of ['.bf-source-switch','.bf-previous','.bf-next','.bf-queue-open'])
       assert(sources.albumBrowserCss.includes('#book-fan-browser.is-starting '+selector),'startup hides '+selector);
   }
+  if (sources.gsapJewelCss) {
+    const closedFrame=sources.gsapJewelCss.match(/\.bf-front-case:not\(\[aria-expanded="true"\]\)\s+\.gsap-flap::before\s*\{([^}]*)\}/);
+    assert(closedFrame&&/border:\s*0\s*!important/.test(closedFrame[1])&&/box-shadow:\s*none\s*!important/.test(closedFrame[1]),
+      'closed jewel case suppresses the duplicate grey frame');
+    assert(sources.gsapJewelCss.includes('.gsap-flap::before{content:'),
+      'open jewel case retains its original moulded lid border');
+  }
   if (sources.lmsProvider) {
     let disabled=new Set(['7','9']);
     const calls=[];
@@ -395,5 +402,6 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.lmsProvider=await readFile(new URL('../js/providers/lms-provider.js',import.meta.url),'utf8');
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
+  sources.gsapJewelCss=await readFile(new URL('../css/gsap-jewel-poc.css',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }
