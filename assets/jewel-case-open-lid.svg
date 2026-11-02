@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 710" preserveAspectRatio="none" aria-hidden="true">
+<defs>
+  <linearGradient id="clear" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f8fcff" stop-opacity=".82"/><stop offset=".17" stop-color="#d9e6ed" stop-opacity=".38"/><stop offset=".50" stop-color="#6d7d88" stop-opacity=".25"/><stop offset=".82" stop-color="#f5fcff" stop-opacity=".65"/><stop offset="1" stop-color="#84949c" stop-opacity=".4"/></linearGradient>
+  <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f6fdff" stop-opacity=".94"/><stop offset=".15" stop-color="#61737b" stop-opacity=".32"/><stop offset=".55" stop-color="#d2e0e7" stop-opacity=".34"/><stop offset=".88" stop-color="#a1b2bb" stop-opacity=".40"/><stop offset="1" stop-color="#fff" stop-opacity=".82"/></linearGradient>
+  <linearGradient id="hinge" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#43515a" stop-opacity=".85"/><stop offset=".25" stop-color="#f7fcff" stop-opacity=".9"/><stop offset=".44" stop-color="#667680" stop-opacity=".6"/><stop offset=".70" stop-color="#e6f2f6" stop-opacity=".75"/><stop offset="1" stop-color="#4f5c65" stop-opacity=".72"/></linearGradient>
+  <linearGradient id="shine" x1="0" y1="0" x2="1" y2=".8"><stop stop-color="#fff" stop-opacity=".15"/><stop offset=".15" stop-color="#fff" stop-opacity=".045"/><stop offset=".47" stop-color="#fff" stop-opacity=".006"/><stop offset=".70" stop-color="#fff" stop-opacity=".015"/><stop offset=".94" stop-color="#fff" stop-opacity=".11"/></linearGradient>
+  <filter id="grain" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence baseFrequency=".47" numOctaves="2" seed="11" result="noise"/><feColorMatrix in="noise" type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".028"/></feComponentTransfer></filter>
+  <filter id="soft"><feGaussianBlur stdDeviation="3"/></filter>
+</defs>
+<!-- The cover artwork is rendered dynamically behind this clear lid. -->
+<rect x="10" y="9" width="780" height="692" rx="5" fill="none" stroke="#111c24" stroke-opacity=".55" stroke-width="13"/>
+<rect x="8" y="8" width="784" height="694" rx="5" fill="none" stroke="url(#clear)" stroke-width="13"/>
+<rect x="18" y="18" width="764" height="674" rx="3" fill="none" stroke="#e9f4f8" stroke-opacity=".53" stroke-width="3"/>
+<rect x="24" y="23" width="752" height="663" rx="1" fill="none" stroke="#17222b" stroke-opacity=".24" stroke-width="2"/>
+<!-- The clear front has a very faint, irregular specular sheen. -->
+<path d="M28 22H774V686H28Z" fill="url(#shine)" opacity=".55"/>
+<path d="M82 30 187 30 537 681 432 681Z" fill="#fff" opacity=".018"/>
+<path d="M33 30H768" stroke="#fff" stroke-opacity=".46" stroke-width="3"/>
+<path d="M32 683H770" stroke="#10171a" stroke-opacity=".35" stroke-width="4"/>
+<path d="M38 685H758" stroke="#fff" stroke-opacity=".37" stroke-width="2"/>
+<!-- Clear hinge with alternating raised catches, not a solid picture frame. -->
+<rect x="0" y="14" width="17" height="680" rx="2" fill="url(#hinge)" opacity=".9"/>
+<path d="M3 25V682M13 25V682" stroke="#f9ffff" stroke-opacity=".46" stroke-width="2"/>
+<g fill="url(#edge)" stroke="#e8f5fb" stroke-opacity=".56" stroke-width="2">
+  <rect x="0" y="64" width="26" height="80" rx="5"/>
+  <rect x="0" y="278" width="26" height="81" rx="5"/>
+  <rect x="0" y="566" width="26" height="82" rx="5"/>
+</g>
+<!-- Two semicircular lid catches along top and bottom. -->
+<g fill="url(#clear)" stroke="#eff9ff" stroke-opacity=".63" stroke-width="3">
+  <path d="M176 11H255C252 37 245 47 216 48 188 47 180 33 176 11Z"/>
+  <path d="M550 11H633C628 37 620 47 591 48 563 47 555 34 550 11Z"/>
+  <path d="M168 698H254C252 673 244 663 212 663 185 663 174 678 168 698Z"/>
+  <path d="M558 698H642C637 673 627 663 601 663 572 663 563 678 558 698Z"/>
+</g>
+<g fill="none" stroke="#151f26" stroke-opacity=".35" stroke-width="1.7">
+  <path d="M188 17C191 34 200 38 217 39 236 38 245 31 246 17"/>
+  <path d="M562 17C568 33 576 39 591 39 610 39 619 33 622 17"/>
+</g>
+<!-- Subtle ribs and latch apertures along the outer edge. -->
+<g fill="#c5d4dc" fill-opacity=".27" stroke="#fbffff" stroke-opacity=".65" stroke-width="2">
+  <rect x="775" y="125" width="14" height="92" rx="3"/>
+  <rect x="775" y="499" width="14" height="91" rx="3"/>
+</g>
+<g stroke="#53626d" stroke-opacity=".35" stroke-width="2">
+  <path d="M781 144v56M781 514v57"/>
+</g>
+<path d="M35 42H757" stroke="#f9ffff" stroke-opacity=".19" stroke-width="1.5"/>
+<path d="M40 665H756" stroke="#fff" stroke-opacity=".15" stroke-width="1.5"/>
+<rect x="22" y="22" width="756" height="666" fill="#fff" filter="url(#grain)" opacity=".35"/>
+</svg>
