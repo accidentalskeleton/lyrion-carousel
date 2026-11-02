@@ -366,10 +366,17 @@ export async function runTests(sources) {
       'closed jewel case suppresses the duplicate grey frame');
     assert(sources.gsapJewelCss.includes('.gsap-flap::before{content:'),
       'original lid frame is available for its older states');
-    assert(sources.gsapJewelCss.includes("jewel-case-open-tray.svg")&&sources.gsapJewelCss.includes("jewel-case-open-lid.svg"),
-      'opened case uses separate shell and lid artwork');
-    assert(sources.gsapJewelCss.includes('.bf-front-case[aria-expanded="true"] .gsap-tray')&&sources.gsapJewelCss.includes('background-image:url('),
-      'open tray uses reusable image rather than only CSS-drawn gradients');
+    assert(sources.gsapJewelCss.includes('jewel-case-open-photographic-v1.svg')&&
+      sources.gsapJewelCss.includes('.bf-front-case[aria-expanded="true"]:not(.gsap-turned)::after'),
+      'open case uses one photographic shell image with both dynamic apertures');
+    assert(sources.gsapJewelCss.includes('width:200%')&&sources.gsapJewelCss.includes('inset:0 auto auto -100%'),
+      'open photographic shell spans left and right halves');
+    assert(sources.gsapJewelCss.includes('.bf-front-case[aria-expanded="true"] .gsap-disc')&&
+      sources.gsapJewelCss.includes('width:81.5%'),
+      'real disc remains the appropriate size within the photographic tray');
+    assert(!sources.gsapJewelCss.includes('jewel-case-open-tray.svg')&&
+      !sources.gsapJewelCss.includes('jewel-case-open-lid.svg'),
+      'open jewel case avoids overlapping synthetic SVG frames');
   }
   if (sources.gsapJewelJs) {
     assert(sources.gsapJewelJs.includes("url.searchParams.delete('case')")&&sources.gsapJewelJs.includes('setDefaultBooklet(coverUrl)'),
@@ -377,12 +384,12 @@ export async function runTests(sources) {
     assert(sources.gsapJewelJs.includes("if(bookletPages.length)setBookletPage(0)")&&sources.gsapJewelJs.includes('applyDiscScan(discScan.url,token)'),
       'actual booklet and disc scans still override generic fallbacks');
   }
-  if (sources.openJewelLidSvg&&sources.openJewelTraySvg) {
-    for(const svg of [sources.openJewelLidSvg,sources.openJewelTraySvg])
-      assert(svg.startsWith('<svg ')&&svg.trimEnd().endsWith('</svg>')&&svg.includes('viewBox="0 0 800 710"'),
-        'open case shell templates are dimensionally matched valid SVG documents');
-    assert(/clear hinge/i.test(sources.openJewelLidSvg)&&/circular seat/i.test(sources.openJewelTraySvg),
-      'open case shell assets include physical hinge and disc tray details');
+  if (sources.openJewelPhotoSvg) {
+    assert(sources.openJewelPhotoSvg.includes('viewBox="0 0 1557 685"')&&
+      sources.openJewelPhotoSvg.includes('data:image/webp;base64,'),
+      'single open-case shell contains a real image with dynamic content cut-outs');
+    assert(sources.openJewelPhotoSvg.length>20000,
+      'photographic jewel-case texture is embedded in the installable shell asset');
   }
   if (sources.lmsProvider) {
     let disabled=new Set(['7','9']);
@@ -421,7 +428,6 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
   sources.gsapJewelCss=await readFile(new URL('../css/gsap-jewel-poc.css',import.meta.url),'utf8');
   sources.gsapJewelJs=await readFile(new URL('../js/gsap-jewel-poc.js',import.meta.url),'utf8');
-  sources.openJewelLidSvg=await readFile(new URL('../assets/jewel-case-open-lid.svg',import.meta.url),'utf8');
-  sources.openJewelTraySvg=await readFile(new URL('../assets/jewel-case-open-tray.svg',import.meta.url),'utf8');
+  sources.openJewelPhotoSvg=await readFile(new URL('../assets/jewel-case-open-photographic-v1.svg',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }
