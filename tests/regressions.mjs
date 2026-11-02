@@ -81,7 +81,7 @@ export async function runTests(sources) {
     return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
-      geometry:()=>({nodes,frontPreviewIndex})};
+      geometry:()=>({nodes,frontPreviewIndex,jewelGapProgress,jewelGapTo})};
   `)(...Object.values(env));
   async function settle(promise) {
     let done=false,error;promise.then(()=>done=true,e=>{done=true;error=e;});
@@ -108,6 +108,55 @@ export async function runTests(sources) {
   await settle(api.selectStartupAlbum({mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1}));
   api.set({connecting:false});
   assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden&&api.state().frontTimer===0,'startup opens playing cover without timeout');
+
+  // Open-case art spans two case widths. Its neighbouring spines must clear
+  // both panels, animate outwards, and return without disturbing shelf scroll.
+  frontCase.coverWidth=300;
+  api.draw();
+  const width=stage.clientWidth/20;
+  const frontIndex=api.geometry().frontPreviewIndex;
+  const total=api.state().albums.length;
+  const leftIndex=(frontIndex+total-1)%total,rightIndex=(frontIndex+1)%total;
+  const neighbour=index=>api.geometry().nodes.find(node=>node.index===index)?.el;
+  const xFor=index=>{
+    const value=neighbour(index)?.style.transform||'';
+    const match=value.match(/translate3d\\(([-\\d.]+)px/);
+    if(!match)throw Error('Shelf transform missing for '+index);
+    return Number(match[1]);
+  };
+  const beforeLeft=xFor(leftIndex),beforeRight=xFor(rightIndex);
+  preview.dispatchEvent(new env.CustomEvent('carousel:jewel-open-state',{detail:{opened:true}}));
+  const advanceGap=framesToRun=>{
+    for(let i=0;i<framesToRun;i++){
+      time+=16;
+      const pending=[...frames.values()];frames.clear();
+      for(const fn of pending)fn(time);
+    }
+  };
+  advanceGap(16);
+  const midwayLeft=xFor(leftIndex),midwayRight=xFor(rightIndex);
+  assert(midwayLeft<beforeLeft&&midwayRight>beforeRight,
+    'spines on both sides animate outwards when an album is opened');
+  advanceGap(26);
+  const expandedLeft=xFor(leftIndex),expandedRight=xFor(rightIndex);
+  assert(api.geometry().jewelGapProgress===1&&api.geometry().jewelGapTo===1,
+    'shelf open-gap animation reaches full width');
+  assert(Math.abs(expandedLeft-beforeLeft)>=frontCase.coverWidth/2-8&&
+    Math.abs(expandedRight-beforeRight)>=frontCase.coverWidth/2-8,
+    'open spines clear the second full-width case panel on both sides');
+  assert(Math.abs((expandedLeft-beforeLeft)+(expandedRight-beforeRight))<1,
+    'open case creates a symmetric gap around the selected album');
+  assert(neighbour(leftIndex)?.getAttribute('data-front-preview')===undefined&&
+    neighbour(rightIndex)?.getAttribute('data-front-preview')===undefined,
+    'adjacent spines remain visible instead of being hidden behind the case');
+  const beforeSlide=api.state().position;
+  preview.dispatchEvent(new env.CustomEvent('carousel:jewel-open-state',{detail:{opened:false}}));
+  advanceGap(38);
+  assert(Math.abs(xFor(leftIndex)-beforeLeft)<1&&Math.abs(xFor(rightIndex)-beforeRight)<1,
+    'closing the jewel case smoothly restores the original shelf spacing');
+  assert(api.state().position===beforeSlide&&api.geometry().jewelGapProgress===0,
+    'jewel-case expansion does not alter carousel scroll position');
+
 
   const compilationAlbum=api.state().albums.find(album=>album?.[6]===20);
   const originalAlbumArtist=compilationAlbum[1];
