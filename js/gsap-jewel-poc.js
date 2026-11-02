@@ -148,7 +148,13 @@ if(preview&&caseEl){
       if(bookletPages.length)setBookletPage(0);
     }catch(error){console.debug('Additional LMS artwork unavailable:',error)}
   }
-  preview.addEventListener('carousel:album-preview',event=>loadArtwork(event.detail?.albumId,event.detail?.coverUrl));
+  let lastPreviewAlbumKey=null;
+  preview.addEventListener('carousel:album-preview',event=>{
+    const key=String(event.detail?.albumId??event.detail?.coverUrl??'');
+    if(lastPreviewAlbumKey!==null&&key!==lastPreviewAlbumKey&&opened)setOpen(false);
+    lastPreviewAlbumKey=key;
+    loadArtwork(event.detail?.albumId,event.detail?.coverUrl);
+  });
   const gsap=window.gsap;
   let opened=false;
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
