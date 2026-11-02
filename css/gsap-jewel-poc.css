@@ -366,3 +366,9 @@
 }
 /* The turn button remains above the photograph and is only shown when a rear
    scan exists. Neither the GSAP opening nor the rear-case renderer changes. */
+
+/* The photographic shell extends one case width to the left of its tray.
+   Centre the full two-panel object on the selected album's shelf coordinate. */
+.bf-front-case[aria-expanded="true"]:not(.gsap-turned){
+  translate:50% 0!important;
+}
