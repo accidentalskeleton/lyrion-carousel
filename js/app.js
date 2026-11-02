@@ -543,7 +543,7 @@ async function showTrackList(album){
             const item=document.createElement('li'),number=document.createElement('span');
             number.textContent=track.tracknum||index+1;
             const title=document.createElement('span'),artist=distinctTrackArtist(track,album[1]);
-            title.textContent=(track.title||'Untitled')+(artist?' — '+artist:'');
+            title.textContent=(artist?artist+' - ':'')+(track.title||'Untitled');
             const duration=document.createElement('span');
             duration.textContent=track.duration?formatTime(track.duration):'';
             item.append(number,title,duration);trackList.append(item);
@@ -623,7 +623,7 @@ function updateMeta(force=false){
         // track performer to the now-playing line when metadata supplies one.
         const artist=String(nowTrackArtist||'').trim(),albumArtist=String(album[1]||'').trim();
         const differentArtist=!!artist&&artist.toLocaleLowerCase()!==albumArtist.toLocaleLowerCase();
-        now.dataset.prefix=(nowTrackNumber?'Track '+nowTrackNumber+' · ':'')+nowTrackTitle+(differentArtist?' — '+artist:'');
+        now.dataset.prefix=(nowTrackNumber?'Track '+nowTrackNumber+' · ':'')+(differentArtist?artist+' - ':'')+nowTrackTitle;
         const nowText=document.createElement('span');nowText.className='bf-now-track-text';
         if(differentLibrary){
             const source=document.createElement('span');
