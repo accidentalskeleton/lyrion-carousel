@@ -107,6 +107,49 @@ export async function runTests(sources) {
   await settle(api.selectStartupAlbum({mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1}));
   api.set({connecting:false});
   assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden&&api.state().frontTimer===0,'startup opens playing cover without timeout');
+
+  const compilationAlbum=api.state().albums.find(album=>album?.[6]===20);
+  const originalAlbumArtist=compilationAlbum[1];
+  compilationAlbum[1]='Various Artists';
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',albumartist:'Various Artists',
+    artist:'Cast',title:'Walkaway',duration:215
+  }],time:41});
+  assert(element('.bf-meta').children[0]?.children[1]?.textContent.includes('Various Artists'),
+    'compilation heading retains album artist');
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Walkaway — Cast',
+    'compilation now-playing line shows individual track artist');
+  compilationAlbum[1]=originalAlbumArtist;
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',albumartist:'Artist',
+    artist:'Artist',title:'Track',duration:60
+  }],time:1});
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Track',
+    'single-artist album does not repeat the artist alongside track title');
+
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',albumartist:'Artist',
+    artist:'  ARTIST  ',title:'Same Performer',duration:60
+  }],time:1});
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Same Performer',
+    'artist comparison ignores surrounding whitespace and letter case');
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',albumartist:'Artist',
+    artist:'Various Artists',title:'Different Performer',duration:60
+  }],time:1});
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Different Performer — Various Artists',
+    'a distinct artist is shown without hard-coded performer exclusions');
+
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',albumartist:'Artist',
+    title:'Instrumental',duration:60
+  }],time:1});
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Instrumental',
+    'missing track artist does not invent a performer');
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60
+  }],time:1});
+
   api.stopFollowing();assert(!preview.hidden,'pin survives scrolling');
   const otherIndex=api.state().albums.findIndex(album=>album[6]!==20);
   api.openFrontPreview(api.state().albums[otherIndex],otherIndex);
