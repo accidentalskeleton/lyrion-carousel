@@ -189,7 +189,7 @@ function shelfWindowCount(){
     const pitch=shelfPitch();
     const coverWidth=!frontPreview.hidden?frontPreview.querySelector('.bf-front-case').getBoundingClientRect().width:0;
     // Keep enough real spines outside both sides of the expanded shell.
-    const expandedWidth=coverWidth*(1+jewelGapProgress);
+    const expandedWidth=coverWidth*2;
     const buffer=Math.ceil(Math.max(0,expandedWidth-pitch)/(2*Math.max(1,pitch)))+2;
     return Math.min(albums.length,DISPLAY_ALBUM_COUNT+2*buffer);
 }
