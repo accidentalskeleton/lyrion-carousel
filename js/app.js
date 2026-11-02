@@ -584,7 +584,7 @@ function updateMeta(force=false){
         // Keep compilation album artist in the heading; only add a distinct
         // track performer to the now-playing line when metadata supplies one.
         const artist=String(nowTrackArtist||'').trim(),albumArtist=String(album[1]||'').trim();
-        const differentArtist=artist&&artist.toLocaleLowerCase()!==albumArtist.toLocaleLowerCase()&&artist.toLocaleLowerCase()!=='various artists';
+        const differentArtist=!!artist&&artist.toLocaleLowerCase()!==albumArtist.toLocaleLowerCase();
         now.dataset.prefix=(nowTrackNumber?'Track '+nowTrackNumber+' · ':'')+nowTrackTitle+(differentArtist?' — '+artist:'');
         const nowText=document.createElement('span');nowText.className='bf-now-track-text';
         if(differentLibrary){
