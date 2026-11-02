@@ -365,7 +365,24 @@ export async function runTests(sources) {
     assert(closedFrame&&/border:\s*0\s*!important/.test(closedFrame[1])&&/box-shadow:\s*none\s*!important/.test(closedFrame[1]),
       'closed jewel case suppresses the duplicate grey frame');
     assert(sources.gsapJewelCss.includes('.gsap-flap::before{content:'),
-      'open jewel case retains its original moulded lid border');
+      'original lid frame is available for its older states');
+    assert(sources.gsapJewelCss.includes("jewel-case-open-tray.svg")&&sources.gsapJewelCss.includes("jewel-case-open-lid.svg"),
+      'opened case uses separate shell and lid artwork');
+    assert(sources.gsapJewelCss.includes('.bf-front-case[aria-expanded="true"] .gsap-tray')&&sources.gsapJewelCss.includes('background-image:url('),
+      'open tray uses reusable image rather than only CSS-drawn gradients');
+  }
+  if (sources.gsapJewelJs) {
+    assert(sources.gsapJewelJs.includes("url.searchParams.delete('case')")&&sources.gsapJewelJs.includes('setDefaultBooklet(coverUrl)'),
+      'open booklet uses original album art without closed-case composite');
+    assert(sources.gsapJewelJs.includes("if(bookletPages.length)setBookletPage(0)")&&sources.gsapJewelJs.includes('applyDiscScan(discScan.url,token)'),
+      'actual booklet and disc scans still override generic fallbacks');
+  }
+  if (sources.openJewelLidSvg&&sources.openJewelTraySvg) {
+    for(const svg of [sources.openJewelLidSvg,sources.openJewelTraySvg])
+      assert(svg.startsWith('<svg ')&&svg.trimEnd().endsWith('</svg>')&&svg.includes('viewBox="0 0 800 710"'),
+        'open case shell templates are dimensionally matched valid SVG documents');
+    assert(sources.openJewelLidSvg.includes('clear hinge')&&sources.openJewelTraySvg.includes('circular seat'),
+      'open case shell assets include physical hinge and disc tray details');
   }
   if (sources.lmsProvider) {
     let disabled=new Set(['7','9']);
@@ -403,5 +420,8 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
   sources.gsapJewelCss=await readFile(new URL('../css/gsap-jewel-poc.css',import.meta.url),'utf8');
+  sources.gsapJewelJs=await readFile(new URL('../js/gsap-jewel-poc.js',import.meta.url),'utf8');
+  sources.openJewelLidSvg=await readFile(new URL('../assets/jewel-case-open-lid.svg',import.meta.url),'utf8');
+  sources.openJewelTraySvg=await readFile(new URL('../assets/jewel-case-open-tray.svg',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }
