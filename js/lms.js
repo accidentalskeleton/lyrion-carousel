@@ -96,7 +96,7 @@ export class CometDClient {
           clientId: hello.clientId,
           id: String(++this.messageId),
           data: {
-            request: [playerId, ['status', '-', 1, 'tags:alJen', 'subscribe:30']],
+            request: [playerId, ['status', '-', 1, 'tags:alJenA', 'subscribe:30']],
             response: playerChannel
           }
         },

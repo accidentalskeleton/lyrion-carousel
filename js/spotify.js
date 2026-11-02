@@ -111,7 +111,7 @@ export async function spotifyAlbumInformation(playerId,album){
   }).map((item,index)=>{
     const raw=String(item?.line1||item?.name||item?.text||'Untitled');
     const match=raw.match(/^\s*(\d+)[.\s-]+(.+)$/);
-    return {tracknum:item?.tracknum||match?.[1]||index+1,title:match?.[2]||raw,duration:Number(item?.duration)||0};
+    return {tracknum:item?.tracknum||match?.[1]||index+1,disc:item?.disc||item?.discnumber||null,artist:item?.trackartist||item?.artist||'',title:match?.[2]||raw,duration:Number(item?.duration)||0};
   });
   const meta=rows.find(item=>item?.genre||item?.genres||item?.year||item?.album)||{};
   const genres=[meta.genre,meta.genres].flat().filter(Boolean).join(', ');

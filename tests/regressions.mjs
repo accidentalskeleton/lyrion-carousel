@@ -65,8 +65,9 @@ export async function runTests(sources) {
   const setTimeout=fn=>{timers.set(++nextId,fn);return nextId;},clearTimeout=id=>timers.delete(id);
   const requestAnimationFrame=fn=>{frames.set(++nextId,fn);return nextId;},cancelAnimationFrame=id=>frames.delete(id);
   const rpcCalls=[];
+  let tracksFixture=null;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
-  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='albums')return {count:library.length,albums_loop:library.slice(cmd[1],cmd[1]+cmd[2])};return {};};
+  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums')return {count:library.length,albums_loop:library.slice(cmd[1],cmd[1]+cmd[2])};return {};};
   window.dispatchEvent=()=>{};
   const imageRequests=[];
   class PreloadImage{set src(url){this.url=url;imageRequests.push(this)}}
@@ -77,7 +78,7 @@ export async function runTests(sources) {
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,updateMeta,draw,
+    return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -119,6 +120,14 @@ export async function runTests(sources) {
     'compilation heading retains album artist');
   assert(element('.bf-meta').children[1]?.dataset.prefix==='Walkaway — Cast',
     'compilation now-playing line shows individual track artist');
+
+  api.applyStatus({mode:'play',playlist_cur_index:0,playlist_loop:[{
+    'playlist index':0,album_id:20,album:'Album 020',albumartist:'Various Artists',
+    artist:'Various Artists',trackartist:'Cast',title:'Walkaway',duration:215
+  }],time:41});
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Walkaway — Cast',
+    'LMS artist roles use per-track performer instead of generic compilation artist');
+
   compilationAlbum[1]=originalAlbumArtist;
   api.applyStatus({mode:'play',playlist_loop:[{
     album_id:20,album:'Album 020',albumartist:'Artist',
@@ -149,6 +158,36 @@ export async function runTests(sources) {
   api.applyStatus({mode:'play',playlist_loop:[{
     album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60
   }],time:1});
+
+  const albumForTrackList=api.state().albums.find(a=>a?.[6]===20);
+  const previousTrackListArtist=albumForTrackList[1];
+  albumForTrackList[1]='Various Artists';
+  tracksFixture=[
+    {id:4,disc:2,tracknum:2,title:'California Dreamin’',artist:'The Mamas & the Papas',duration:120},
+    {id:2,disc:1,tracknum:2,title:'I’m Sticking With You',artist:'Various Artists',duration:120},
+    {id:3,disc:2,tracknum:1,title:'A Thousand Miles',artist:'Vanessa Carlton',duration:120},
+    {id:1,disc:1,tracknum:1,title:'Everything I Own',artist:'Bread',duration:120}
+  ];
+  const sortedTracks=api.sortAlbumTracks(tracksFixture);
+  assert(sortedTracks.map(a=>a.id).join(',')==='1,2,3,4','multidisc tracks sort by disc then track number');
+  assert(api.sortAlbumTracks([
+    {disc:2,tracknum:'2/20',id:5},{disc:'1/2',tracknum:'3/20',id:4},
+    {disc:'1/2',tracknum:'1/20',id:2}
+  ]).map(a=>a.id).join(',')==='2,4,5','disc and track fraction tags sort numerically');
+  assert(api.sortAlbumTracks([{id:3,disc:1},{id:1,disc:1}]).map(a=>a.id).join(',')==='3,1',
+    'tracks without track numbers preserve upstream order');
+  await api.showTrackList(albumForTrackList);
+  const rows=element('.bf-track-list').children;
+  assert(rows.filter(row=>row.className==='bf-disc-heading').map(row=>row.textContent).join(',')==='Disc 1,Disc 2',
+    'multidisc album information inserts numbered disc headings');
+  const titles=rows.filter(row=>row.className!=='bf-disc-heading').map(row=>row.children[1].textContent);
+  assert(titles.join('|')==='Everything I Own — Bread|I’m Sticking With You|A Thousand Miles — Vanessa Carlton|California Dreamin’ — The Mamas & the Papas',
+    'album information lists discs and tracks in order with only distinct artists');
+  assert(rpcCalls.some(cmd=>cmd[0]==='tracks'&&cmd.includes('sort:tracknum')&&cmd.includes('tags:altngidA')),
+    'LMS track request asks for disc numbers, artists and track order');
+  api.closeTrackList();
+  tracksFixture=null;
+  albumForTrackList[1]=previousTrackListArtist;
 
   api.stopFollowing();assert(!preview.hidden,'pin survives scrolling');
   const otherIndex=api.state().albums.findIndex(album=>album[6]!==20);
@@ -343,7 +382,10 @@ export async function runTests(sources) {
     assert(unfiltered.albums.length===3&&calls.length===1,'local search returns all matches when no genres are disabled');
     assert(sources.app.includes('lmsProvider.search(value)'),'app search uses genre-aware LMS provider');
   }
-  assert(sources.app.includes("'tags:altng'")&&sources.app.includes('trackGenres'),'LMS Album Information requests and aggregates track genre metadata');
+  assert(sources.app.includes("'tags:altngidA'")&&sources.app.includes('trackGenres'),'LMS Album Information requests disc, artist and genre metadata');
+  assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
+  assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
+
   return checks;
 }
 

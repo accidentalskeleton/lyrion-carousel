@@ -1,9 +1,9 @@
-import { rpc, CometDClient, resetRpcSession } from './lms.js?v=display-choice-1';
+import { rpc, CometDClient, resetRpcSession } from './lms.js?v=track-artist-roles-1';
 import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from './catalogue.js?v=display-choice-1';
 import { clamp, modulo, circularDelta, fanLayout, nearestPositionForIndex as nearestPosition } from './browser.js?v=display-choice-1';
 import { createLmsProvider } from './providers/lms-provider.js?v=providers-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=providers-1';
-import { spotifyAlbumInformation } from './spotify.js?v=0.10.0';
+import { spotifyAlbumInformation } from './spotify.js?v=album-details-1';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
@@ -376,7 +376,7 @@ function spotifyPlayingIndex(track,result){
 function setPlayerPower(value){playerPower=value===1||value==='1'||value===true?true:value===0||value==='0'||value===false?false:null;powerButton.dataset.power=playerPower===null?'unknown':playerPower?'on':'off';powerButton.setAttribute('aria-pressed',String(playerPower===true));const label=playerPower===null?'Player power unavailable':playerPower?'Turn selected player off':'Turn selected player on';powerButton.setAttribute('aria-label',label);powerButton.title=label;updateBusyState()}
 async function togglePlayerPower(){if(!playerId||powerPending||playerPower===null)return;const selected=playerId,target=playerPower?0:1;powerPending=true;updateBusyState();try{await rpc(selected,['power',target]);if(selected===playerId){setPlayerPower(target);await refreshStatus()}}catch(_){if(selected===playerId){setConnection('Could not change player power',false);await refreshStatus()}}finally{powerPending=false;updateBusyState()}}
 function applyStatus(result){if(!result)return;if(Object.prototype.hasOwnProperty.call(result,'power'))setPlayerPower(result.power);const previousAlbum=playingAlbumId,wasPlaying=playing;playing=result.mode==='play';const currentIndex=Math.max(0,Number(result.playlist_cur_index)||0),track=result.playlist_loop?.find(item=>Number(item['playlist index']??item.playlist_index)===currentIndex)||result.playlist_loop?.[currentIndex]||result.playlist_loop?.[0];if(track){const remote=result.remoteMeta||{};playingSource=(result.remote||remote.id||(/^spotify:/i.test(String(track.url||track.uri||''))))?'spotify':(track.album_id||remote.album_id?'library':'unknown');const spotifyIndex=spotifyPlayingIndex(track,result);playingAlbumId=track.album_id||remote.album_id||(spotifyIndex>=0?albums[spotifyIndex][6]:null);nowAlbumTitle=track.album||remote.album||track.remote_title||result.current_title||track.title||'';nowAlbumArtist=track.albumartist||track.artist||remote.artist||track.remote_artist||'';nowTrackTitle=track.title||remote.title||track.remote_title||result.current_title||'';nowTrackArtist=track.trackartist||track.artist||remote.trackartist||remote.artist||track.remote_artist||'';nowTrackNumber=track.tracknum||'';playbackSeconds=Number(result.time)||0;trackDuration=Number(track.duration||result.duration)||0;statusUpdatedAt=performance.now()}else{playingSource='unknown';playingAlbumId=null;nowAlbumTitle=nowAlbumArtist='';nowTrackTitle=nowTrackArtist=nowTrackNumber='';playbackSeconds=trackDuration=0}setConnection(albumCountLabel(),true);updateMeta(true);if(wasPlaying&&!playing&&frontPreviewAlbum&&String(frontPreviewAlbum[6])===String(previousAlbum)){pinnedRequest++;closeFrontPreview()}if(connecting)return;if(KEEP_PLAYING_OPEN&&(wasPlaying!==playing||String(previousAlbum)!==String(playingAlbumId)||frontPreview.hidden))ensurePlayingCover();else frontPreview.dataset.pinned=String(isPlayingCoverPinned());if(!playing){cancelFollowAnimation();followingNowPlaying=false}if(wasPlaying!==playing||String(previousAlbum)!==String(playingAlbumId))resumeFrontTimeout();const carouselPlayingIndex=playingCarouselIndex(),carouselPlayingId=carouselPlayingIndex>=0?String(albums[carouselPlayingIndex]?.[6]||''):'';if(playing&&carouselPlayingIndex>=0&&String(previousAlbum)!==String(playingAlbumId)&&(followingNowPlaying||KEEP_PLAYING_OPEN)){closeFrontPreview(true);returnToPlayingAlbum(true);return}if(carouselPlayingIndex>=0&&String(idleReturnAlbumId||'')!==carouselPlayingId&&Date.now()-lastActivityAt>=IDLE_RETURN_MS)armIdleReturn(0)}
-async function getStatus(trackCount=1){if(!playerId)return null;return rpc(playerId,['status','-',trackCount,'tags:alJenKNR'])}
+async function getStatus(trackCount=1){if(!playerId)return null;return rpc(playerId,['status','-',trackCount,'tags:alJenKNRA'])}
 async function refreshStatus(){
     if(!playerId)return;
     const expectedPlayer=playerId,connection=connectionGeneration;
@@ -484,6 +484,25 @@ async function playAlbumNow(album){closeAlbumMenu();if(!playerId||!album?.[6])re
 async function clearPlaylistAndPlay(album){closeAlbumMenu();if(!playerId||!album?.[6])return;try{await loadAlbum(album);setConnection('Playlist cleared; playing '+album[0]+' from track 1',true)}catch(_){setConnection('Could not clear playlist and play album',false);scheduleReconnect()}}
 let trackRequest=0,trackAlbum=null;
 function closeTrackList(){trackRequest++;trackAlbum=null;trackOverlay.hidden=true;trackList.replaceChildren()}
+// The LMS track query defaults to title order. Keep disc order, then track
+// number, and retain upstream order for missing/ambiguous track numbers.
+function albumTrackNumber(value){
+    const match=String(value??'').trim().match(/^(\d+)(?:\s*\/\s*\d+)?$/);
+    return match&&Number(match[1])>0?Number(match[1]):null;
+}
+function sortAlbumTracks(tracks){
+    return tracks.map((track,index)=>({track,index})).sort((a,b)=>{
+        const ad=albumTrackNumber(a.track.disc)??1,bd=albumTrackNumber(b.track.disc)??1;
+        if(ad!==bd)return ad-bd;
+        const at=albumTrackNumber(a.track.tracknum),bt=albumTrackNumber(b.track.tracknum);
+        if(at!==null&&bt!==null&&at!==bt)return at-bt;
+        return a.index-b.index;
+    }).map(item=>item.track);
+}
+function distinctTrackArtist(track,albumArtist){
+    const artist=String(track?.trackartist||track?.artist||'').trim();
+    return artist&&artist.toLocaleLowerCase()!==String(albumArtist||'').trim().toLocaleLowerCase()?artist:'';
+}
 async function showTrackList(album){
     closeAlbumMenu();if(!album?.[6])return;
     const request=++trackRequest,spotify=album?.[13]==='spotify';trackAlbum=album;trackPlayNow.hidden=spotify;trackPlayNow.disabled=!playerId;
@@ -496,20 +515,39 @@ async function showTrackList(album){
             tracks=info.tracks||[];genre=info.genre||'';year=info.year||year;
         }else{
             const [trackResult,albumResult]=await Promise.all([
-                rpc('0',['tracks',0,1000,'album_id:'+album[6],'tags:altng']),
+                rpc('0',['tracks',0,1000,'album_id:'+album[6],'sort:tracknum','tags:altngidA']),
                 rpc('0',['albums',0,1,'album_id:'+album[6],'tags:ajlyg'])
             ]);
-            tracks=(trackResult.titles_loop||[]).slice().sort((x,y)=>Number(x.tracknum||0)-Number(y.tracknum||0));
+            tracks=sortAlbumTracks(trackResult.titles_loop||[]);
             const detail=(albumResult.albums_loop||[])[0]||{};
             const trackGenres=[...new Set(tracks.flatMap(track=>[track.genre,track.genres]).flat().filter(Boolean).flatMap(value=>String(value).split(/\s*,\s*/)).filter(Boolean))];
             genre=detail.genre||detail.genres||trackGenres.join(', ');
             year=detail.year||year;
         }
+        tracks=sortAlbumTracks(tracks);
         if(request!==trackRequest||trackOverlay.hidden)return;
         const details=[album[1],year,genre].filter(Boolean);trackDetails.textContent=details.join(' · ');
         if(!tracks.length){trackStatus.textContent=spotify?'No track list returned by Spotty.':'No tracks found.';return}
         trackStatus.textContent='';
-        tracks.forEach((track,index)=>{const item=document.createElement('li');const number=document.createElement('span');number.textContent=track.tracknum||index+1;const title=document.createElement('span');title.textContent=track.title||'Untitled';const duration=document.createElement('span');duration.textContent=track.duration?formatTime(track.duration):'';item.append(number,title,duration);trackList.append(item)})
+        const multiDisc=new Set(tracks.map(track=>albumTrackNumber(track.disc)??1)).size>1;
+        let displayedDisc=null;
+        tracks.forEach((track,index)=>{
+            const disc=albumTrackNumber(track.disc)??1;
+            if(multiDisc&&disc!==displayedDisc){
+                const separator=document.createElement('li');
+                separator.className='bf-disc-heading';
+                separator.textContent='Disc '+disc;
+                trackList.append(separator);
+                displayedDisc=disc;
+            }
+            const item=document.createElement('li'),number=document.createElement('span');
+            number.textContent=track.tracknum||index+1;
+            const title=document.createElement('span'),artist=distinctTrackArtist(track,album[1]);
+            title.textContent=(track.title||'Untitled')+(artist?' — '+artist:'');
+            const duration=document.createElement('span');
+            duration.textContent=track.duration?formatTime(track.duration):'';
+            item.append(number,title,duration);trackList.append(item);
+        })
     }catch(_){if(request!==trackRequest)return;trackStatus.textContent=spotify?'Spotify album information is unavailable from Spotty.':'Track list unavailable while LMS reconnects.'}
 }
 const queueScrim=root.querySelector('.bf-queue-scrim'),queueDrawer=root.querySelector('.bf-queue-drawer'),queueGrip=root.querySelector('.bf-queue-grip'),queueClose=root.querySelector('.bf-queue-close'),queueStatus=root.querySelector('.bf-queue-status'),queueList=root.querySelector('.bf-queue-list');let queueRequest=0,queueGesture=null;
