@@ -120,7 +120,7 @@ export async function runTests(sources) {
   const neighbour=index=>api.geometry().nodes.find(node=>node.index===index)?.el;
   const xFor=index=>{
     const value=neighbour(index)?.style.transform||'';
-    const match=value.match(/translate3d\\(([-\\d.]+)px/);
+    const match=value.match(/translate3d\(([-\d.]+)px/);
     if(!match)throw Error('Shelf transform missing for '+index);
     return Number(match[1]);
   };
