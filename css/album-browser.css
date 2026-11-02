@@ -538,6 +538,20 @@ body {
 .bf-track-list li { display:grid; grid-template-columns:28px 1fr auto; gap:8px; padding:7px 8px; border-radius:5px; color:#ddd9d2; font-size:12px; }
 .bf-track-list li:nth-child(odd) { background:rgba(255,255,255,.035); }
 .bf-track-list li span:first-child,.bf-track-list li span:last-child { color:var(--bf-muted); }
+.bf-track-list li.bf-disc-heading {
+    display:block;
+    margin:8px 0 3px;
+    padding:8px 8px 4px;
+    border-top:1px solid rgba(255,255,255,.1);
+    background:transparent;
+    color:var(--bf-muted);
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+}
+.bf-track-list li span:nth-child(2) { min-width:0; overflow-wrap:anywhere; }
+
 .bf-album-detail {
     height:18px;
     overflow:hidden;
