@@ -100,10 +100,27 @@ if(preview&&caseEl){
       console.debug('Processed disc unavailable:',error);
     }
   }
-  async function loadArtwork(albumId){
+  // The ordinary album thumbnail is already composited into a closed jewel case.
+  // Strip that shell variant so the open lid displays only the album's real art.
+  function rawCoverUrl(caseUrl){
+    if(typeof caseUrl!=='string'||!caseUrl.startsWith('/api/'))return '';
+    try{
+      const url=new URL(caseUrl,window.location.href);
+      if(url.origin!==window.location.origin)return '';
+      if(!url.pathname.startsWith('/api/art/')&&url.pathname!=='/api/spotty-art')return '';
+      url.searchParams.delete('case');
+      return url.pathname+url.search;
+    }catch(_){return ''}
+  }
+  function setDefaultBooklet(caseUrl){
+    const url=rawCoverUrl(caseUrl);
+    booklet.style.backgroundImage=url?'url("'+url+'")':'';
+    booklet.setAttribute('aria-label',url?'Album front cover':'Booklet artwork unavailable');
+  }
+  async function loadArtwork(albumId,coverUrl){
     const token=++requestToken;
     bookletPages=[];bookletIndex=0;
-    booklet.style.backgroundImage='';booklet.removeAttribute('aria-label');
+    setDefaultBooklet(coverUrl);
     pageIndicator.textContent='';
     rearScan=null;turned=false;updateTurnControl();rearArtwork.style.backgroundImage='';rear.classList.remove('has-artwork');
     disc.style.backgroundImage='';
@@ -131,7 +148,7 @@ if(preview&&caseEl){
       if(bookletPages.length)setBookletPage(0);
     }catch(error){console.debug('Additional LMS artwork unavailable:',error)}
   }
-  preview.addEventListener('carousel:album-preview',event=>loadArtwork(event.detail?.albumId));
+  preview.addEventListener('carousel:album-preview',event=>loadArtwork(event.detail?.albumId,event.detail?.coverUrl));
   const gsap=window.gsap;
   let opened=false;
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
