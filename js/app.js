@@ -611,8 +611,8 @@ function updateMeta(force=false){
     nodes.forEach(n=>n.el.setAttribute('aria-selected',n.index===displayIndex?'true':'false'));
     if(!album){meta.replaceChildren();return}
     const title=document.createElement('strong');title.textContent=album[0];
-    const detail=document.createElement('span'),isRemoteNowPlaying=playing&&hoveredAlbumIndex<0&&!playingAlbumId&&album[6]==='remote-now-playing',isThisPlaying=isRemoteNowPlaying||(playing&&String(album[6]||'')===String(playingAlbumId||''));
-    detail.textContent=' — '+album[1]+(isThisPlaying?' · Playing':'');
+    const detail=document.createElement('span');
+    detail.textContent=' — '+album[1];
     const heading=document.createElement('div');heading.className='bf-album-detail';heading.append(title,detail);
     const content=[heading];
     const showingNowPlaying=playing&&hoveredAlbumIndex<0&&!!nowAlbumTitle;
