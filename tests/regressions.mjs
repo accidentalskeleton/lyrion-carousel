@@ -447,6 +447,9 @@ export async function runTests(sources) {
       'open jewel case avoids overlapping synthetic SVG frames');
   }
   if (sources.gsapJewelJs) {
+    assert(sources.gsapJewelJs.includes("carousel:jewel-open-state")&&
+      sources.gsapJewelJs.includes("if(lastPreviewAlbumKey!==null&&key!==lastPreviewAlbumKey&&opened)setOpen(false)"),
+      'GSAP case emits open-close state and resets it when albums change');
     assert(sources.gsapJewelJs.includes("url.searchParams.delete('case')")&&sources.gsapJewelJs.includes('setDefaultBooklet(coverUrl)'),
       'open booklet uses original album art without closed-case composite');
     assert(sources.gsapJewelJs.includes("if(bookletPages.length)setBookletPage(0)")&&sources.gsapJewelJs.includes('applyDiscScan(discScan.url,token)'),
