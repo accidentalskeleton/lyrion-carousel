@@ -1,5 +1,5 @@
 # Lyrion Music Server used by Lyrion Carousel.
-LMS_URL=http://mrlazy:9000
+LMS_URL=http://streamer:9000
 
 # Listen on the LAN. Use 127.0.0.1 for local access only.
 BIND_ADDRESS=0.0.0.0
