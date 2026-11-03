@@ -253,6 +253,39 @@ class ServerTests(unittest.TestCase):
         self.assertIn(data['spine_font'], server.SPINE_FONTS)
         self.assertEqual(data, json.loads(meta_path.read_bytes()))
 
+    def test_spine_metadata_post_populates_persistent_colour_index(self):
+        colour='#ff00ff'
+        meta={'spine_color':colour,'text_color':'#f5f2ea',
+              'spine_font':server.SPINE_FONTS[0],
+              'colour_index':server.colour_sort_index(colour)}
+        body=json.dumps({'artwork_ids':['first','first','missing']}).encode()
+        self.handler.headers={'Content-Length':str(len(body))}
+        self.handler.rfile=io.BytesIO(body)
+        with patch.object(self.handler,'_artwork_metadata',
+                          side_effect=lambda key: meta if key=='first' else None):
+            self.handler._serve_metadata_batch()
+        self.assertEqual(self.handler._colour_index_count(),1)
+        self.assertEqual(self.handler._load_colour_index(),{'first':meta})
+        payload=json.loads(self.responses[-1][1])
+        self.assertEqual(payload['metadata']['first'],meta)
+        self.assertIsNone(payload['metadata']['missing'])
+
+    def test_damaged_colour_database_falls_back_to_metadata_files(self):
+        path=self.handler._colour_index_path()
+        path.write_bytes(b'not SQLite data')
+        self.assertEqual(self.handler._load_colour_index(),{})
+        self.assertEqual(self.handler._colour_index_count(),0)
+        rows=[[{'id':1,'artist':'A','album':'Album','artwork_track_id':'art'}]]
+        colour='#ffff00'
+        meta={'spine_color':colour,'text_color':'#111417',
+              'spine_font':server.SPINE_FONTS[0],
+              'colour_index':server.colour_sort_index(colour)}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(rows)):
+            self.handler.path='/api/catalogue?order=colour'
+            with patch.object(self.handler,'_artwork_metadata',return_value=meta):
+                self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['count'],1)
+
     def test_colour_sort_reuses_index_and_only_computes_missing_spines(self):
         albums=[[{'id':1,'artist':'A','album':'Red','artwork_track_id':'red'},
                  {'id':2,'artist':'B','album':'Green','artwork_track_id':'green'},
