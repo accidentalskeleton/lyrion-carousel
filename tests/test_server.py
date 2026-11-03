@@ -124,6 +124,36 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status['albums'],1)
         self.assertEqual(status['source'],'memory')
 
+    def test_expired_snapshot_refreshes_instead_of_using_old_disk_data(self):
+        first=[[{'id':1,'artist':'A','album':'Expired'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(first)):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
+        snapshot['created']=server.time.time()-server.CATALOGUE_SNAPSHOT_TTL_SECONDS-30
+        self.handler._save_catalogue_snapshot(snapshot)
+        replacement=[[{'id':2,'artist':'B','album':'Fresh'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(replacement)) as remote:
+            self.handler._serve_catalogue()
+        remote.assert_called_once()
+        self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['album'],'Fresh')
+
+    def test_large_catalogue_sorting_does_not_rescan_upstream(self):
+        rows=[{'id':i,'artist':f'Artist {i%79:03d}','album':f'Album {10000-i:05d}'}
+              for i in range(10000)]
+        calls=[]
+        def pages(genre_id=None):
+            calls.append(genre_id)
+            for start in range(0,len(rows),200):yield rows[start:start+200]
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        self.assertEqual(calls,[None])
+        self.assertEqual(json.loads(self.responses[-1][1])['count'],10000)
+        self.assertEqual(len(json.loads(self.responses[-1][1])['albums_loop']),10000)
+
     def test_new_metadata_is_stable_and_persisted(self):
         fonts = set()
         for i in range(20):
