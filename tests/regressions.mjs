@@ -435,6 +435,19 @@ export async function runTests(sources) {
   stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:52,clientX:100,clientY:80,stopImmediatePropagation(){}});
   assert(api.state().frontPreviewAlbum===api.state().albums[idleIndex]&&!preview.hidden,
     'deliberate spine click opens its cover once scrolling has stopped');
+  // A subsequent spine drag must close the manually selected preview and
+  // should never promote the spine under the pointer at release.
+  api.set({playing:false,position:10});
+  api.openFrontPreview(api.state().albums[10],10);
+  const scrollSpine={dataset:{index:'12'}};
+  const scrollTarget={closest:selector=>selector==='.bf-album'?scrollSpine:null};
+  stage.dispatchEvent({type:'pointerdown',button:0,target:scrollTarget,pointerId:53,clientX:300,clientY:80});
+  time+=40;
+  stage.dispatchEvent({type:'pointermove',target:scrollTarget,pointerId:53,clientX:180,clientY:80});
+  stage.dispatchEvent({type:'pointerup',target:scrollTarget,pointerId:53,clientX:180,clientY:80,
+    stopImmediatePropagation(){}});
+  assert(preview.hidden&&api.state().frontPreviewAlbum===null,
+    'drag-scrolling the spines closes a manual cover and never opens a replacement');
 
   api.set({playing:true,playingAlbumId:20,position:5});
   api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);
@@ -547,6 +560,11 @@ export async function runTests(sources) {
   assert(!sources.app.includes('showTrackList(frontPreviewAlbum)')&&
     !sources.app.includes('showTrackList(press.album)'),
     'short cover presses do not open Album Information');
+  assert(sources.app.includes('lastShelfScrollAt')&&
+    sources.app.includes('if(shelfIsScrolling()||event.button!==0)return;'),
+    'spine clicks are suppressed during active wheel or drag scrolling');
+  assert(!/function browseWithArrow\([\s\S]*?function stopFollowing\(/.exec(sources.app)?.[0].includes('openFrontPreview('),
+    'arrow-key browsing cannot automatically open another cover');
   assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
 
   return checks;
