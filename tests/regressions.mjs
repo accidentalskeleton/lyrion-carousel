@@ -443,6 +443,22 @@ export async function runTests(sources) {
     assert(sources.app.includes('lmsProvider.search(value)'),'app search uses genre-aware LMS provider');
   }
   assert(sources.app.includes("'tags:altngidA'")&&sources.app.includes('trackGenres'),'LMS Album Information requests disc, artist and genre metadata');
+
+  if (sources.server) {
+    assert(!sources.server.includes('from disc_artwork import')&&
+      !sources.server.includes('/api/processed-disc/')&&
+      !sources.server.includes('/api/local-artwork/'),
+      'server no longer exposes the removed disc and booklet routes');
+    assert(sources.server.includes('jewel-case-realistic-v1.png')&&
+      sources.app.includes('case=realistic-v1'),
+      'realistic closed jewel-case artwork composition is preserved');
+  }
+  if (sources.debianBuild) {
+    assert(!sources.debianBuild.includes('disc_artwork.py')&&
+      sources.debianBuild.includes('cp -a "$PROJECT_DIR/assets" "$PROJECT_DIR/css" "$PROJECT_DIR/js"'),
+      'Debian package excludes removed disc module while retaining photographic assets');
+  }
+
   assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
     'closed-cover interaction no longer dispatches open-case events');
@@ -457,5 +473,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.lmsProvider=await readFile(new URL('../js/providers/lms-provider.js',import.meta.url),'utf8');
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
+  sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
+  sources.debianBuild=await readFile(new URL('../packaging/debian/build-deb.sh',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }
