@@ -85,7 +85,11 @@ export async function runTests(sources) {
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
+    return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,
+      metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
+      cachedSpineMeta:url=>spineMetaCache.get(url),
+      replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
+      prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -101,6 +105,66 @@ export async function runTests(sources) {
   await api.loadInitialCatalogue();
   assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
   assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
+
+  // Phase 1: existing backend supports at most 64 local spine metadata IDs
+  // per request. A large visible window should not issue one GET per spine.
+  api.clearSpineMetadata();
+  const metadataBatches=[];
+  metadataFetch=async (url,options)=>{
+    if(url==='/api/art-meta'){
+      const ids=JSON.parse(options.body).artwork_ids;
+      metadataBatches.push(ids);
+      return {ok:true,json:async()=>({metadata:Object.fromEntries(ids.map(id=>[id,{
+        spine_color:'#123456',text_color:'#ffffff',colour_index:5
+      }]))})};
+    }
+    return {ok:false};
+  };
+  const sampleAlbums=Array.from({length:70},(_,i)=>{
+    const album=[];album[11]='/api/art-meta/perf'+i+'?v=3&server=local';return album;
+  });
+  const pendingMetadata=sampleAlbums.map(album=>api.fetchSpineMeta(album));
+  assert(api.fetchSpineMeta(sampleAlbums[0])===pendingMetadata[0],
+    'duplicate spine metadata lookups share the same pending promise');
+  assert(api.metaState().queued===70,'rapidly requested metadata is queued, not sent as 70 GETs');
+  await api.flushSpineMetaBatch();
+  await api.flushSpineMetaBatch();
+  const metadataResult=await Promise.all(pendingMetadata);
+  assert(metadataBatches.length===2&&metadataBatches[0].length===64&&metadataBatches[1].length===6,
+    '70 spine metadata lookups use only two bounded batch requests');
+  assert(metadataResult.every(meta=>meta?.spine_color==='#123456')&&api.metaState().pending===0,
+    'metadata batches resolve all callers and clear pending requests');
+  await api.fetchSpineMeta(sampleAlbums[0]);
+  assert(metadataBatches.length===2,'cached metadata is reused without another request');
+
+  let spotifyMetaCalls=0;
+  metadataFetch=async url=>{
+    if(url.startsWith('/api/spotty-art-meta'))spotifyMetaCalls++;
+    return {ok:true,json:async()=>({spine_color:'#abcdef'})};
+  };
+  const spotifyMetadata=[];spotifyMetadata[11]='/api/spotty-art-meta?path=%2Fimageproxy%2Fabc';
+  assert((await api.fetchSpineMeta(spotifyMetadata)).spine_color==='#abcdef'&&spotifyMetaCalls===1,
+    'Spotty metadata retains its separate single-item endpoint');
+
+  for(let i=0;i<1150;i++)api.rememberSpineMeta('/lru/'+i,{spine_color:'#123456'});
+  assert(api.metaState().cached===1024&&api.cachedSpineMeta('/lru/1149')!==undefined&&
+    api.cachedSpineMeta('/lru/0')===undefined,
+    'spine metadata cache remains bounded as a large library is browsed');
+
+  let finishStaleBatch;
+  metadataFetch=()=>new Promise(resolve=>{finishStaleBatch=resolve});
+  const staleAlbum=[];staleAlbum[11]='/api/art-meta/stale-generation?v=3';
+  const staleMetadata=api.fetchSpineMeta(staleAlbum);
+  const inFlightBatch=api.flushSpineMetaBatch();
+  await Promise.resolve();
+  api.clearSpineMetadata();
+  finishStaleBatch({ok:true,json:async()=>({metadata:{'stale-generation':{spine_color:'#ff0000'}}})});
+  await inFlightBatch;
+  assert((await staleMetadata)===null&&api.metaState().cached===0,
+    'clearing metadata discards stale in-flight batch results');
+
+  metadataFetch=async()=>({ok:false});
+
   api.applySetting('displayCount',20);
   assert(api.state().PAGE_SIZE===40&&stage.children.length>20&&stage.children.length<40, 'display count independent of page size');
   await api.setDisplayOrder('random');
@@ -613,9 +677,31 @@ export async function runTests(sources) {
   assert(sources.app.includes('lastShelfScrollAt')&&
     sources.app.includes('if(shelfIsScrolling()||event.button!==0)return;'),
     'spine clicks are suppressed during active wheel or drag scrolling');
+  assert(sources.app.includes('indexForAlbumId(playingAlbumId)')&&
+    sources.app.includes('frontPreviewIndex=frontPreviewAlbum[6]!=null?'),
+    'per-frame Now Playing and preview positions use indexed album lookup');
+  assert(sources.app.includes('lastHoverProbeAt')&&
+    sources.app.includes('updateHoveredAlbumFromPoint(true)'),
+    'hover hit testing is throttled during animation but immediate on pointer movement');
+
   assert(!/function browseWithArrow\([\s\S]*?function stopFollowing\(/.exec(sources.app)?.[0].includes('openFrontPreview('),
     'arrow-key browsing cannot automatically open another cover');
   assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
+
+  // Large catalogues retain O(1) album lookup; stale positions after a
+  // reorder are validated and repaired rather than returning wrong albums.
+  const savedAlbums=api.state().albums;
+  const largeAlbums=Array.from({length:20000},(_,i)=>{
+    const album=[];album[6]='large-'+i;return album;
+  });
+  api.replaceAlbumsForTest(largeAlbums);
+  assert(api.indexForAlbumId('large-19999')===19999,
+    '20,000-album indexed lookup reaches last album');
+  [largeAlbums[1],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[1]];
+  assert(api.indexForAlbumId('large-19999')===1&&api.indexForAlbumId('large-1')===19999,
+    'album index cache detects reordered positions and self-corrects');
+  api.replaceAlbumsForTest(savedAlbums);
+
 
   return checks;
 }
