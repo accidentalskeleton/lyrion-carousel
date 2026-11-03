@@ -109,42 +109,65 @@ export async function runTests(sources) {
   api.set({connecting:false});
   assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden&&api.state().frontTimer===0,'startup opens playing cover without timeout');
 
-  // The photographic cover is now a direct Album Information control, not an
-  // animated opening case. Keep pointer, keyboard, fallback click and long press.
+  // Short clicks are inert; dragging the enlarged cover scrolls the same
+  // shelf with the same distance, momentum and snap as dragging the spines.
+  // Album Information is only reached through the long-press album menu.
   const trackOverlay=element('.bf-track-overlay');
   const coverTarget={closest:selector=>selector==='.bf-front-case'?frontCase:null};
   const playbackBefore=rpcCalls.filter(command=>command[0]==='playlistcontrol').length;
+  const originalCover=api.state().frontPreviewAlbum;
+  const originalCoverIndex=api.geometry().frontPreviewIndex;
+  const originalCoverPosition=api.state().position;
   assert(trackOverlay.hidden,'Album Information initially closed');
   frontCase.dispatchEvent({type:'click',target:{closest:()=>null}});
-  assert(!trackOverlay.hidden,'native cover click opens Album Information');
-  api.closeTrackList();
+  assert(trackOverlay.hidden,'normal cover click never opens Album Information');
 
   let prevented=false;
   element('.bf-front-art').dispatchEvent({type:'keydown',key:'Enter',preventDefault(){prevented=true;}});
-  assert(prevented&&!trackOverlay.hidden,'keyboard Enter opens Album Information from the cover');
-  api.closeTrackList();
-  prevented=false;
   element('.bf-front-art').dispatchEvent({type:'keydown',key:' ',preventDefault(){prevented=true;}});
-  assert(prevented&&!trackOverlay.hidden,'keyboard Space opens Album Information from the cover');
-  api.closeTrackList();
+  assert(!prevented&&trackOverlay.hidden,'Enter and Space on the artwork do not open Album Information');
 
-  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:31,clientX:80,clientY:90});
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:31,clientX:300,clientY:90});
   preview.dispatchEvent({type:'pointerup',pointerId:31});
-  assert(!trackOverlay.hidden,'normal short tap opens Album Information without opening a case');
-  api.closeTrackList();
+  assert(trackOverlay.hidden&&api.state().position===originalCoverPosition,
+    'short cover tap neither opens Album Information nor moves the shelf');
   frontCase.dispatchEvent({type:'click',target:{closest:()=>null}});
-  assert(trackOverlay.hidden,'synthetic click after pointerup does not reopen Album Information');
+  assert(trackOverlay.hidden,'synthetic click after tap remains inert');
 
-  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:32,clientX:80,clientY:90});
-  preview.dispatchEvent({type:'pointermove',pointerId:32,clientX:125,clientY:90});
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:32,clientX:300,clientY:90});
+  time+=80;
+  preview.dispatchEvent({type:'pointermove',pointerId:32,clientX:190,clientY:95});
+  const draggingLeft=api.state().position;
+  assert(draggingLeft>originalCoverPosition&&stage.classList.contains('is-dragging'),
+    'dragging the cover left scrolls the shelf right like the spines');
+  time+=80;
+  preview.dispatchEvent({type:'pointermove',pointerId:32,clientX:120,clientY:95});
   preview.dispatchEvent({type:'pointerup',pointerId:32});
-  assert(trackOverlay.hidden,'dragging the cover does not open Album Information');
+  assert(trackOverlay.hidden&&!stage.classList.contains('is-dragging')&&api.state().target>originalCoverPosition,
+    'releasing the cover drag snaps toward a neighbouring album without showing info');
+  assert(api.state().frontPreviewAlbum!==originalCover,
+    'dragging the cover updates the enlarged preview to the newly selected album');
+  api.set({position:originalCoverPosition});
+  api.openFrontPreview(originalCover,originalCoverIndex);
+
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:35,clientX:130,clientY:90});
+  time+=90;
+  preview.dispatchEvent({type:'pointermove',pointerId:35,clientX:270,clientY:93});
+  assert(api.state().position<originalCoverPosition,
+    'dragging the cover right scrolls the shelf left');
+  preview.dispatchEvent({type:'pointercancel',pointerId:35});
+  assert(!stage.classList.contains('is-dragging'),
+    'cancelled cover gesture resets the shelf drag state');
+  api.set({position:originalCoverPosition});
+  api.openFrontPreview(originalCover,originalCoverIndex);
+
   const playTarget={closest:selector=>selector==='button'?element('.bf-front-play'):frontCase};
   preview.dispatchEvent({type:'pointerdown',button:0,target:playTarget,pointerId:33,clientX:80,clientY:90});
   frontCase.dispatchEvent({type:'click',target:playTarget});
-  assert(trackOverlay.hidden,'Play button does not activate the cover information control');
+  assert(trackOverlay.hidden&&api.state().position===originalCoverPosition,
+    'Play button pointer interactions do not move the carousel or show information');
   assert(rpcCalls.filter(command=>command[0]==='playlistcontrol').length===playbackBefore,
-    'cover information interactions never change playback');
+    'cover gestures and short clicks never change playback');
 
   // A long press must continue to expose the existing album action menu,
   // rather than turning into a cover click or an opening-case animation.
@@ -408,8 +431,11 @@ export async function runTests(sources) {
   }
   if (sources.index) {
     assert(sources.index.includes('data-source="library"')&&sources.index.includes('data-source="spotify"'),'Library and Spotify source controls present');
-    assert(sources.index.includes('role="button" tabindex="0" aria-label="Show album information"'),
-      'closed cover exposes an accessible Album Information action');
+    assert(sources.index.includes('class="bf-front-case" tabindex="0"')&&
+      sources.index.includes('Swipe left or right to browse albums'),
+      'closed cover is keyboard-focusable and advertises horizontal browsing');
+    assert(!sources.index.includes('aria-label="Show album information"'),
+      'the closed cover is no longer a direct Album Information button');
     assert(!sources.index.includes('gsap-jewel-poc')&&!sources.index.includes('cdn.jsdelivr.net/npm/gsap'),
       'production page has no GSAP or open-case experiment dependencies');
     assert(sources.index.includes('class="bf-front-play"'),
@@ -462,6 +488,12 @@ export async function runTests(sources) {
   assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
     'closed-cover interaction no longer dispatches open-case events');
+  assert(sources.app.includes('beginShelfDrag(')&&sources.app.includes('moveShelfDrag(event,false)')&&
+    sources.app.includes('finishShelfDrag(false)'),
+    'cover reuses the existing spine drag and snap physics');
+  assert(!sources.app.includes('showTrackList(frontPreviewAlbum)')&&
+    !sources.app.includes('showTrackList(press.album)'),
+    'short cover presses do not open Album Information');
   assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
 
   return checks;
