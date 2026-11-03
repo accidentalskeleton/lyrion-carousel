@@ -247,7 +247,7 @@ async function ensurePlayingCover(){
     }catch(_){/* A later playback update can retry when the catalogue is available. */}
 }
 function closeFrontPreview(suppressReopen=false){if(isPlayingCoverPinned()&&!suppressReopen)return;cancelFrontPress();clearTimeout(frontTimer);frontTimer=0;frontPreviewIndex=-1;frontPreviewAlbum=null;frontPreview.hidden=true;frontPreview.dataset.visible='false';frontPreview.setAttribute('aria-hidden','true');syncShelfDom();if(!suppressReopen&&KEEP_PLAYING_OPEN&&playing&&playingCarouselIndex()>=0)ensurePlayingCover()}
-function openFrontPreview(album,index){if(!album)return;clearTimeout(frontTimer);frontPreviewIndex=index;frontPreviewAlbum=album;prefetchCoverWindow(index);frontArt.style.background=album[2];frontPreview.dispatchEvent(new CustomEvent('carousel:album-preview',{detail:{albumId:album[12]==='spotify'?null:album[6],coverUrl:album[7]}}));frontPreview.hidden=false;frontPreview.dataset.visible='true';frontPreview.setAttribute('aria-hidden','false');frontPreview.dataset.pinned=String(isPlayingCoverPinned());syncShelfDom();resumeFrontTimeout()}
+function openFrontPreview(album,index){if(!album)return;clearTimeout(frontTimer);frontPreviewIndex=index;frontPreviewAlbum=album;prefetchCoverWindow(index);frontArt.style.background=album[2];frontPreview.hidden=false;frontPreview.dataset.visible='true';frontPreview.setAttribute('aria-hidden','false');frontPreview.dataset.pinned=String(isPlayingCoverPinned());syncShelfDom();resumeFrontTimeout()}
 frontPlay.onclick=async event=>{event.stopPropagation();const album=frontPreviewAlbum;if(!album)return;try{await loadAlbum(album);closeFrontPreview()}catch(_){setConnection('Could not play album',false);scheduleReconnect()}};
 // Dismiss from the exposed shelf without opening or playing the spine underneath.
 root.addEventListener('pointerdown',event=>{
@@ -256,7 +256,10 @@ root.addEventListener('pointerdown',event=>{
     event.preventDefault();event.stopPropagation();
     cancelLongPress();followingNowPlaying=false;closeFrontPreview();
 },true);
-let frontPress=null,frontPressTimer=0;
+// A short cover press opens Album Information; a long press retains the album
+// action menu. The click fallback covers browsers that lose pointer capture.
+const frontCaseElement=frontPreview.querySelector('.bf-front-case');
+let frontPress=null,frontPressTimer=0,lastFrontPointerHandledAt=-Infinity;
 function cancelFrontPress(){clearTimeout(frontPressTimer);frontPressTimer=0;frontPress=null}
 function resumeFrontTimeout(){clearTimeout(frontTimer);frontTimer=!frontPreview.hidden&&!(playing&&String(frontPreviewAlbum?.[6])===String(playingAlbumId))&&FRONT_TIMEOUT_MS>0?setTimeout(()=>{frontTimer=0;const wasNonPlayingPreview=playing&&playingCarouselIndex()>=0&&!isPlayingCoverPinned();closeFrontPreview(true);if(wasNonPlayingPreview)returnToPlayingAlbum(true)},FRONT_TIMEOUT_MS):0}
 frontPreview.addEventListener('pointerdown',event=>{
@@ -273,18 +276,35 @@ frontPreview.addEventListener('pointerdown',event=>{
 frontPreview.addEventListener('pointermove',event=>{
     if(!frontPress||event.pointerId!==frontPress.id)return;
     if(Math.hypot(event.clientX-frontPress.x,event.clientY-frontPress.y)>10){
-        frontPress.cancelled=true;clearTimeout(frontPressTimer);frontPressTimer=0;
+        frontPress.cancelled=true;lastFrontPointerHandledAt=performance.now();clearTimeout(frontPressTimer);frontPressTimer=0;
     }
 });
 frontPreview.addEventListener('pointerup',event=>{
     if(!frontPress||event.pointerId!==frontPress.id)return;
     const press=frontPress;
     cancelFrontPress();
-    if(!press.long&&!press.cancelled){frontPreview.dispatchEvent(new CustomEvent('carousel:toggle-jewel-case'));resumeFrontTimeout()}else resumeFrontTimeout();
+    lastFrontPointerHandledAt=performance.now();
+    if(!press.long&&!press.cancelled&&trackOverlay.hidden)showTrackList(press.album);
+    resumeFrontTimeout();
 });
-function cancelFrontGesture(event){if(frontPress&&event.pointerId===frontPress.id){cancelFrontPress();resumeFrontTimeout()}}
+function cancelFrontGesture(event){
+    if(frontPress&&event.pointerId===frontPress.id){
+        if(event.type==='pointercancel')lastFrontPointerHandledAt=performance.now();
+        cancelFrontPress();resumeFrontTimeout();
+    }
+}
 frontPreview.addEventListener('pointercancel',cancelFrontGesture);
 frontPreview.addEventListener('lostpointercapture',cancelFrontGesture);
+frontCaseElement.addEventListener('click',event=>{
+    if(frontPreview.hidden||!frontPreviewAlbum||!trackOverlay.hidden||event.target.closest('button'))return;
+    if(performance.now()-lastFrontPointerHandledAt<400||frontPress?.long||frontPress?.cancelled)return;
+    showTrackList(frontPreviewAlbum);
+});
+frontArt.addEventListener('keydown',event=>{
+    if(event.key!=='Enter'&&event.key!==' ')return;
+    event.preventDefault();
+    if(!frontPreview.hidden&&frontPreviewAlbum&&trackOverlay.hidden)showTrackList(frontPreviewAlbum);
+});
 function updateHoveredAlbumFromPoint(){
     let index=-1;
     if(lastPointerClientX>=0){
