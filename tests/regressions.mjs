@@ -160,8 +160,18 @@ export async function runTests(sources) {
   api.clearSpineMetadata();
   finishStaleBatch({ok:true,json:async()=>({metadata:{'stale-generation':{spine_color:'#ff0000'}}})});
   await inFlightBatch;
-  assert((await staleMetadata)===null&&api.metaState().cached===0,
-    'clearing metadata discards stale in-flight batch results');
+  assert((await staleMetadata)===null&&api.metaState().cached===0&&api.metaState().active===0,
+    'clearing metadata discards stale results and releases old-generation capacity');
+
+  const overflowAlbums=Array.from({length:300},(_,i)=>{
+    const album=[];album[11]='/api/art-meta/over'+i+'?v=3';return album;
+  });
+  const overflowPromises=overflowAlbums.map(album=>api.fetchSpineMeta(album));
+  assert(api.metaState().queued===256&&api.metaState().pending===256,
+    'fast browsing bounds the queued metadata window to 256 albums');
+  api.clearSpineMetadata();
+  assert((await Promise.all(overflowPromises)).every(meta=>meta===null)&&api.metaState().pending===0,
+    'discarded metadata promises are resolved, never left hanging');
 
   metadataFetch=async()=>({ok:false});
 
