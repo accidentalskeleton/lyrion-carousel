@@ -298,7 +298,21 @@ sudo systemctl disable --now lyrion-carousel.service
 
 The first cold catalogue request still reads LMS in bounded 200-album pages. Subsequent sort changes reuse the same catalogue, including after restarting Carousel while the snapshot is still fresh. The snapshot lasts up to 15 minutes as a fallback when library events are unavailable; an LMS scan-complete event invalidates it immediately. Genre-exclusion album IDs are indexed only on first use and saved alongside the snapshot. Non-random prepared orders are retained in a four-entry in-memory response cache; random order is shuffled afresh each time.
 
-The snapshot is stored separately from image files under the existing Carousel cache directory. Clearing the cache also removes catalogue snapshots. Colour ordering still requires complete colour metadata preparation on its first uncached request; incremental background colour indexing is a future optimisation.
+The snapshot is stored separately from image files under the existing Carousel cache directory. Clearing the artwork cache also removes catalogue snapshots, but **does not reset the selected LMS server**. Colour ordering still requires complete colour metadata preparation on its first uncached request; incremental background colour indexing is a future optimisation.
+
+### LMS URL across service restarts
+
+The installed systemd service uses `LMS_URL` from `/etc/default/lyrion-carousel` as the **initial fallback** (currently `http://mrlazy:9000`). Once the Connection settings page selects another LMS, Carousel now writes that choice to `/var/cache/lyrion-carousel/lyrion-carousel-lms.json` (the parent of the configured `CACHE_DIR`). The saved server takes precedence on subsequent restarts, even before any browser reconnects. It is deliberately outside the artwork cache so Settings → Clear Cache does not remove it.
+
+To use the local LMS on the streamer, change its URL in Carousel's Connection settings to `http://streamer:9000` after deploying this version, or POST:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8088/api/config/lms \
+  -H 'Content-Type: application/json' \
+  -d '{"lms_url":"http://streamer:9000"}' | python3 -m json.tool
+```
+
+Verify `/api/config` returns `streamer:9000` both before and after restarting `lyrion-carousel.service`. This prevents a restart from silently loading a different LMS's catalogue snapshot.
 
 Inspect the catalogue cache without triggering a new LMS scan:
 
