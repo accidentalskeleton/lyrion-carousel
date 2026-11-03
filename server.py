@@ -30,6 +30,10 @@ CATALOGUE_SNAPSHOT_VERSION=1
 CATALOGUE_SNAPSHOT_TTL_SECONDS=900
 CATALOGUE_MAX_SNAPSHOT_BYTES=64_000_000
 CATALOGUE_SORT_CACHE_ENTRIES=4
+# The selected LMS belongs to the appliance, not solely to the web browser.
+# Keep it outside /artwork so Settings -> Clear Cache cannot reset it.
+LMS_SETTINGS_FILENAME='lyrion-carousel-lms.json'
+MAX_LMS_SETTINGS_BYTES=4096
 # Bound incoming JSON, upstream responses and stored image bytes separately.
 MAX_RPC_BYTES=1_000_000
 MAX_UPSTREAM_BYTES=8_000_000
@@ -52,6 +56,40 @@ def colour_sort_index(colour:str)->int:
     hue,saturation,value=colorsys.rgb_to_hsv(red,green,blue)
     hue_band=360 if saturation<.12 else min(359,int(hue*360))
     return hue_band*1_000_000+round(value*1000)*1000+round(saturation*1000)
+
+def validate_lms_url(value)->str:
+    """Normalise the same safe, unauthenticated LMS URL format used by Settings."""
+    if not isinstance(value,str):raise ValueError('LMS URL must be a string')
+    lms_url=value.strip().rstrip('/')
+    parsed=urlsplit(lms_url)
+    if (parsed.scheme not in ('http','https') or not parsed.hostname or
+            parsed.username or parsed.password or parsed.query or parsed.fragment):
+        raise ValueError('Invalid LMS URL')
+    # Trigger urllib validation for malformed numeric ports.
+    _=parsed.port
+    return lms_url
+
+def load_saved_lms_url(path:Path,fallback:str)->str:
+    """Use the persisted server choice, falling back to systemd/CLI on first run."""
+    try:
+        if path.stat().st_size>MAX_LMS_SETTINGS_BYTES:raise ValueError('Oversized LMS settings')
+        payload=json.loads(path.read_bytes())
+        if not isinstance(payload,dict) or payload.get('version')!=1:
+            raise ValueError('Unsupported LMS settings')
+        return validate_lms_url(payload.get('lms_url'))
+    except (OSError,ValueError,UnicodeError,TypeError,AttributeError):
+        return fallback
+
+def save_lms_url(path:Path,lms_url:str)->None:
+    """Atomically persist the LMS choice outside the artwork-cache tree."""
+    payload=json.dumps({'version':1,'lms_url':validate_lms_url(lms_url)}).encode('utf-8')
+    path.parent.mkdir(parents=True,exist_ok=True)
+    temporary=path.with_name(path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
+    try:
+        temporary.write_bytes(payload)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 class UpstreamPayloadTooLarge(Exception):
     pass
@@ -149,6 +187,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     server_version="LyrionCarousel/1.0"
     def __init__(self,*args,directory:str,lms_url:str,cache_dir:Path,runtime_config:dict[str,object],**kwargs):
         self.lms_url=lms_url.rstrip('/'); self.cache_dir=cache_dir; self.runtime_config=runtime_config
+        self.lms_settings_path=cache_dir.parent/LMS_SETTINGS_FILENAME
         super().__init__(*args,directory=directory,**kwargs)
     def end_headers(self)->None:
         """Revalidate application assets; image endpoints supply their own cache policy."""
@@ -219,17 +258,19 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if length<1 or length>MAX_RPC_BYTES: self.send_error(413,'Invalid request size'); return
             payload=json.loads(self.rfile.read(length))
             value=payload.get('lms_url') if isinstance(payload,dict) else None
-            lms_url=str(value).strip().rstrip('/')
-            parsed=urlsplit(lms_url)
-            if parsed.scheme not in {'http','https'} or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment: raise ValueError
+            lms_url=validate_lms_url(value)
+            # Keep the server and browser in agreement after restarts. Persist
+            # before returning 200; if the disk write fails, keep the old URL.
+            save_lms_url(getattr(self,'lms_settings_path',
+                              self.cache_dir.parent/LMS_SETTINGS_FILENAME),lms_url)
             ARTWORK_WARMER.stop()
-            # A saved snapshot for a previously selected LMS may be stale.
-            # Keep artwork namespaces isolated and invalidate the target cache.
+            # An earlier snapshot of this server can be stale after switching.
             self._invalidate_catalogue_data(lms_url=lms_url)
             self.runtime_config['lms_url']=lms_url
             self.lms_url=lms_url
             self._send_payload(200,json.dumps({'lms_url':lms_url}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError): self.send_error(400,'Invalid LMS URL')
+        except OSError as error:self._send_upstream_error(error)
     def _update_cache_limit(self)->None:
         """Update the soft artwork-cache limit without exceeding the server ceiling."""
         try:
@@ -846,15 +887,16 @@ def main()->int:
     if args.clear_cache and cache_dir.exists():
         removed=sum(1 for path in cache_dir.rglob('*') if path.is_file()); shutil.rmtree(cache_dir); print(f"Cleared artwork cache: {removed} file{'s' if removed!=1 else ''} removed from {cache_dir}")
     cache_dir.mkdir(parents=True,exist_ok=True)
+    saved_lms_url=load_saved_lms_url(cache_dir.parent/LMS_SETTINGS_FILENAME,args.lms.rstrip('/'))
     # Shared mutable defaults are exposed to the browser. UI durations use ms;
     # CLI durations use seconds. The handler factory reads the current LMS target.
-    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'cache_limit_bytes':args.cache_limit_mb*1_000_000,'cache_hard_limit_bytes':args.cache_hard_limit_mb*1_000_000,'lms_url':args.lms.rstrip('/')}
+    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'cache_limit_bytes':args.cache_limit_mb*1_000_000,'cache_hard_limit_bytes':args.cache_hard_limit_mb*1_000_000,'lms_url':saved_lms_url}
     def handler(*handler_args,**handler_kwargs): return LyrionCarouselHandler(*handler_args,directory=str(static_dir),lms_url=runtime_config['lms_url'],cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
     # Long-poll connections must not block ordinary artwork and control requests.
     server=ThreadingHTTPServer((args.bind,args.port),handler)
     if args.bind in {'0.0.0.0','::'}: print('Lyrion Carousel listening on all network interfaces.'); print(f'Open: http://{socket.gethostname()}:{args.port}/ or http://<server-ip>:{args.port}/')
     else: print(f'Lyrion Carousel: http://{args.bind}:{args.port}/')
-    print(f'Lyrion server: {args.lms}'); print(f'Artwork cache: {cache_dir}'); print(f'Runtime config: batch={args.batch_size}, idle={args.idle_return_seconds}s, library-events=CometD, live-status=CometD, album-index=lightweight, random-scroll-max={args.random_scroll_max_seconds}s')
+    print(f'Lyrion server: {runtime_config["lms_url"]}'); print(f'Artwork cache: {cache_dir}'); print(f'Runtime config: batch={args.batch_size}, idle={args.idle_return_seconds}s, library-events=CometD, live-status=CometD, album-index=lightweight, random-scroll-max={args.random_scroll_max_seconds}s')
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nStopping.')
     finally: server.server_close()
