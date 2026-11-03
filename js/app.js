@@ -742,7 +742,8 @@ stage.addEventListener('pointerup',event=>{
     if(wasClick&&album){
         event.stopImmediatePropagation();dragging=false;moved=true;pressedAlbumIndex=null;
         stage.classList.remove('is-dragging');target=nearestPositionForIndex(index);
-        openFrontPreview(album,index);schedule();
+        // A deliberate spine click wins over any outstanding Now Playing lookup.
+        pinnedRequest++;openFrontPreview(album,index);schedule();
     }
 },true);
 stage.addEventListener('pointercancel',()=>{focusClickIndex=null},true);
