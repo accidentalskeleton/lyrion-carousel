@@ -12,7 +12,7 @@ let DISPLAY_STYLE='shelf',COVER_SIZE=512;
 let PAGE_SIZE=40,DISPLAY_ALBUM_COUNT=30,IDLE_RETURN_MS=30000,MENU_TIMEOUT_MS=10000,FRONT_TIMEOUT_MS=10000,RECONNECT_MAX_MS=30000,RANDOM_SCROLL_MAX_MS=3000,SEARCH_LIMIT=100;
 const demoAlbums=[['Night Geometry','The Meridian','linear-gradient(145deg,#0f3155,#d14e45)','rgba(244,190,76,.9)','8%','18deg'],['Blue Hours','Harbour Lights','linear-gradient(145deg,#0e223a,#458ca5)','linear-gradient(90deg,#d5eef0 48%,#193a61 48%)','2px','-12deg'],['Still Moving','Northbound','linear-gradient(145deg,#4b1f2c,#de8a55)','rgba(30,16,24,.72)','50%','0deg'],['Parallel Lines','Signal Path','linear-gradient(145deg,#e8dfca,#9c2828)','repeating-linear-gradient(90deg,#181818 0 9px,transparent 9px 18px)','0','24deg'],['After Image','Low Season','linear-gradient(145deg,#192019,#557557)','radial-gradient(circle at 35% 35%,#e0c895 0 12%,transparent 13%),radial-gradient(circle,#182219 0 48%,transparent 49%)','50%','0deg']];
 let playerPower=null,powerPending=false;let playingSource='unknown',albums=demoAlbums.slice(),orderMode='artistAlbum',desiredOrderMode='artistAlbum',orderBusy=false,nodes=[],renderedWindowAnchor=-1,renderedWindowCount=0,prefetchedWindowPage=-1,playerId='',playingAlbumId=null,progressTimer=0,reconnectTimer=0,reconnectDelay=1000,connecting=false,totalAlbums=albums.length,libraryAlbumCount=albums.length,liveCatalogue=false,loadedBatches=new Set(),loadingBatches=new Map(),catalogueGeneration=0,albumPositionById=new Map(),positionIndexPromise=null,nowAlbumTitle='',nowAlbumArtist='',nowTrackTitle='',nowTrackArtist='',nowTrackNumber='',playbackSeconds=0,trackDuration=0,statusUpdatedAt=performance.now(),searchTimer=0,searchToken=0,idleTimer=0,idleReturnAlbumId=null,lastActivityAt=Date.now();
-const SPINE_META_CACHE_LIMIT=1024;
+const SPINE_META_CACHE_LIMIT=1024,SPINE_META_QUEUE_LIMIT=256;
 const spineMetaCache=new Map(),spineMetaPending=new Map(),spineMetaBatchQueue=new Map();
 let spineMetaBatchTimer=0,spineMetaBatchesActive=0,spineMetaGeneration=0;
 const albumIndexCache=new Map();
@@ -23,6 +23,9 @@ function rememberSpineMeta(url,meta){
 }
 function clearSpineMetadata(){
     spineMetaGeneration++;clearTimeout(spineMetaBatchTimer);spineMetaBatchTimer=0;
+    // In-flight old-generation requests may still finish, but must not
+    // throttle metadata for a newly selected LMS or cleared artwork cache.
+    spineMetaBatchesActive=0;
     for(const job of spineMetaBatchQueue.values())job.resolve(null);
     spineMetaBatchQueue.clear();spineMetaCache.clear();spineMetaPending.clear();
 }
@@ -171,6 +174,7 @@ async function flushSpineMetaBatch(){
     const jobs=[...spineMetaBatchQueue.values()].slice(0,64);
     for(const job of jobs)spineMetaBatchQueue.delete(job.url);
     spineMetaBatchesActive++;
+    const generation=spineMetaGeneration;
     scheduleSpineMetaBatch(); // Up to two batches in flight.
     let result=null;
     try{
@@ -186,7 +190,7 @@ async function flushSpineMetaBatch(){
         if(spineMetaPending.get(job.url)===job.promise)spineMetaPending.delete(job.url);
         job.resolve(meta);
     }
-    spineMetaBatchesActive--;
+    if(generation===spineMetaGeneration)spineMetaBatchesActive--;
     scheduleSpineMetaBatch();
 }
 function fetchSpineMeta(album){
@@ -203,6 +207,14 @@ function fetchSpineMeta(album){
         let resolve;const promise=new Promise(done=>{resolve=done});
         spineMetaPending.set(url,promise);
         spineMetaBatchQueue.set(url,{url,id,promise,resolve,generation:spineMetaGeneration});
+        // Browsing can outrun metadata processing. Drop old, no-longer-visible
+        // queued requests instead of retaining one for every library album.
+        while(spineMetaBatchQueue.size>SPINE_META_QUEUE_LIMIT){
+            const [expiredUrl,expired]=spineMetaBatchQueue.entries().next().value;
+            spineMetaBatchQueue.delete(expiredUrl);
+            if(spineMetaPending.get(expiredUrl)===expired.promise)spineMetaPending.delete(expiredUrl);
+            expired.resolve(null);
+        }
         scheduleSpineMetaBatch();
         return promise;
     }
