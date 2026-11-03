@@ -38,27 +38,36 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.handler.lms_url,'http://streamer:9000')
         path=self.handler.lms_settings_path
         self.assertTrue(path.is_file())
-        self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
+        self.assertEqual(server.load_saved_lms_url(path,'http://other-lms:9000'),
                          'http://streamer:9000')
         self.handler._clear_cache_files()
         self.assertTrue(path.exists(),'Clear artwork must never discard selected LMS')
-        self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
+        self.assertEqual(server.load_saved_lms_url(path,'http://other-lms:9000'),
                          'http://streamer:9000')
+
+    def test_lms_defaults_use_local_streamer_everywhere(self):
+        root=Path(__file__).resolve().parents[1]
+        service=(root/'packaging/debian/lyrion-carousel.service').read_text()
+        defaults=(root/'packaging/debian/lyrion-carousel.default').read_text()
+        server_source=(root/'server.py').read_text()
+        self.assertIn('Environment=LMS_URL=http://streamer:9000',service)
+        self.assertIn('LMS_URL=http://streamer:9000',defaults)
+        self.assertIn("parser.add_argument('--lms',default='http://streamer:9000'",server_source)
 
     def test_lms_settings_missing_or_corrupt_fall_back_to_service_default(self):
         path=self.handler.lms_settings_path
-        self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
-                         'http://mrlazy:9000')
+        self.assertEqual(server.load_saved_lms_url(path,'http://streamer:9000'),
+                         'http://streamer:9000')
         for payload in [b'not-json',b'{}',
                         b'{"version":1,"lms_url":"file:///etc/passwd"}',
                         b'{"version":1,"lms_url":"http://user:secret@host:9000"}',
                         b'x'*5000]:
             path.write_bytes(payload)
-            self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
-                             'http://mrlazy:9000')
-        server.save_lms_url(path,'http://streamer:9000')
-        self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
-                         'http://streamer:9000')
+            self.assertEqual(server.load_saved_lms_url(path,'http://streamer:9000'),
+                             'http://streamer:9000')
+        server.save_lms_url(path,'http://other-lms:9000')
+        self.assertEqual(server.load_saved_lms_url(path,'http://streamer:9000'),
+                         'http://other-lms:9000')
 
     def test_lms_change_rejects_bad_url_without_persisting(self):
         self.handler.runtime_config={'lms_url':'http://test:9000'}
