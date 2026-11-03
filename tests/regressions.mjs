@@ -182,6 +182,22 @@ export async function runTests(sources) {
     'long press shows album action menu without opening Album Information');
   preview.dispatchEvent({type:'pointerup',pointerId:34});
   assert(trackOverlay.hidden,'releasing long press never activates the cover');
+  element('.bf-track-list-open').onclick();
+  assert(!trackOverlay.hidden&&element('.bf-album-menu').hidden,
+    'Album Information remains available through the long-press menu item only');
+  api.closeTrackList();
+
+  let menuPrevented=false;
+  frontCase.dispatchEvent({type:'contextmenu',target:coverTarget,clientX:90,clientY:85,
+    preventDefault(){menuPrevented=true;}});
+  assert(menuPrevented&&!element('.bf-album-menu').hidden&&trackOverlay.hidden,
+    'right-click opens the same album actions menu without directly showing information');
+  api.closeAlbumMenu();
+  menuPrevented=false;
+  frontCase.dispatchEvent({type:'keydown',key:'ContextMenu',
+    preventDefault(){menuPrevented=true;}});
+  assert(menuPrevented&&!element('.bf-album-menu').hidden&&trackOverlay.hidden,
+    'keyboard ContextMenu key opens album actions menu');
   api.closeAlbumMenu();
 
 
