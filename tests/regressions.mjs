@@ -26,7 +26,9 @@ export async function runTests(sources) {
   );
   const comet = new CometDClient(() => {}, () => {}, data => { assert(data.rescan === 0, 'scan payload forwarded'); libraryEvents++; });
   comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:1}); comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:0});
-  assert(libraryEvents === 1, 'one refresh per completed scan');
+  assert(libraryEvents === 1, 'one observation per completed scan');
+  comet.handleServerStatus({rescan:true}); comet.handleServerStatus({rescan:false});
+  assert(libraryEvents === 2, 'boolean scan-status changes are also observed once');
   const oldRpc = realRpc('0', ['players',0,1]); resetRpcSession();
   let rejected = false; try { await oldRpc; } catch (_) { rejected = true; }
   assert(rejected, 'old server RPC rejected');
