@@ -136,6 +136,18 @@ export async function runTests(sources) {
     'idle return never hides the playing cover, even temporarily');
   assert(frontCase.style.transform!==offCentreTransform,
     'playing cover slides back with the shelf instead of reopening');
+  // The library can replace an album object during a scan or reorder without
+  // changing the album identity; pinning must survive that replacement.
+  const refreshedPlayingAlbum=[...firstPlayingCover];
+  api.state().albums[firstPlayingIndex]=refreshedPlayingAlbum;
+  const beforeRefreshHideWrites=previewHideWrites.length;
+  api.stopFollowing();
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===firstPlayingCover,
+    'stable playing album ID keeps the cover open after a catalogue refresh');
+  assert(!previewHideWrites.slice(beforeRefreshHideWrites).includes(true),
+    'catalogue object replacement causes no cover hide event');
+  api.state().albums[firstPlayingIndex]=firstPlayingCover;
+
 
   // Short clicks are inert; dragging the enlarged cover scrolls the same
   // shelf with the same distance, momentum and snap as dragging the spines.
