@@ -501,7 +501,10 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if (data.get('version')!=CATALOGUE_SNAPSHOT_VERSION or
                     data.get('lms_url')!=self.lms_url or
                     not isinstance(data.get('albums'),list) or
+                    not all(isinstance(album,dict) for album in data['albums']) or
                     not isinstance(data.get('genres'),dict) or
+                    not all(isinstance(ids,list) and all(isinstance(i,str) for i in ids)
+                            for ids in data['genres'].values()) or
                     not isinstance(data.get('created'),(int,float)) or
                     not 0<=now-data['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS):
                 raise ValueError('Snapshot outdated')
@@ -557,7 +560,23 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                        'genre_indexes':len(snapshot['genres'])}
             else:
                 path=self._catalogue_snapshot_path()
-                state={'cached':path.is_file(),'source':'disk' if path.is_file() else 'none'}
+                if path.is_file():
+                    # Checking the recorded creation date avoids reporting an
+                    # expired on-disk snapshot as warm. Never contact LMS here.
+                    try:
+                        data=json.loads(path.read_bytes())
+                        age=max(0,time.time()-float(data['created']))
+                        valid=(data.get('version')==CATALOGUE_SNAPSHOT_VERSION and
+                               data.get('lms_url')==self.lms_url and
+                               age<CATALOGUE_SNAPSHOT_TTL_SECONDS)
+                        state={'cached':valid,'source':'disk',
+                               'age_seconds':round(age,1),
+                               'albums':len(data.get('albums',[])),
+                               'genre_indexes':len(data.get('genres',{}))}
+                    except (OSError,ValueError,KeyError,TypeError,AttributeError):
+                        state={'cached':False,'source':'invalid'}
+                else:
+                    state={'cached':False,'source':'none'}
         self._send_payload(200,json.dumps(state).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
     def _serve_catalogue(self)->None:
