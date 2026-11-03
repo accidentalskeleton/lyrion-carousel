@@ -137,6 +137,9 @@ async function setDisplayOrder(mode){
         if(generation===catalogueGeneration){
             orderBusy=false;updateBusyState();
             if(genreRefreshPending){genreRefreshPending=false;setDisplayOrder(orderMode).catch(error=>setConnection(error.message||'Could not filter genres',false))}
+            else if(libraryRefreshPending&&!libraryRefreshing&&!randomAnimating){
+                handleLibraryEvent();
+            }
         }
     }
 }
