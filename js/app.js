@@ -503,11 +503,14 @@ async function loadInitialCatalogue(){
     await setDisplayOrder(desiredOrderMode);
     lastSelected=-1;
 }
-async function refreshCatalogue(){
-    // LMS reports a completed library rescan through CometD. Invalidate the
-    // shared server snapshot before requesting fresh pages/ordering.
-    const invalidation=await fetch('/api/catalogue/invalidate',{method:'POST'});
-    if(!invalidation.ok)throw Error('Could not invalidate the catalogue snapshot');
+async function refreshCatalogue({invalidate=true}={}){
+    // Explicit/manual refreshes can invalidate the snapshot. An observed LMS
+    // scan has already been reconciled by Carousel's own server and must use
+    // that freshly prepared snapshot instead of scanning LMS twice.
+    if(invalidate){
+        const response=await fetch('/api/catalogue/invalidate',{method:'POST'});
+        if(!response.ok)throw Error('Could not invalidate the catalogue snapshot');
+    }
     const connection=connectionGeneration,anchor=albums[selectedIndex()]?.[6];
     const previousOrder=albums.filter(Boolean).map(album=>String(album[6]));
     cancelFollowAnimation();
@@ -559,17 +562,26 @@ async function selectStartupAlbum(status){
     prefetchAround(selectedIndex());
 }
 async function handleLibraryEvent(){
-    if(!liveCatalogue){
-        // A background LMS library scan can finish while Spotify is selected.
-        // Clear the saved LMS snapshot so returning to Library is up-to-date.
-        try{await fetch('/api/catalogue/invalidate',{method:'POST'})}catch(_){}
-        return;
-    }
+    // This is a passive LMS status observation, not a command from LMS.
+    // Carousel independently checks whether its library has changed.
     libraryRefreshPending=true;
     if(libraryRefreshing||randomAnimating||orderBusy)return;
     libraryRefreshing=true;updateBusyState();
-    try{while(libraryRefreshPending){libraryRefreshPending=false;await refreshCatalogue()}}
-    catch(_){scheduleReconnect()}
+    try{
+        while(libraryRefreshPending){
+            libraryRefreshPending=false;
+            const connection=connectionGeneration;
+            const response=await fetch('/api/catalogue/reconcile',{method:'POST'});
+            if(!response.ok)throw Error('Could not check the LMS catalogue');
+            const result=await response.json();
+            if(connection!==connectionGeneration)return;
+            // Genre membership can change after a scan even when the album
+            // records remain identical, so active filters warrant a refresh.
+            if(!result.changed&&!disabledGenres.size)continue;
+            if(!liveCatalogue||catalogueSource==='spotify')continue;
+            await refreshCatalogue({invalidate:false});
+        }
+    }catch(_){scheduleReconnect()}
     finally{libraryRefreshing=false;updateBusyState()}
 }
 const cometd=new CometDClient(applyStatus,state=>{root.dataset.liveUpdates=state==='live'?'true':state==='connecting'?'connecting':'false';emitStatus();if(state==='connecting')setConnection('Connecting to live updates…',false);else if(state==='live')setConnection(albumCountLabel()+' · live',true);else setConnection('Live updates lost · reconnecting',false)},handleLibraryEvent);
