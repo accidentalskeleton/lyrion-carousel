@@ -263,7 +263,7 @@ let frontPress=null,frontPressTimer=0;
 function cancelFrontPress(){clearTimeout(frontPressTimer);frontPressTimer=0;frontPress=null}
 function resumeFrontTimeout(){clearTimeout(frontTimer);frontTimer=!frontPreview.hidden&&!(playing&&String(frontPreviewAlbum?.[6])===String(playingAlbumId))&&FRONT_TIMEOUT_MS>0?setTimeout(()=>{frontTimer=0;const wasNonPlayingPreview=playing&&playingCarouselIndex()>=0&&!isPlayingCoverPinned();closeFrontPreview(true);if(wasNonPlayingPreview)returnToPlayingAlbum(true)},FRONT_TIMEOUT_MS):0}
 frontPreview.addEventListener('pointerdown',event=>{
-    if(randomAnimating||event.button!==0||!event.target.closest('.bf-front-case')||event.target.closest('button')||!frontPreviewAlbum)return;
+    if(randomAnimating||frontPress||event.button!==0||!event.target.closest('.bf-front-case')||event.target.closest('button')||!frontPreviewAlbum)return;
     cancelFrontPress();clearTimeout(frontTimer);frontTimer=0;
     const press={id:event.pointerId,x:event.clientX,y:event.clientY,album:frontPreviewAlbum,cancelled:false,long:false,scrolling:false};
     frontPress=press;
@@ -276,7 +276,7 @@ frontPreview.addEventListener('pointerdown',event=>{
 });
 frontPreview.addEventListener('pointermove',event=>{
     const press=frontPress;
-    if(!press||event.pointerId!==press.id||press.long)return;
+    if(!press||event.pointerId!==press.id||press.long||(press.cancelled&&!press.scrolling))return;
     const dx=event.clientX-press.x,dy=event.clientY-press.y;
     if(Math.hypot(dx,dy)>10){
         press.cancelled=true;
