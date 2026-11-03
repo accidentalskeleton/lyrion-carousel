@@ -404,6 +404,8 @@ export async function runTests(sources) {
   api.browseWithArrow(1);
   assert(preview.hidden&&Math.round(api.state().target)===lastAlbum+1,
     'arrow browsing wraps without opening the next album');
+  const previousKeepOpen=api.state().KEEP_PLAYING_OPEN;
+  api.applySetting('keepPlayingOpen',true);
   api.set({playing:true,playingAlbumId:20,position:5});
   const pinnedIndex=api.state().albums.findIndex(a=>a[6]===20);
   api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);
@@ -439,6 +441,7 @@ export async function runTests(sources) {
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:180,preventDefault(){}});
   assert(api.state().frontPreviewAlbum===api.state().albums[pinnedIndex]&&!preview.hidden,
     'wheel scrolling retains the currently playing cover without replacing it');
+  api.applySetting('keepPlayingOpen',previousKeepOpen);
 
   assert(api.coverCache().active===2,'cover preloader limits concurrent downloads');
   assert(imageRequests.every(image=>image.fetchPriority==='low'&&image.decoding==='async'),'cover warming uses low priority and async decoding');
