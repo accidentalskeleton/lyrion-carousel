@@ -57,6 +57,13 @@ export async function runTests(sources) {
   const element=selector=>{if(!elements.has(selector))elements.set(selector,new Element(selector));return elements.get(selector);};
   root.querySelector=selector=>selector.includes(':not(')?null:element(selector);
   const stage=element('.bf-stage'),preview=element('.bf-front-preview'),frontCase=new Element('case');
+  // Track hidden transitions as well as final state; a close/reopen flicker
+  // can otherwise pass assertions that inspect only the final DOM.
+  const previewHideWrites=[];
+  let previewHiddenState=preview.hidden;
+  Object.defineProperty(preview,'hidden',{get(){return previewHiddenState},set(value){
+    previewHideWrites.push(Boolean(value));previewHiddenState=Boolean(value);
+  }});
   preview.querySelector=()=>frontCase;
   const document=new Element('document');document.querySelectorAll=()=>[];document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
   const window=new Element('window');window.innerWidth=1000;window.innerHeight=600;
@@ -78,7 +85,7 @@ export async function runTests(sources) {
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
+    return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -108,6 +115,132 @@ export async function runTests(sources) {
   await settle(api.selectStartupAlbum({mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1}));
   api.set({connecting:false});
   assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden&&api.state().frontTimer===0,'startup opens playing cover without timeout');
+  // Reproduce the configured idle return: browse away from Now Playing,
+  // then animate back. The playing cover must not be hidden even for a frame.
+  const firstPlayingCover=api.state().frontPreviewAlbum;
+  const firstPlayingIndex=api.state().albums.indexOf(firstPlayingCover);
+  const firstPlayingPosition=api.state().position;
+  api.set({position:firstPlayingPosition+7});
+  api.draw();
+  const offCentreTransform=frontCase.style.transform;
+  const hideStart=previewHideWrites.length;
+  const returning=api.returnToPlayingAlbum(true);
+  await Promise.resolve();
+  assert(api.state().frontPreviewAlbum===firstPlayingCover&&!preview.hidden,
+    'playing cover remains mounted as automatic return begins');
+  await settle(returning);
+  assert(api.state().frontPreviewAlbum===firstPlayingCover&&!preview.hidden&&
+    api.geometry().frontPreviewIndex===firstPlayingIndex,
+    'idle return keeps the identical playing cover open');
+  assert(!previewHideWrites.slice(hideStart).includes(true),
+    'idle return never hides the playing cover, even temporarily');
+  assert(frontCase.style.transform!==offCentreTransform,
+    'playing cover slides back with the shelf instead of reopening');
+  // The library can replace an album object during a scan or reorder without
+  // changing the album identity; pinning must survive that replacement.
+  const refreshedPlayingAlbum=[...firstPlayingCover];
+  api.state().albums[firstPlayingIndex]=refreshedPlayingAlbum;
+  const beforeRefreshHideWrites=previewHideWrites.length;
+  api.stopFollowing();
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===firstPlayingCover,
+    'stable playing album ID keeps the cover open after a catalogue refresh');
+  assert(!previewHideWrites.slice(beforeRefreshHideWrites).includes(true),
+    'catalogue object replacement causes no cover hide event');
+  api.state().albums[firstPlayingIndex]=firstPlayingCover;
+
+
+  // Short clicks are inert; dragging the enlarged cover scrolls the same
+  // shelf with the same distance, momentum and snap as dragging the spines.
+  // Album Information is only reached through the long-press album menu.
+  const trackOverlay=element('.bf-track-overlay');
+  const coverTarget={closest:selector=>selector==='.bf-front-case'?frontCase:null};
+  const playbackBefore=rpcCalls.filter(command=>command[0]==='playlistcontrol').length;
+  const originalCover=api.state().frontPreviewAlbum;
+  const originalCoverIndex=api.geometry().frontPreviewIndex;
+  const originalCoverPosition=api.state().position;
+  assert(trackOverlay.hidden,'Album Information initially closed');
+  frontCase.dispatchEvent({type:'click',target:{closest:()=>null}});
+  assert(trackOverlay.hidden,'normal cover click never opens Album Information');
+
+  let prevented=false;
+  element('.bf-front-art').dispatchEvent({type:'keydown',key:'Enter',preventDefault(){prevented=true;}});
+  element('.bf-front-art').dispatchEvent({type:'keydown',key:' ',preventDefault(){prevented=true;}});
+  assert(!prevented&&trackOverlay.hidden,'Enter and Space on the artwork do not open Album Information');
+
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:31,clientX:300,clientY:90});
+  preview.dispatchEvent({type:'pointerup',pointerId:31});
+  assert(trackOverlay.hidden&&api.state().position===originalCoverPosition,
+    'short cover tap neither opens Album Information nor moves the shelf');
+  frontCase.dispatchEvent({type:'click',target:{closest:()=>null}});
+  assert(trackOverlay.hidden,'synthetic click after tap remains inert');
+
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:32,clientX:300,clientY:90});
+  time+=80;
+  preview.dispatchEvent({type:'pointermove',pointerId:32,clientX:190,clientY:95});
+  const draggingLeft=api.state().position;
+  assert(draggingLeft>originalCoverPosition&&stage.classList.contains('is-dragging'),
+    'dragging the cover left scrolls the shelf right like the spines');
+  time+=80;
+  preview.dispatchEvent({type:'pointermove',pointerId:32,clientX:120,clientY:95});
+  preview.dispatchEvent({type:'pointerup',pointerId:32});
+  assert(trackOverlay.hidden&&!stage.classList.contains('is-dragging')&&api.state().target>originalCoverPosition,
+    'releasing the cover drag snaps toward a neighbouring album without showing info');
+  assert(api.state().frontPreviewAlbum===originalCover&&!preview.hidden,
+    'swiping a pinned playing cover never opens the destination album');
+  api.set({position:originalCoverPosition});
+  api.openFrontPreview(originalCover,originalCoverIndex);
+
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:35,clientX:130,clientY:90});
+  time+=90;
+  preview.dispatchEvent({type:'pointermove',pointerId:35,clientX:270,clientY:93});
+  assert(api.state().position<originalCoverPosition,
+    'dragging the cover right scrolls the shelf left');
+  preview.dispatchEvent({type:'pointercancel',pointerId:35});
+  assert(!stage.classList.contains('is-dragging'),
+    'cancelled cover gesture resets the shelf drag state');
+  api.set({position:originalCoverPosition});
+  api.openFrontPreview(originalCover,originalCoverIndex);
+
+  const playTarget={closest:selector=>selector==='button'?element('.bf-front-play'):frontCase};
+  preview.dispatchEvent({type:'pointerdown',button:0,target:playTarget,pointerId:33,clientX:80,clientY:90});
+  frontCase.dispatchEvent({type:'click',target:playTarget});
+  assert(trackOverlay.hidden&&api.state().position===originalCoverPosition,
+    'Play button pointer interactions do not move the carousel or show information');
+  assert(rpcCalls.filter(command=>command[0]==='playlistcontrol').length===playbackBefore,
+    'cover gestures and short clicks never change playback');
+
+  // A long press must continue to expose the existing album action menu,
+  // rather than turning into a cover click or an opening-case animation.
+  const beforeLongPressTimers=new Set(timers.keys());
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:34,clientX:80,clientY:90});
+  const longPressId=[...timers.keys()].find(id=>!beforeLongPressTimers.has(id));
+  assert(longPressId!==undefined,'cover long-press timer is still registered');
+  const longPressCallback=timers.get(longPressId);
+  timers.delete(longPressId);
+  longPressCallback();
+  assert(!element('.bf-album-menu').hidden&&trackOverlay.hidden,
+    'long press shows album action menu without opening Album Information');
+  preview.dispatchEvent({type:'pointerup',pointerId:34});
+  assert(trackOverlay.hidden,'releasing long press never activates the cover');
+  element('.bf-track-list-open').onclick();
+  assert(!trackOverlay.hidden&&element('.bf-album-menu').hidden,
+    'Album Information remains available through the long-press menu item only');
+  api.closeTrackList();
+
+  let menuPrevented=false;
+  frontCase.dispatchEvent({type:'contextmenu',target:coverTarget,clientX:90,clientY:85,
+    preventDefault(){menuPrevented=true;}});
+  assert(menuPrevented&&!element('.bf-album-menu').hidden&&trackOverlay.hidden,
+    'right-click opens the same album actions menu without directly showing information');
+  api.closeAlbumMenu();
+  menuPrevented=false;
+  frontCase.dispatchEvent({type:'keydown',key:'ContextMenu',
+    preventDefault(){menuPrevented=true;}});
+  assert(menuPrevented&&!element('.bf-album-menu').hidden&&trackOverlay.hidden,
+    'keyboard ContextMenu key opens album actions menu');
+  api.closeAlbumMenu();
+
+
 
   const compilationAlbum=api.state().albums.find(album=>album?.[6]===20);
   const originalAlbumArtist=compilationAlbum[1];
@@ -212,7 +345,10 @@ export async function runTests(sources) {
   api.set({hover:api.state().albums.findIndex(a=>a[6]!==20)});api.updateMeta(true);
   assert(element('.bf-meta').children.length===1,'hover omits unrelated track');
   api.set({hover:-1});api.updateMeta(true);assert(element('.bf-meta').children.length===3,'outside hover shows playing track');
-  api.applySetting('keepPlayingOpen',false);api.stopFollowing();assert(preview.hidden,'off restores dismissal');
+  api.applySetting('keepPlayingOpen',false);
+  api.stopFollowing();
+  assert(!preview.hidden&&api.state().KEEP_PLAYING_OPEN===true,
+    'playing cover cannot be dismissed or disabled while playback is active');
   for(const mode of ['pause','stop']){
     api.set({playing:true,playingAlbumId:20});
     const index=api.state().albums.findIndex(a=>a[6]===20);
@@ -258,10 +394,12 @@ export async function runTests(sources) {
   assert(!element('#settings-panel-about').hidden,'arrow key selects about settings tab');
   tabs[5].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
-  assert(window.__lyrionCarouselSettings.keepPlayingOpen===true,'keep-open defaults on');
+  assert(api.state().KEEP_PLAYING_OPEN===true,
+    'the playing cover is permanently pinned regardless of old preferences');
   assert(window.__lyrionCarouselSettings.idle===45000&&window.__lyrionCarouselSettings.random===2000,'unsaved settings respect runtime defaults');
-  const keep=element('.bf-keep-playing-open');keep.value='false';keep.listeners.change[0]();
-  assert(storage.get('albumBrowserKeepPlayingOpen')==='false','keep-open choice persisted');
+  assert(!sources.index.includes('bf-keep-playing-open')&&
+    !sources.settings.includes('keepPlayingOpen:'),
+    'obsolete setting to close playing cover has been removed');
   await settle(api.connectLyrion());
   assert(root.dataset.ready==='true'&&stage.children.length>0,'complete connection reveals shelf');
   assert(!preview.hidden&&api.state().frontPreviewAlbum[6]===20,'complete connection opens playing album');
@@ -298,21 +436,72 @@ export async function runTests(sources) {
   api.openFrontPreview(api.state().albums[5],5);
   const playbackCalls=rpcCalls.filter(c=>c[0]==='playlistcontrol').length;
   api.browseWithArrow(1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[6],'right arrow advances open cover');
+  assert(preview.hidden&&api.state().frontPreviewAlbum===null&&Math.round(api.state().target)===6,
+    'arrow navigation closes a manually opened cover without opening the next');
   api.browseWithArrow(1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[7],'repeated arrow advances before animation finishes');
+  assert(preview.hidden&&Math.round(api.state().target)===7,
+    'repeated arrows move selection without opening covers');
   api.browseWithArrow(-1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[6],'left arrow reverses open preview');
-  api.openFrontPreview(api.state().albums.at(-1),api.state().albums.length-1);
+  assert(preview.hidden&&Math.round(api.state().target)===6,
+    'reverse arrow moves spines without opening a cover');
+  const lastAlbum=api.state().albums.length-1;
+  api.set({position:lastAlbum});
   api.browseWithArrow(1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[0],'keyboard preview wraps around catalogue');
-  api.closeFrontPreview();api.browseWithArrow(1);
-  assert(preview.hidden,'closed covers stay closed on arrow navigation');
-  api.set({playing:true,playingAlbumId:20});
+  assert(preview.hidden&&Math.round(api.state().target)===lastAlbum+1,
+    'arrow browsing wraps without opening the next album');
+  assert(api.state().KEEP_PLAYING_OPEN===true,
+    'playing-cover pinning remains enabled during navigation');
+  api.set({playing:true,playingAlbumId:20,position:5});
   const pinnedIndex=api.state().albums.findIndex(a=>a[6]===20);
-  api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);api.browseWithArrow(1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[(pinnedIndex+1)%api.state().albums.length],'arrow browses away from pinned playing cover');
-  assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===playbackCalls,'keyboard previews do not start playback');
+  api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);
+  api.browseWithArrow(1);
+  assert(api.state().frontPreviewAlbum===api.state().albums[pinnedIndex]&&!preview.hidden,
+    'arrow navigation leaves the currently playing cover pinned');
+  assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===playbackCalls,
+    'keyboard browsing never starts playback');
+
+  // Wheel browsing must never promote a spine to a preview. Once it stops,
+  // a deliberate tap on a spine is still allowed to open that album.
+  api.set({playing:false,position:5});
+  api.openFrontPreview(api.state().albums[5],5);
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:180,preventDefault(){}});
+  assert(preview.hidden&&api.state().frontPreviewAlbum===null,
+    'wheel scrolling dismisses a manually previewed album without opening another');
+  const wheelPosition=api.state().position;
+  const idleIndex=(Math.round(wheelPosition)+2)%api.state().albums.length;
+  const idleSpine={dataset:{index:String(idleIndex)}};
+  const idleTarget={closest:selector=>selector==='.bf-album'?idleSpine:null};
+  stage.dispatchEvent({type:'pointerdown',button:0,target:idleTarget,pointerId:51,clientX:100,clientY:80});
+  stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:51,clientX:100,clientY:80,stopImmediatePropagation(){}});
+  assert(preview.hidden,'spine press during wheel scrolling cannot open a cover');
+  time+=250;
+  api.set({position:Math.round(wheelPosition)});
+  stage.dispatchEvent({type:'pointerdown',button:0,target:idleTarget,pointerId:52,clientX:100,clientY:80});
+  stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:52,clientX:100,clientY:80,stopImmediatePropagation(){}});
+  assert(api.state().frontPreviewAlbum===api.state().albums[idleIndex]&&!preview.hidden,
+    'deliberate spine click opens its cover once scrolling has stopped');
+  // A subsequent spine drag must close the manually selected preview and
+  // should never promote the spine under the pointer at release.
+  api.set({playing:false,position:10});
+  api.openFrontPreview(api.state().albums[10],10);
+  const scrollSpine={dataset:{index:'12'}};
+  const scrollTarget={closest:selector=>selector==='.bf-album'?scrollSpine:null};
+  stage.dispatchEvent({type:'pointerdown',button:0,target:scrollTarget,pointerId:53,clientX:300,clientY:80});
+  time+=40;
+  stage.dispatchEvent({type:'pointermove',target:scrollTarget,pointerId:53,clientX:180,clientY:80});
+  stage.dispatchEvent({type:'pointerup',target:scrollTarget,pointerId:53,clientX:180,clientY:80,
+    stopImmediatePropagation(){}});
+  assert(preview.hidden&&api.state().frontPreviewAlbum===null,
+    'drag-scrolling the spines closes a manual cover and never opens a replacement');
+
+  api.set({playing:true,playingAlbumId:20,position:5});
+  api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:180,preventDefault(){}});
+  assert(api.state().frontPreviewAlbum===api.state().albums[pinnedIndex]&&!preview.hidden,
+    'wheel scrolling retains the currently playing cover without replacing it');
+  assert(api.state().KEEP_PLAYING_OPEN===true,
+    'wheel browsing cannot disable permanent playing-cover pinning');
+
   assert(api.coverCache().active===2,'cover preloader limits concurrent downloads');
   assert(imageRequests.every(image=>image.fetchPriority==='low'&&image.decoding==='async'),'cover warming uses low priority and async decoding');
   api.prefetchCoverWindow(10);api.prefetchCoverWindow(30);
@@ -354,6 +543,15 @@ export async function runTests(sources) {
   }
   if (sources.index) {
     assert(sources.index.includes('data-source="library"')&&sources.index.includes('data-source="spotify"'),'Library and Spotify source controls present');
+    assert(sources.index.includes('class="bf-front-case" tabindex="0"')&&
+      sources.index.includes('Swipe left or right to browse albums'),
+      'closed cover is keyboard-focusable and advertises horizontal browsing');
+    assert(!sources.index.includes('aria-label="Show album information"'),
+      'the closed cover is no longer a direct Album Information button');
+    assert(!sources.index.includes('gsap-jewel-poc')&&!sources.index.includes('cdn.jsdelivr.net/npm/gsap'),
+      'production page has no GSAP or open-case experiment dependencies');
+    assert(sources.index.includes('class="bf-front-play"'),
+      'separate Play button remains on the closed photographic case');
     assert(sources.index.includes('settings-panel-coffee')&&sources.index.includes('https://buymeacoffee.com/stuliet'),'Coffee settings panel present');
   }
   if (sources.albumBrowserCss) {
@@ -383,7 +581,36 @@ export async function runTests(sources) {
     assert(sources.app.includes('lmsProvider.search(value)'),'app search uses genre-aware LMS provider');
   }
   assert(sources.app.includes("'tags:altngidA'")&&sources.app.includes('trackGenres'),'LMS Album Information requests disc, artist and genre metadata');
+
+  if (sources.server) {
+    assert(!sources.server.includes('from disc_artwork import')&&
+      !sources.server.includes('/api/processed-disc/')&&
+      !sources.server.includes('/api/local-artwork/'),
+      'server no longer exposes the removed disc and booklet routes');
+    assert(sources.server.includes('jewel-case-realistic-v1.png')&&
+      sources.app.includes('case=realistic-v1'),
+      'realistic closed jewel-case artwork composition is preserved');
+  }
+  if (sources.debianBuild) {
+    assert(!sources.debianBuild.includes('disc_artwork.py')&&
+      sources.debianBuild.includes('cp -a "$PROJECT_DIR/assets" "$PROJECT_DIR/css" "$PROJECT_DIR/js"'),
+      'Debian package excludes removed disc module while retaining photographic assets');
+  }
+
   assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
+  assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
+    'closed-cover interaction no longer dispatches open-case events');
+  assert(sources.app.includes('beginShelfDrag(')&&sources.app.includes('moveShelfDrag(event,false)')&&
+    sources.app.includes('finishShelfDrag(false)'),
+    'cover reuses the existing spine drag and snap physics');
+  assert(!sources.app.includes('showTrackList(frontPreviewAlbum)')&&
+    !sources.app.includes('showTrackList(press.album)'),
+    'short cover presses do not open Album Information');
+  assert(sources.app.includes('lastShelfScrollAt')&&
+    sources.app.includes('if(shelfIsScrolling()||event.button!==0)return;'),
+    'spine clicks are suppressed during active wheel or drag scrolling');
+  assert(!/function browseWithArrow\([\s\S]*?function stopFollowing\(/.exec(sources.app)?.[0].includes('openFrontPreview('),
+    'arrow-key browsing cannot automatically open another cover');
   assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
 
   return checks;
@@ -395,5 +622,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.lmsProvider=await readFile(new URL('../js/providers/lms-provider.js',import.meta.url),'utf8');
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
+  sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
+  sources.debianBuild=await readFile(new URL('../packaging/debian/build-deb.sh',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }
