@@ -504,6 +504,10 @@ async function loadInitialCatalogue(){
     lastSelected=-1;
 }
 async function refreshCatalogue(){
+    // LMS reports a completed library rescan through CometD. Invalidate the
+    // shared server snapshot before requesting fresh pages/ordering.
+    const invalidation=await fetch('/api/catalogue/invalidate',{method:'POST'});
+    if(!invalidation.ok)throw Error('Could not invalidate the catalogue snapshot');
     const connection=connectionGeneration,anchor=albums[selectedIndex()]?.[6];
     const previousOrder=albums.filter(Boolean).map(album=>String(album[6]));
     cancelFollowAnimation();
@@ -555,7 +559,12 @@ async function selectStartupAlbum(status){
     prefetchAround(selectedIndex());
 }
 async function handleLibraryEvent(){
-    if(!liveCatalogue)return;
+    if(!liveCatalogue){
+        // A background LMS library scan can finish while Spotify is selected.
+        // Clear the saved LMS snapshot so returning to Library is up-to-date.
+        try{await fetch('/api/catalogue/invalidate',{method:'POST'})}catch(_){}
+        return;
+    }
     libraryRefreshPending=true;
     if(libraryRefreshing||randomAnimating||orderBusy)return;
     libraryRefreshing=true;updateBusyState();
