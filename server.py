@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
-import time, io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sys, threading
+import time, io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sqlite3, sys, threading
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -26,14 +26,13 @@ _IMAGE_CACHE_BYTES={}
 # catalogue HTTP requests; the on-disk snapshots survive application restarts.
 _CATALOGUE_LOCK=threading.RLock()
 _CATALOGUE_MEMORY={}
-CATALOGUE_SNAPSHOT_VERSION=2
+CATALOGUE_SNAPSHOT_VERSION=1
 CATALOGUE_SNAPSHOT_TTL_SECONDS=900
 CATALOGUE_MAX_SNAPSHOT_BYTES=64_000_000
 CATALOGUE_SORT_CACHE_ENTRIES=4
-# The colour index stores only validated artwork metadata. Metadata fetched by
-# ordinary spine batches updates it incrementally, with bounded disk writes.
-CATALOGUE_COLOUR_SAVE_THRESHOLD=32
-CATALOGUE_COLOUR_SAVE_INTERVAL_SECONDS=15
+# Store indexed cover colours in small SQLite transactions instead of rewriting
+# a full 10,000+ album snapshot whenever a user scrolls to new albums.
+COLOUR_INDEX_VERSION=1
 # The selected LMS belongs to the appliance, not solely to the web browser.
 # Keep it outside /artwork so Settings -> Clear Cache cannot reset it.
 LMS_SETTINGS_FILENAME='lyrion-carousel-lms.json'
@@ -531,16 +530,13 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             'lms_url':self.lms_url,
             'created':snapshot['created'],
             'albums':snapshot['albums'],
-            'genres':snapshot['genres'],
-            'colours':snapshot['colours']
+            'genres':snapshot['genres']
         },ensure_ascii=False,separators=(',',':')).encode('utf-8')
         if len(payload)>CATALOGUE_MAX_SNAPSHOT_BYTES:return
         temp=path.with_name(path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
         try:
             temp.write_bytes(payload)
             temp.replace(path)
-            snapshot['dirty_colours']=0
-            snapshot['last_colour_save']=time.monotonic()
         finally:
             temp.unlink(missing_ok=True)
 
@@ -562,47 +558,80 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     not isinstance(data.get('genres'),dict) or
                     not all(isinstance(ids,list) and all(isinstance(i,str) for i in ids)
                             for ids in data['genres'].values()) or
-                    not isinstance(data.get('colours'),dict) or
-                    not all(isinstance(k,str) and valid_colour_metadata(v)
-                            for k,v in data['colours'].items()) or
                     not isinstance(data.get('created'),(int,float)) or
                     not 0<=now-data['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS):
                 raise ValueError('Snapshot outdated')
             snapshot={'created':data['created'],'albums':data['albums'],
-                      'genres':data['genres'],'colours':data['colours'],
-                      'orders':OrderedDict(),'dirty_colours':0,
-                      'last_colour_save':time.monotonic()}
+                      'genres':data['genres'],'colours':self._load_colour_index(),
+                      'orders':OrderedDict()}
         except (OSError,ValueError,TypeError,AttributeError,UnicodeError):
             albums=[album for page in self._catalogue_pages() for album in page]
-            snapshot={'created':time.time(),'albums':albums,'genres':{},'colours':{},
-                      'orders':OrderedDict(),'dirty_colours':0,
-                      'last_colour_save':time.monotonic()}
+            snapshot={'created':time.time(),'albums':albums,'genres':{},
+                      'colours':self._load_colour_index(),'orders':OrderedDict()}
             try:self._save_catalogue_snapshot(snapshot)
             except OSError:pass  # Serving the live catalogue is more important than caching.
         _CATALOGUE_MEMORY[key]=snapshot
         return snapshot
 
+    def _colour_index_path(self,lms_url:str|None=None)->Path:
+        namespace=hashlib.sha256((lms_url or self.lms_url).encode()).hexdigest()[:24]
+        return self.cache_dir/f'colour-index-v{COLOUR_INDEX_VERSION}-{namespace}.sqlite3'
+
+    def _load_colour_index(self)->dict:
+        """Load previously indexed colours; bad records are ignored safely."""
+        colours={}
+        path=self._colour_index_path()
+        if not path.is_file():return colours
+        try:
+            with sqlite3.connect(path,timeout=5) as db:
+                for artwork_id,raw in db.execute('SELECT artwork_id, metadata FROM colours'):
+                    try:details=json.loads(raw)
+                    except (ValueError,TypeError,UnicodeError):continue
+                    if valid_colour_metadata(details):colours[artwork_id]=details
+        except (sqlite3.Error,OSError):
+            # Corruption is nonfatal: the ordinary .meta artwork cache remains.
+            return {}
+        return colours
+
+    def _save_colour_index(self,metadata:dict)->None:
+        """Write only changed colour rows; the large album JSON stays untouched."""
+        values=[(str(artwork_id),json.dumps(details,separators=(',',':')))
+                for artwork_id,details in metadata.items()
+                if valid_colour_metadata(details)]
+        if not values:return
+        with sqlite3.connect(self._colour_index_path(),timeout=5) as db:
+            db.execute('CREATE TABLE IF NOT EXISTS colours ('
+                       'artwork_id TEXT PRIMARY KEY, metadata TEXT NOT NULL)')
+            db.executemany('INSERT OR REPLACE INTO colours (artwork_id,metadata) VALUES (?,?)',values)
+
+    def _colour_index_count(self)->int:
+        """Read count for diagnostics without loading thousands of entries."""
+        path=self._colour_index_path()
+        if not path.is_file():return 0
+        try:
+            with sqlite3.connect(path,timeout=5) as db:
+                return int(db.execute('SELECT count(*) FROM colours').fetchone()[0])
+        except (sqlite3.Error,OSError):return 0
+
     def _remember_catalogue_colours(self,metadata:dict)->int:
-        """Index successful spine batches without reserialising every album."""
+        """Index successful spine batches and invalidate prepared colour orders."""
         with _CATALOGUE_LOCK:
+            # Save metadata even when the full album catalogue is not loaded yet.
+            # These colours will be available on the first catalogue request.
             snapshot=_CATALOGUE_MEMORY.get(self._catalogue_snapshot_key())
-            if not snapshot or time.time()-snapshot['created']>=CATALOGUE_SNAPSHOT_TTL_SECONDS:
-                return 0
-            changed=0
+            changed={}
             for artwork_id,details in metadata.items():
                 if not valid_colour_metadata(details):continue
-                if snapshot['colours'].get(artwork_id)!=details:
-                    snapshot['colours'][artwork_id]=details
-                    changed+=1
-            if changed:
-                snapshot['dirty_colours']+=changed
+                if snapshot and snapshot['colours'].get(artwork_id)==details:continue
+                changed[artwork_id]=details
+            if not changed:return 0
+            try:self._save_colour_index(changed)
+            except (sqlite3.Error,OSError):pass
+            if snapshot:
+                snapshot['colours'].update(changed)
                 for key in tuple(snapshot['orders']):
                     if key[0]=='colour':snapshot['orders'].pop(key,None)
-                if (snapshot['dirty_colours']>=CATALOGUE_COLOUR_SAVE_THRESHOLD or
-                        time.monotonic()-snapshot['last_colour_save']>=CATALOGUE_COLOUR_SAVE_INTERVAL_SECONDS):
-                    try:self._save_catalogue_snapshot(snapshot)
-                    except OSError:pass
-            return changed
+            return len(changed)
 
     def _catalogue_genre_ids(self,snapshot,genres:set[int])->set[str]:
         """Index each excluded genre once; reuse across orders and restarts."""
@@ -660,7 +689,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                                'age_seconds':round(age,1),
                                'albums':len(data.get('albums',[])),
                                'genre_indexes':len(data.get('genres',{})),
-                               'colour_indexes':len(data.get('colours',{}))}
+                               'colour_indexes':self._colour_index_count()}
                     except (OSError,ValueError,KeyError,TypeError,AttributeError):
                         state={'cached':False,'source':'invalid'}
                 else:
@@ -701,8 +730,8 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                             for artwork_id,details in fresh.items():
                                 if isinstance(details,dict):
                                     snapshot['colours'][artwork_id]=details
-                            try:self._save_catalogue_snapshot(snapshot)
-                            except OSError:pass
+                            try:self._save_colour_index(fresh)
+                            except (sqlite3.Error,OSError):pass
                         metadata=snapshot['colours']
                         albums=[dict(album,spine_metadata=metadata.get(str(album.get('artwork_track_id'))))
                                 for album in albums]
