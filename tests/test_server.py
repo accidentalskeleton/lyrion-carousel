@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -252,6 +253,162 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(data['spine_color'], '#abcdef')
         self.assertIn(data['spine_font'], server.SPINE_FONTS)
         self.assertEqual(data, json.loads(meta_path.read_bytes()))
+
+    def test_colour_sqlite_connections_are_closed_on_success_and_errors(self):
+        """sqlite3's transaction context does not close connections in Python 3.13."""
+        colour='#00ff00'
+        details={'spine_color':colour,'text_color':'#111417',
+                 'spine_font':server.SPINE_FONTS[0],
+                 'colour_index':server.colour_sort_index(colour)}
+        original_connect=sqlite3.connect
+        connections=[]
+
+        class TrackingConnection(sqlite3.Connection):
+            was_closed=False
+
+            def close(self):
+                self.was_closed=True
+                return super().close()
+
+        def tracked_connect(*args,**kwargs):
+            kwargs['factory']=TrackingConnection
+            db=original_connect(*args,**kwargs)
+            connections.append(db)
+            return db
+
+        with patch.object(server.sqlite3,'connect',side_effect=tracked_connect):
+            self.handler._save_colour_index({'a':details})
+            self.assertEqual(self.handler._load_colour_index(),{'a':details})
+            self.assertEqual(self.handler._colour_index_count(),1)
+            path=self.handler._colour_index_path()
+            path.write_bytes(b'not a sqlite database')
+            self.assertEqual(self.handler._load_colour_index(),{})
+            self.assertEqual(self.handler._colour_index_count(),0)
+
+        self.assertGreaterEqual(len(connections),5)
+        self.assertTrue(all(db.was_closed for db in connections),
+                        'Every SQLite connection must be explicitly closed')
+
+    def test_spine_metadata_post_populates_persistent_colour_index(self):
+        colour='#ff00ff'
+        meta={'spine_color':colour,'text_color':'#f5f2ea',
+              'spine_font':server.SPINE_FONTS[0],
+              'colour_index':server.colour_sort_index(colour)}
+        body=json.dumps({'artwork_ids':['first','first','missing']}).encode()
+        self.handler.headers={'Content-Length':str(len(body))}
+        self.handler.rfile=io.BytesIO(body)
+        with patch.object(self.handler,'_artwork_metadata',
+                          side_effect=lambda key: meta if key=='first' else None):
+            self.handler._serve_metadata_batch()
+        self.assertEqual(self.handler._colour_index_count(),1)
+        self.assertEqual(self.handler._load_colour_index(),{'first':meta})
+        payload=json.loads(self.responses[-1][1])
+        self.assertEqual(payload['metadata']['first'],meta)
+        self.assertIsNone(payload['metadata']['missing'])
+
+    def test_damaged_colour_database_falls_back_to_metadata_files(self):
+        path=self.handler._colour_index_path()
+        path.write_bytes(b'not SQLite data')
+        self.assertEqual(self.handler._load_colour_index(),{})
+        self.assertEqual(self.handler._colour_index_count(),0)
+        rows=[[{'id':1,'artist':'A','album':'Album','artwork_track_id':'art'}]]
+        colour='#ffff00'
+        meta={'spine_color':colour,'text_color':'#111417',
+              'spine_font':server.SPINE_FONTS[0],
+              'colour_index':server.colour_sort_index(colour)}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(rows)):
+            self.handler.path='/api/catalogue?order=colour'
+            with patch.object(self.handler,'_artwork_metadata',return_value=meta):
+                self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['count'],1)
+
+    def test_colour_sort_reuses_index_and_only_computes_missing_spines(self):
+        albums=[[{'id':1,'artist':'A','album':'Red','artwork_track_id':'red'},
+                 {'id':2,'artist':'B','album':'Green','artwork_track_id':'green'},
+                 {'id':3,'artist':'C','album':'Blue','artwork_track_id':'blue'}]]
+        def metadata(colour):
+            return {'spine_color':colour,'text_color':'#f5f2ea',
+                    'spine_font':server.SPINE_FONTS[0],
+                    'colour_index':server.colour_sort_index(colour)}
+        values={'red':metadata('#ff0000'),'green':metadata('#00ff00'),
+                'blue':metadata('#0000ff')}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(albums)):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        self.assertEqual(self.handler._remember_catalogue_colours({'red':values['red']}),1)
+        with patch.object(self.handler,'_artwork_metadata',side_effect=lambda key: values[key]) as compute:
+            self.handler.path='/api/catalogue?order=colour'
+            self.handler._serve_catalogue()
+        self.assertEqual(compute.call_count,2)
+        self.assertEqual({call.args[0] for call in compute.call_args_list},{'green','blue'})
+        self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,2,3])
+        self.assertEqual(self.handler._load_colour_index(),values)
+        # Memory cleared to emulate service restart; SQLite is authoritative.
+        server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
+        with patch.object(self.handler,'_artwork_metadata',side_effect=AssertionError('Recomputed indexed colour')):
+            self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['count'],3)
+        self.handler._serve_catalogue_status()
+        self.assertEqual(json.loads(self.responses[-1][1])['colour_indexes'],3)
+
+    def test_colour_batch_persists_without_rewriting_large_catalogue(self):
+        rows=[[{'id':i,'artist':'A','album':str(i),'artwork_track_id':str(i)}
+               for i in range(1000)]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(rows)):
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        catalogue_path=self.handler._catalogue_snapshot_path()
+        original=catalogue_path.read_bytes()
+        def metadata():
+            color='#888888'
+            return {'spine_color':color,'text_color':'#f5f2ea',
+                    'spine_font':server.SPINE_FONTS[0],
+                    'colour_index':server.colour_sort_index(color)}
+        first={str(i):metadata() for i in range(100)}
+        second={str(i):metadata() for i in range(100,200)}
+        self.assertEqual(self.handler._remember_catalogue_colours(first),100)
+        self.assertEqual(self.handler._remember_catalogue_colours(second),100)
+        self.assertEqual(catalogue_path.read_bytes(),original)
+        self.assertEqual(self.handler._colour_index_count(),200)
+        server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
+        with patch.object(self.handler,'_catalogue_pages',side_effect=AssertionError('Unnecessary LMS scan')):
+            snapshot=self.handler._load_catalogue_snapshot()
+        self.assertEqual(len(snapshot['colours']),200)
+        self.assertEqual(len(snapshot['albums']),1000)
+
+    def test_colour_metadata_change_invalidates_prepared_colour_order(self):
+        albums=[[{'id':1,'artist':'A','album':'One','artwork_track_id':'one'},
+                 {'id':2,'artist':'B','album':'Two','artwork_track_id':'two'}]]
+        def metadata(colour):
+            return {'spine_color':colour,'text_color':'#111417',
+                    'spine_font':server.SPINE_FONTS[0],
+                    'colour_index':server.colour_sort_index(colour)}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(albums)):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        self.handler._remember_catalogue_colours({'one':metadata('#ff0000'),
+                                                  'two':metadata('#0000ff')})
+        self.handler.path='/api/catalogue?order=colour'
+        with patch.object(self.handler,'_artwork_metadata',side_effect=AssertionError('All colours indexed')):
+            self.handler._serve_catalogue()
+            self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,2])
+            self.handler._remember_catalogue_colours({'one':metadata('#00ffff')})
+            self.handler._remember_catalogue_colours({'two':metadata('#ff0000')})
+            self.handler._serve_catalogue()
+            self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[2,1])
+
+    def test_invalid_colour_metadata_is_not_indexed(self):
+        rows=[[{'id':1,'artist':'A','album':'First','artwork_track_id':'x'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(rows)):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        bogus={'spine_color':'#ff0000','text_color':'#ffffff',
+               'spine_font':server.SPINE_FONTS[0],'colour_index':-1}
+        self.assertEqual(self.handler._remember_catalogue_colours({'x':bogus}),0)
+        cache=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
+        self.assertFalse(cache['colours'])
+        self.assertEqual(self.handler._colour_index_count(),0)
+        self.assertFalse(server.valid_colour_metadata(bogus))
 
     def test_colour_index_orders_rainbow_then_neutrals(self):
         colours = ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#000000', '#888888', '#ffffff']
