@@ -152,7 +152,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         super().__init__(*args,directory=directory,**kwargs)
     def end_headers(self)->None:
         """Revalidate application assets; image endpoints supply their own cache policy."""
-        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
+        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear','/api/catalogue','/api/catalogue/status','/api/catalogue/invalidate'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
             self.send_header('Cache-Control','no-cache')
         super().end_headers()
     def do_POST(self)->None:
