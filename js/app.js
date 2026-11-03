@@ -418,7 +418,14 @@ frontCaseElement.addEventListener('keydown',event=>{
     event.preventDefault();
     openAlbumMenu(frontPreviewAlbum,{clientX:window.innerWidth/2,clientY:window.innerHeight/2});
 });
-function updateHoveredAlbumFromPoint(){
+let lastHoverProbeAt=-Infinity;
+function updateHoveredAlbumFromPoint(force=false){
+    // Hit testing can force layout. During animation, sample hover at ~30 Hz
+    // rather than on every frame; pointer movement always updates immediately.
+    const now=performance.now();
+    if(!force&&now-lastHoverProbeAt<32)return;
+    lastHoverProbeAt=now;
+    if(lastPointerClientX<0&&hoveredAlbumIndex===-1)return;
     let index=-1;
     if(lastPointerClientX>=0){
         const hit=document.elementFromPoint(lastPointerClientX,lastPointerClientY);
@@ -605,10 +612,10 @@ root.addEventListener('contextmenu',event=>event.preventDefault());
 root.addEventListener('pointerdown',event=>{if(event.button!==0)event.stopPropagation()},true);
 document.addEventListener('pointermove',event=>{
     if((event.clientX!==lastPointerClientX||event.clientY!==lastPointerClientY)&&(stage.contains(event.target)||frontPreview.contains(event.target)))noteUserActivity();
-    lastPointerClientX=event.clientX;lastPointerClientY=event.clientY;updateHoveredAlbumFromPoint();
+    lastPointerClientX=event.clientX;lastPointerClientY=event.clientY;updateHoveredAlbumFromPoint(true);
 },{passive:true});
 document.addEventListener('pointerout',event=>{
-    if(!event.relatedTarget){lastPointerClientX=lastPointerClientY=-1;updateHoveredAlbumFromPoint()}
+    if(!event.relatedTarget){lastPointerClientX=lastPointerClientY=-1;updateHoveredAlbumFromPoint(true)}
 });
 function closeAlbumMenu(){clearTimeout(menuIdleTimer);menuIdleTimer=0;albumMenu.hidden=true;menuAlbum=null}
 function openAlbumMenu(album,event){closeAlbumMenu();closeOrderMenu();menuAlbum=album;const spotify=album?.[13]==='spotify';playNowButton.hidden=spotify;playNextButton.hidden=spotify;addQueueButton.hidden=spotify;trackListOpen.hidden=false;albumMenuTitle.textContent=album[0]+' — '+album[1];albumMenu.hidden=false;const width=220,left=Math.min(event.clientX,window.innerWidth-width-12),top=Math.min(event.clientY,window.innerHeight-130);albumMenu.style.left=Math.max(12,left)+'px';albumMenu.style.top=Math.max(12,top)+'px';if(MENU_TIMEOUT_MS>0)menuIdleTimer=setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS);playNextButton.focus()}
