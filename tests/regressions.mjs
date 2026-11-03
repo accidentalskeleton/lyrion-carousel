@@ -78,7 +78,7 @@ export async function runTests(sources) {
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
+    return {prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -145,6 +145,22 @@ export async function runTests(sources) {
   assert(trackOverlay.hidden,'Play button does not activate the cover information control');
   assert(rpcCalls.filter(command=>command[0]==='playlistcontrol').length===playbackBefore,
     'cover information interactions never change playback');
+
+  // A long press must continue to expose the existing album action menu,
+  // rather than turning into a cover click or an opening-case animation.
+  const beforeLongPressTimers=new Set(timers.keys());
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:34,clientX:80,clientY:90});
+  const longPressId=[...timers.keys()].find(id=>!beforeLongPressTimers.has(id));
+  assert(longPressId!==undefined,'cover long-press timer is still registered');
+  const longPressCallback=timers.get(longPressId);
+  timers.delete(longPressId);
+  longPressCallback();
+  assert(!element('.bf-album-menu').hidden&&trackOverlay.hidden,
+    'long press shows album action menu without opening Album Information');
+  preview.dispatchEvent({type:'pointerup',pointerId:34});
+  assert(trackOverlay.hidden,'releasing long press never activates the cover');
+  api.closeAlbumMenu();
+
 
 
   const compilationAlbum=api.state().albums.find(album=>album?.[6]===20);
