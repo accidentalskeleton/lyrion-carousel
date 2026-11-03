@@ -12,10 +12,39 @@ let DISPLAY_STYLE='shelf',COVER_SIZE=512;
 let PAGE_SIZE=40,DISPLAY_ALBUM_COUNT=30,IDLE_RETURN_MS=30000,MENU_TIMEOUT_MS=10000,FRONT_TIMEOUT_MS=10000,RECONNECT_MAX_MS=30000,RANDOM_SCROLL_MAX_MS=3000,SEARCH_LIMIT=100;
 const demoAlbums=[['Night Geometry','The Meridian','linear-gradient(145deg,#0f3155,#d14e45)','rgba(244,190,76,.9)','8%','18deg'],['Blue Hours','Harbour Lights','linear-gradient(145deg,#0e223a,#458ca5)','linear-gradient(90deg,#d5eef0 48%,#193a61 48%)','2px','-12deg'],['Still Moving','Northbound','linear-gradient(145deg,#4b1f2c,#de8a55)','rgba(30,16,24,.72)','50%','0deg'],['Parallel Lines','Signal Path','linear-gradient(145deg,#e8dfca,#9c2828)','repeating-linear-gradient(90deg,#181818 0 9px,transparent 9px 18px)','0','24deg'],['After Image','Low Season','linear-gradient(145deg,#192019,#557557)','radial-gradient(circle at 35% 35%,#e0c895 0 12%,transparent 13%),radial-gradient(circle,#182219 0 48%,transparent 49%)','50%','0deg']];
 let playerPower=null,powerPending=false;let playingSource='unknown',albums=demoAlbums.slice(),orderMode='artistAlbum',desiredOrderMode='artistAlbum',orderBusy=false,nodes=[],renderedWindowAnchor=-1,renderedWindowCount=0,prefetchedWindowPage=-1,playerId='',playingAlbumId=null,progressTimer=0,reconnectTimer=0,reconnectDelay=1000,connecting=false,totalAlbums=albums.length,libraryAlbumCount=albums.length,liveCatalogue=false,loadedBatches=new Set(),loadingBatches=new Map(),catalogueGeneration=0,albumPositionById=new Map(),positionIndexPromise=null,nowAlbumTitle='',nowAlbumArtist='',nowTrackTitle='',nowTrackArtist='',nowTrackNumber='',playbackSeconds=0,trackDuration=0,statusUpdatedAt=performance.now(),searchTimer=0,searchToken=0,idleTimer=0,idleReturnAlbumId=null,lastActivityAt=Date.now();
-const spineMetaCache=new Map(),spineMetaPending=new Map();let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
+const SPINE_META_CACHE_LIMIT=1024,SPINE_META_QUEUE_LIMIT=256;
+const spineMetaCache=new Map(),spineMetaPending=new Map(),spineMetaBatchQueue=new Map();
+let spineMetaBatchTimer=0,spineMetaBatchesActive=0,spineMetaGeneration=0;
+const albumIndexCache=new Map();
+function rememberSpineMeta(url,meta){
+    if(!url||!meta)return;
+    spineMetaCache.delete(url);spineMetaCache.set(url,meta);
+    while(spineMetaCache.size>SPINE_META_CACHE_LIMIT)spineMetaCache.delete(spineMetaCache.keys().next().value);
+}
+function clearSpineMetadata(){
+    spineMetaGeneration++;clearTimeout(spineMetaBatchTimer);spineMetaBatchTimer=0;
+    // In-flight old-generation requests may still finish, but must not
+    // throttle metadata for a newly selected LMS or cleared artwork cache.
+    spineMetaBatchesActive=0;
+    for(const job of spineMetaBatchQueue.values())job.resolve(null);
+    spineMetaBatchQueue.clear();spineMetaCache.clear();spineMetaPending.clear();
+}
+function indexForAlbumId(id){
+    if(id===null||id===undefined)return -1;
+    const key=String(id),cached=albumIndexCache.get(key);
+    if(cached!==undefined&&albums[cached]&&String(albums[cached][6])===key)return cached;
+    const found=albums.findIndex(album=>album&&String(album[6])===key);
+    if(found<0)albumIndexCache.delete(key);else albumIndexCache.set(key,found);
+    return found;
+}
+function rebuildAlbumIndex(){
+    albumIndexCache.clear();
+    albums.forEach((album,index)=>{if(album?.[6]!=null)albumIndexCache.set(String(album[6]),index)});
+}
+let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
 const selectedIndex=()=>modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
-function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=3&server='+artworkNamespace:'';if(album.spine_metadata)spineMetaCache.set(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
+function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=3&server='+artworkNamespace:'';if(album.spine_metadata)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
 function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg','spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId]}
 const lmsProvider=createLmsProvider({
     mapAlbum:mapLyrionAlbum,getPlayerId:()=>playerId,getPageSize:()=>PAGE_SIZE,getSearchLimit:()=>SEARCH_LIMIT,
@@ -29,7 +58,7 @@ const currentProvider=()=>catalogueProviders[catalogueSource];
 async function loadSpotifyCatalogue(){
     setConnection('Loading Spotify albums…',true);
     const result=await spotifyProvider.load();
-    albums=result.albums;totalAlbums=result.total;libraryAlbumCount=result.libraryCount;catalogueGeneration++;liveCatalogue=result.live;
+    albums=result.albums;totalAlbums=result.total;libraryAlbumCount=result.libraryCount;catalogueGeneration++;liveCatalogue=result.live;rebuildAlbumIndex();
     loadedBatches=new Set();loadingBatches=new Map();albumPositionById=new Map();positionIndexPromise=null;prefetchedWindowPage=-1;
     orderMode=desiredOrderMode='artistAlbum';
     position=target=0;hoveredAlbumIndex=-1;lastSelected=-1;closeFrontPreview();renderAlbums();draw();setConnection(albumCountLabel()+' · Spotify',true);
@@ -80,7 +109,7 @@ async function setDisplayOrder(mode){
         if(mode==='random')albums.sort(()=>Math.random()-.5);
         else if(mode==='colour')mode='artistAlbum';
         if(mode!=='random')albums.sort((a,b)=>(mode==='album'?(a[0]+'\0'+a[1]):(a[1]+'\0'+a[0])).localeCompare(mode==='album'?(b[0]+'\0'+b[1]):(b[1]+'\0'+b[0])));
-        const i=albums.findIndex(a=>a&&String(a[6])===String(selected));position=target=i>=0?i:0;updateOrderToggle();renderAlbums();draw();return;
+        rebuildAlbumIndex();const i=indexForAlbumId(selected);position=target=i>=0?i:0;updateOrderToggle();renderAlbums();draw();return;
     }
     if(orderBusy||randomAnimating||!Object.prototype.hasOwnProperty.call(orderLabels,mode))return;
     const generation=catalogueGeneration,selected=albums[selectedIndex()]?.[6];
@@ -93,13 +122,13 @@ async function setDisplayOrder(mode){
         if(!response.ok)throw Error('Could not prepare catalogue; restart the updated server');
         const result=await response.json();
         if(generation!==catalogueGeneration)return;
-        albums=(result.albums_loop||[]).map(mapLyrionAlbum);totalAlbums=albums.length;libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);
+        albums=(result.albums_loop||[]).map(mapLyrionAlbum);totalAlbums=albums.length;libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
         loadedBatches=new Set(Array.from({length:batchCount()},(_,i)=>i));
         orderMode=desiredOrderMode=mode;
         try{localStorage.setItem('albumBrowserOrderMode',mode)}catch(_){}
         updateOrderToggle();
-        const playingIndex=playing&&playingAlbumId!=null?albums.findIndex(album=>String(album[6])===String(playingAlbumId)):-1;
-        const nextIndex=playingIndex>=0?playingIndex:selected!=null?albums.findIndex(album=>album&&String(album[6])===String(selected)):selectedIndex();
+        const playingIndex=playing?playingCarouselIndex():-1;
+        const nextIndex=playingIndex>=0?playingIndex:selected!=null?indexForAlbumId(selected):selectedIndex();
         if(nextIndex>=0)position=target=nextIndex;
         hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();
         if(playingIndex>=0)openFrontPreview(albums[playingIndex],playingIndex);
@@ -136,20 +165,76 @@ function pumpCoverQueue(){
         image.onload=()=>finish(true);image.onerror=()=>finish(false);image.src=url;
     }
 }
+function scheduleSpineMetaBatch(){
+    if(spineMetaBatchTimer||!spineMetaBatchQueue.size||spineMetaBatchesActive>=2)return;
+    spineMetaBatchTimer=setTimeout(()=>{spineMetaBatchTimer=0;flushSpineMetaBatch()},0);
+}
+async function flushSpineMetaBatch(){
+    if(!spineMetaBatchQueue.size||spineMetaBatchesActive>=2)return;
+    const jobs=[...spineMetaBatchQueue.values()].slice(0,64);
+    for(const job of jobs)spineMetaBatchQueue.delete(job.url);
+    spineMetaBatchesActive++;
+    const generation=spineMetaGeneration;
+    scheduleSpineMetaBatch(); // Up to two batches in flight.
+    let result=null;
+    try{
+        const response=await fetch('/api/art-meta',{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({artwork_ids:jobs.map(job=>job.id)})
+        });
+        if(response.ok)result=(await response.json()).metadata||null;
+    }catch(_){/* Missing spine metadata must never prevent browsing. */}
+    for(const job of jobs){
+        const meta=job.generation===spineMetaGeneration?result?.[job.id]||null:null;
+        if(meta)rememberSpineMeta(job.url,meta);
+        if(spineMetaPending.get(job.url)===job.promise)spineMetaPending.delete(job.url);
+        job.resolve(meta);
+    }
+    if(generation===spineMetaGeneration)spineMetaBatchesActive--;
+    scheduleSpineMetaBatch();
+}
 function fetchSpineMeta(album){
     const url=album?.[11];if(!url)return Promise.resolve(null);
-    if(spineMetaCache.has(url))return Promise.resolve(spineMetaCache.get(url));
+    if(spineMetaCache.has(url)){
+        const meta=spineMetaCache.get(url);
+        rememberSpineMeta(url,meta);return Promise.resolve(meta);
+    }
     if(spineMetaPending.has(url))return spineMetaPending.get(url);
-    const pending=(async()=>{
-        const response=await fetch(url,{cache:'force-cache'});
-        return response.ok?response.json():null;
-    })().then(meta=>{if(meta)spineMetaCache.set(url,meta);return meta}).catch(()=>null).finally(()=>{
-        if(spineMetaPending.get(url)===pending)spineMetaPending.delete(url);
-    });
+    const match=/^\/api\/art-meta\/([^?]+)/.exec(url);
+    let id=null;
+    if(match){try{id=decodeURIComponent(match[1])}catch(_){}}
+    if(id&&/^[A-Za-z0-9._:@%-]+$/.test(id)){
+        let resolve;const promise=new Promise(done=>{resolve=done});
+        spineMetaPending.set(url,promise);
+        spineMetaBatchQueue.set(url,{url,id,promise,resolve,generation:spineMetaGeneration});
+        // Browsing can outrun metadata processing. Drop old, no-longer-visible
+        // queued requests instead of retaining one for every library album.
+        while(spineMetaBatchQueue.size>SPINE_META_QUEUE_LIMIT){
+            const [expiredUrl,expired]=spineMetaBatchQueue.entries().next().value;
+            spineMetaBatchQueue.delete(expiredUrl);
+            if(spineMetaPending.get(expiredUrl)===expired.promise)spineMetaPending.delete(expiredUrl);
+            expired.resolve(null);
+        }
+        scheduleSpineMetaBatch();
+        return promise;
+    }
+    // Spotify's existing metadata endpoint is not part of the LMS batch API.
+    const generation=spineMetaGeneration;
+    const pending=fetch(url,{cache:'force-cache'})
+        .then(response=>response.ok?response.json():null)
+        .then(meta=>{
+            if(generation!==spineMetaGeneration)return null;
+            if(meta)rememberSpineMeta(url,meta);
+            return meta;
+        }).catch(()=>null).finally(()=>{
+            if(spineMetaPending.get(url)===pending)spineMetaPending.delete(url);
+        });
     spineMetaPending.set(url,pending);return pending;
 }
 function loadSpineMeta(album,element){
+    const url=album?.[11];
     fetchSpineMeta(album).then(meta=>{
+        if(element.dataset.index===undefined||album[11]!==url)return;
         if(meta?.spine_color)element.style.setProperty('--spine-color',meta.spine_color);
         if(meta?.text_color)element.style.setProperty('--spine-text',meta.text_color);
         if(meta?.spine_font)element.style.setProperty('--spine-font-family',meta.spine_font);
@@ -198,7 +283,14 @@ function syncFanDom(){
 }
 function syncShelfDom(){
     shelfDomFrame=0;
-    if(!frontPreview.hidden&&frontPreviewAlbum)frontPreviewIndex=albums.findIndex(album=>album===frontPreviewAlbum||(album&&frontPreviewAlbum[6]!=null&&String(album[6])===String(frontPreviewAlbum[6])));
+    if(!frontPreview.hidden&&frontPreviewAlbum){
+        const atIndex=albums[frontPreviewIndex];
+        if(atIndex!==frontPreviewAlbum&&
+           !(atIndex&&frontPreviewAlbum[6]!=null&&String(atIndex[6])===String(frontPreviewAlbum[6]))){
+            frontPreviewIndex=frontPreviewAlbum[6]!=null?
+                indexForAlbumId(frontPreviewAlbum[6]):albums.indexOf(frontPreviewAlbum);
+        }
+    }
     if(DISPLAY_STYLE==='fan'){syncFanDom();return;}
     updateShelfWindow();
     if(!nodes.length)return;
@@ -229,7 +321,7 @@ let pinnedRequest=0;
 let frontTimer=0,followingNowPlaying=false,followRequest=0,followAnimation=null;
 function playingCarouselIndex(){
     if(!playing)return -1;
-    if(playingAlbumId){const i=albums.findIndex(album=>album&&String(album[6])===String(playingAlbumId));if(i>=0)return i}
+    if(playingAlbumId){const i=indexForAlbumId(playingAlbumId);if(i>=0)return i}
     if(catalogueSource==='spotify'&&nowAlbumTitle){
         const norm=v=>String(v||'').trim().toLocaleLowerCase();
         return albums.findIndex(album=>album?.[13]==='spotify'&&norm(album[0])===norm(nowAlbumTitle)&&(!nowAlbumArtist||norm(album[1])===norm(nowAlbumArtist)));
@@ -338,7 +430,14 @@ frontCaseElement.addEventListener('keydown',event=>{
     event.preventDefault();
     openAlbumMenu(frontPreviewAlbum,{clientX:window.innerWidth/2,clientY:window.innerHeight/2});
 });
-function updateHoveredAlbumFromPoint(){
+let lastHoverProbeAt=-Infinity;
+function updateHoveredAlbumFromPoint(force=false){
+    // Hit testing can force layout. During animation, sample hover at ~30 Hz
+    // rather than on every frame; pointer movement always updates immediately.
+    const now=performance.now();
+    if(!force&&now-lastHoverProbeAt<32)return;
+    lastHoverProbeAt=now;
+    if(lastPointerClientX<0&&hoveredAlbumIndex===-1)return;
     let index=-1;
     if(lastPointerClientX>=0){
         const hit=document.elementFromPoint(lastPointerClientX,lastPointerClientY);
@@ -378,17 +477,17 @@ window.addEventListener('lyrion-carousel-lms-change',event=>{
     closeSearch();closeAlbumMenu();closeTrackList();
     connecting=false;playerId='';liveCatalogue=false;orderBusy=false;randomAnimating=false;randomAnimationDuration=0;randomPlay.classList.remove('is-busy');
     albumPositionById=new Map();positionIndexPromise=null;prefetchedWindowPage=-1;
-    spineMetaCache.clear();spineMetaPending.clear();
+    clearSpineMetadata();
     if(appStarted){setConnection('Connecting to Lyrion Music Server…',false);connectLyrion()}
 });
 window.addEventListener('lyrion-carousel-cache-cleared',()=>{
     artworkNamespace=artworkNamespace.split('&cache=')[0]+'&cache='+Date.now();
-    spineMetaCache.clear();spineMetaPending.clear();handleLibraryEvent();
+    clearSpineMetadata();handleLibraryEvent();
 });
 function scheduleReconnect(){if(reconnectTimer)return;const delay=reconnectDelay;setConnection('Reconnecting to Lyrion Music Server in '+Math.ceil(delay/1000)+'s…',false);reconnectTimer=setTimeout(()=>{reconnectTimer=0;connectLyrion()},delay);reconnectDelay=Math.min(reconnectDelay*2,RECONNECT_MAX_MS)}function resetReconnect(){clearTimeout(reconnectTimer);reconnectTimer=0;reconnectDelay=1000}
-function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length)albums[start+o]=a});loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
+function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length){albums[start+o]=a;if(a?.[6]!=null)albumIndexCache.set(String(a[6]),start+o)}});loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
 async function fetchBatch(batchNumber,render=true){if(!liveCatalogue||!totalAlbums)return[];const normal=modulo(batchNumber,batchCount());if(loadedBatches.has(normal)){const start=normal*PAGE_SIZE;return albums.slice(start,Math.min(start+PAGE_SIZE,totalAlbums))}if(loadingBatches.has(normal))return loadingBatches.get(normal);const generation=catalogueGeneration,promise=(async()=>{const start=normal*PAGE_SIZE,result=await rpc('0',['albums',start,PAGE_SIZE,'sort:artflow','tags:ajlysg']);if(generation!==catalogueGeneration)return[];return storeBatch(normal,result,render)})().finally(()=>{if(loadingBatches.get(normal)===promise)loadingBatches.delete(normal)});loadingBatches.set(normal,promise);return promise}
-function prefetchAround(index){if(!liveCatalogue||!totalAlbums)return;const b=Math.floor(modulo(index,totalAlbums)/PAGE_SIZE);if(b===prefetchedWindowPage)return;prefetchedWindowPage=b;[-1,0,1].forEach(o=>fetchBatch(b+o).catch(()=>{if(prefetchedWindowPage===b)prefetchedWindowPage=-1}))}async function locateAlbum(id,render=true){const found=albums.findIndex(album=>album&&String(album[6])===String(id));if(found>=0)return found;await ensurePositionIndex();return locateIndexedAlbum(id,albums,albumPositionById,PAGE_SIZE,b=>fetchBatch(b,render))}
+function prefetchAround(index){if(!liveCatalogue||!totalAlbums)return;const b=Math.floor(modulo(index,totalAlbums)/PAGE_SIZE);if(b===prefetchedWindowPage)return;prefetchedWindowPage=b;[-1,0,1].forEach(o=>fetchBatch(b+o).catch(()=>{if(prefetchedWindowPage===b)prefetchedWindowPage=-1}))}async function locateAlbum(id,render=true){const found=indexForAlbumId(id);if(found>=0)return found;await ensurePositionIndex();return locateIndexedAlbum(id,albums,albumPositionById,PAGE_SIZE,b=>fetchBatch(b,render))}
 async function loadInitialCatalogue(){
     const connection=connectionGeneration;
     const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artflow','tags:ajlysg']);
@@ -397,7 +496,7 @@ async function loadInitialCatalogue(){
     libraryAlbumCount=Number(result.count)||first.length;
     totalAlbums=libraryAlbumCount;
     if(!totalAlbums)throw Error('No albums');
-    albums=new Array(totalAlbums);first.forEach((a,i)=>albums[i]=a);
+    albums=new Array(totalAlbums);first.forEach((a,i)=>albums[i]=a);rebuildAlbumIndex();
     loadedBatches=new Set([0]);loadingBatches=new Map();catalogueGeneration++;
     orderBusy=false;albumPositionById=new Map();positionIndexPromise=null;prefetchedWindowPage=-1;
     liveCatalogue=true;root.dataset.catalogueSource=result.__lyrionCache?'cache':'live';
@@ -412,9 +511,9 @@ async function refreshCatalogue(){
     if(connection!==connectionGeneration)return;
     if(orderMode==='random'){
         const ranks=new Map(previousOrder.map((id,index)=>[id,index]));
-        albums.sort((a,b)=>(ranks.get(String(a[6]))??Infinity)-(ranks.get(String(b[6]))??Infinity));
+        albums.sort((a,b)=>(ranks.get(String(a[6]))??Infinity)-(ranks.get(String(b[6]))??Infinity));rebuildAlbumIndex();
     }
-    const index=albums.findIndex(album=>album&&String(album[6])===String(anchor));
+    const index=indexForAlbumId(anchor);
     position=target=index>=0?index:modulo(Math.round(position),totalAlbums);
     hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();ensurePlayingCover();
     setConnection(albumCountLabel()+' · library updated',true);
@@ -468,7 +567,7 @@ const cometd=new CometDClient(applyStatus,state=>{root.dataset.liveUpdates=state
 function openSearch(){searchOverlay.hidden=false;searchInput.focus();searchInput.select()}function closeSearch(){searchOverlay.hidden=true;searchToken++;clearTimeout(searchTimer)}function centreAlbumIndex(index,animate=true){if(randomAnimating||!Number.isFinite(index)||index<0)return;stopFollowing();const destination=nearestPositionForIndex(index);if(animate){target=destination;schedule()}else{position=target=destination;draw()}}
 async function navigateToAlbum(id){searchStatus.textContent='Locating album…';try{let i=albums.findIndex(album=>album&&String(album[6])===String(id));if(i<0&&catalogueSource!=='spotify')i=await locateAlbum(id);if(i<0)throw 0;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const arrived=await scrollToAlbumIndex(i);if(arrived){position=target=nearestPositionForIndex(i);renderAlbums();draw()}}catch(_){searchStatus.textContent='That album could not be located.'}}
 function renderSearchResults(results){searchResults.replaceChildren();for(const album of results){const b=document.createElement('button');b.className='bf-search-result';b.type='button';const img=document.createElement('img');img.alt='';if(album[8])img.src=album[8];const c=document.createElement('span'),t=document.createElement('strong'),a=document.createElement('span');t.textContent=album[0];a.textContent=album[1];c.append(t,a);b.append(img,c);b.onclick=()=>selectSearchAlbum(album);searchResults.append(b)}}
-async function selectSearchAlbum(album){let existing=albums.find(a=>a&&String(a[6])===String(album[6]));if(!existing&&catalogueSource==='spotify'){album[15]='search-preview';albums.push(album);totalAlbums=albums.length;existing=album;catalogueGeneration++;renderAlbums();draw()}const i=albums.indexOf(existing);if(i<0)return;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const destination=nearestPositionForIndex(i);const arrived=await scrollToAlbumIndex(i);if(!arrived)return;position=target=destination;hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw()}
+async function selectSearchAlbum(album){let existing=albums.find(a=>a&&String(a[6])===String(album[6]));if(!existing&&catalogueSource==='spotify'){album[15]='search-preview';albums.push(album);totalAlbums=albums.length;existing=album;catalogueGeneration++;rebuildAlbumIndex();renderAlbums();draw()}const i=albums.indexOf(existing);if(i<0)return;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const destination=nearestPositionForIndex(i);const arrived=await scrollToAlbumIndex(i);if(!arrived)return;position=target=destination;hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw()}
 async function runSearch(query){const value=query.trim(),token=++searchToken;if(value.length<2){searchResults.replaceChildren();searchStatus.textContent='Type at least two characters.';return}searchStatus.textContent=catalogueSource==='spotify'?'Searching Spotify albums…':'Searching LMS…';try{if(catalogueSource==='spotify'){const result=await spotifyProvider.search(value);if(token!==searchToken)return;const matches=result.albums;renderSearchResults(matches);searchStatus.textContent=matches.length?matches.length+' Spotify album'+(matches.length===1?'':'s'):'No matching Spotify albums.';return}const result=await lmsProvider.search(value);if(token!==searchToken)return;const matches=result.albums;renderSearchResults(matches);searchStatus.textContent=matches.length?matches.length+' matches':'No matching albums.'}catch(error){if(token!==searchToken)return;console.error('Carousel album search failed:',error);const message=String(error?.message||error||'Unknown error');searchStatus.textContent=/LMS server changed during request/.test(message)?'LMS settings changed. Please retry search.':/HTTP 50[234]|Failed to fetch|NetworkError|Load failed/i.test(message)?'Cannot reach LMS search. Check the server connection.':'Album search failed: '+message.slice(0,140);}}
 async function jumpToLetter(letter){searchStatus.textContent='Finding '+letter+'…';try{for(let b=0;b<batchCount();b++){await fetchBatch(b);const i=albums.findIndex(a=>a&&String(a[9]).toUpperCase()===letter);if(i>=0){closeSearch();centreAlbumIndex(i);return}}searchStatus.textContent='No albums under '+letter+'.'}catch(_){scheduleReconnect()}}for(const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){const b=document.createElement('button');b.className='bf-letter';b.type='button';b.textContent=letter;b.onclick=()=>jumpToLetter(letter);alphabet.append(b)}
 function cancelFollowAnimation(){followRequest++;if(followAnimation){const animation=followAnimation;followAnimation=null;target=position;animation.resolve(false)}}
@@ -518,17 +617,17 @@ async function returnToPlayingAlbum(immediate=false){
         }
     }catch(_){if(request===followRequest){idleReturnAlbumId=null;scheduleReconnect()}}
 }
-async function loadAlbum(album){if(!playerId||!album?.[6])return;const provider=album[13]==='spotify'?spotifyProvider:lmsProvider;const result=await provider.play(album);if(result?.saved){const selectedId=album[6],catalogue=await spotifyProvider.load();albums=catalogue.albums;totalAlbums=libraryAlbumCount=albums.length;catalogueGeneration++;const i=albums.findIndex(a=>a&&String(a[6])===String(selectedId));position=target=i>=0?i:0;renderAlbums();draw()}else if(result?.error)setConnection('Playing · could not save album to Spotify library',false);await refreshStatus();setTimeout(refreshStatus,350)}async function togglePlayback(){if(!playerId)return;try{await rpc(playerId,['pause']);await refreshStatus();setTimeout(refreshStatus,250)}catch(_){setConnection('Playback command failed',false);scheduleReconnect()}}
+async function loadAlbum(album){if(!playerId||!album?.[6])return;const provider=album[13]==='spotify'?spotifyProvider:lmsProvider;const result=await provider.play(album);if(result?.saved){const selectedId=album[6],catalogue=await spotifyProvider.load();albums=catalogue.albums;totalAlbums=libraryAlbumCount=albums.length;catalogueGeneration++;rebuildAlbumIndex();const i=indexForAlbumId(selectedId);position=target=i>=0?i:0;renderAlbums();draw()}else if(result?.error)setConnection('Playing · could not save album to Spotify library',false);await refreshStatus();setTimeout(refreshStatus,350)}async function togglePlayback(){if(!playerId)return;try{await rpc(playerId,['pause']);await refreshStatus();setTimeout(refreshStatus,250)}catch(_){setConnection('Playback command failed',false);scheduleReconnect()}}
 async function skipTrack(direction){if(!playerId)return;try{await rpc(playerId,['playlist','index',direction>0?'+1':'-1']);await refreshStatus();setTimeout(refreshStatus,250)}catch(_){setConnection(direction>0?'Could not play the next track':'Could not play the previous track',false);scheduleReconnect()}}
 const albumMenu=root.querySelector('.bf-album-menu'),albumMenuTitle=root.querySelector('.bf-album-menu-title'),clearPlayButton=root.querySelector('.bf-clear-play'),playNowButton=root.querySelector('.bf-play-now'),playNextButton=root.querySelector('.bf-play-next'),addQueueButton=root.querySelector('.bf-add-queue'),trackListOpen=root.querySelector('.bf-track-list-open'),trackOverlay=root.querySelector('.bf-track-overlay'),trackClose=root.querySelector('.bf-track-close'),trackPlayNow=root.querySelector('.bf-track-play-now'),trackTitle=root.querySelector('#bf-track-title'),trackDetails=root.querySelector('.bf-track-details'),trackStatus=root.querySelector('.bf-track-status'),trackList=root.querySelector('.bf-track-list');let menuAlbum=null,menuIdleTimer=0,longPressTimer=0,longPressAlbum=null,longPressX=0,longPressY=0;
 root.addEventListener('contextmenu',event=>event.preventDefault());
 root.addEventListener('pointerdown',event=>{if(event.button!==0)event.stopPropagation()},true);
 document.addEventListener('pointermove',event=>{
     if((event.clientX!==lastPointerClientX||event.clientY!==lastPointerClientY)&&(stage.contains(event.target)||frontPreview.contains(event.target)))noteUserActivity();
-    lastPointerClientX=event.clientX;lastPointerClientY=event.clientY;updateHoveredAlbumFromPoint();
+    lastPointerClientX=event.clientX;lastPointerClientY=event.clientY;updateHoveredAlbumFromPoint(true);
 },{passive:true});
 document.addEventListener('pointerout',event=>{
-    if(!event.relatedTarget){lastPointerClientX=lastPointerClientY=-1;updateHoveredAlbumFromPoint()}
+    if(!event.relatedTarget){lastPointerClientX=lastPointerClientY=-1;updateHoveredAlbumFromPoint(true)}
 });
 function closeAlbumMenu(){clearTimeout(menuIdleTimer);menuIdleTimer=0;albumMenu.hidden=true;menuAlbum=null}
 function openAlbumMenu(album,event){closeAlbumMenu();closeOrderMenu();menuAlbum=album;const spotify=album?.[13]==='spotify';playNowButton.hidden=spotify;playNextButton.hidden=spotify;addQueueButton.hidden=spotify;trackListOpen.hidden=false;albumMenuTitle.textContent=album[0]+' — '+album[1];albumMenu.hidden=false;const width=220,left=Math.min(event.clientX,window.innerWidth-width-12),top=Math.min(event.clientY,window.innerHeight-130);albumMenu.style.left=Math.max(12,left)+'px';albumMenu.style.top=Math.max(12,top)+'px';if(MENU_TIMEOUT_MS>0)menuIdleTimer=setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS);playNextButton.focus()}
@@ -654,7 +753,7 @@ function formatTime(seconds){const v=Math.max(0,Math.floor(Number(seconds)||0));
 function updateMeta(force=false){
     const selected=selectedIndex();
     if(stage.classList.contains('bf-shelf-active')&&selected!==renderedWindowAnchor)renderAlbums();
-    const playingIndex=playing&&playingAlbumId?albums.findIndex(album=>album&&String(album[6])===String(playingAlbumId)):-1;
+    const playingIndex=playing?playingCarouselIndex():-1;
     const displayIndex=hoveredAlbumIndex>=0?hoveredAlbumIndex:playingIndex;
     play.setAttribute('aria-label',playing?'Pause player':'Resume player');
     play.innerHTML='<span aria-hidden="true">'+(playing?'❚❚':'▶')+'</span>';

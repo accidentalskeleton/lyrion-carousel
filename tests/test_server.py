@@ -234,6 +234,40 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(meta_path.exists())
         self.assertFalse(image_path.with_suffix('.type').exists())
 
+    def test_incremental_cache_bytes_and_overwrite(self):
+        image_path, _ = self.paths('accounting')
+        self.handler._store_artwork(image_path, image_path.with_suffix('.type'), b'12345', 'image/png')
+        self.assertEqual(self.handler._cache_image_bytes(), 5)
+        self.handler._store_artwork(image_path, image_path.with_suffix('.type'), b'12', 'image/png')
+        self.assertEqual(self.handler._cache_image_bytes(), 2)
+        image2, _ = self.paths('accounting-two')
+        self.handler._store_artwork(image2, image2.with_suffix('.type'), b'1234', 'image/png')
+        self.assertEqual(self.handler._cache_image_bytes(), 6)
+        # Under budget, pruning must never enumerate the on-disk cache.
+        with patch.object(Path, 'glob', side_effect=AssertionError('Unexpected cache scan')):
+            self.handler._prune_artwork_cache(force=False)
+        self.assertTrue(image_path.exists())
+        self.assertTrue(image2.exists())
+
+    def test_incremental_counter_prunes_on_budget_and_reconciles(self):
+        first, _ = self.paths('prune-first')
+        second, _ = self.paths('prune-second')
+        self.handler._store_artwork(first, first.with_suffix('.type'), b'12345', 'image/png')
+        self.handler._store_artwork(second, second.with_suffix('.type'), b'12345', 'image/png')
+        with patch.object(server, 'MAX_ARTWORK_CACHE_BYTES', 6):
+            self.handler._prune_artwork_cache(force=False)
+            self.assertLessEqual(self.handler._cache_image_bytes(), 6)
+        self.assertEqual(sum(p.stat().st_size for p in self.handler.cache_dir.glob('*.img')),
+                         self.handler._cache_image_bytes())
+
+    def test_cache_clear_resets_accounting(self):
+        image_path, _ = self.paths('clear-tracked')
+        self.handler._store_artwork(image_path, image_path.with_suffix('.type'), b'12345', 'image/png')
+        self.assertEqual(self.handler._cache_image_bytes(), 5)
+        self.handler._clear_cache_files()
+        self.assertFalse(image_path.exists())
+        self.assertEqual(self.handler._cache_image_bytes(), 0)
+
     def test_response_limit_with_and_without_length(self):
         for headers in ({'Content-Length': '11'}, {}, {'Content-Length': 'not-a-number'}):
             response = io.BytesIO(b'x' * 11)

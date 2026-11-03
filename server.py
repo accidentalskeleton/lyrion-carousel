@@ -16,6 +16,11 @@ from PIL import Image, ImageStat, ImageOps
 # The pool below is shared across metadata requests; the optional artwork warmer
 # has its own single daemon thread so it does not occupy this foreground pool.
 METADATA_WORKERS=ThreadPoolExecutor(max_workers=6,thread_name_prefix="album-metadata")
+# Incremental image-cache accounting avoids scanning thousands of cache files
+# after every newly generated cover. The first write after restart establishes
+# a disk baseline; explicit pruning/clearing reconciles the counter.
+_IMAGE_CACHE_LOCK=threading.RLock()
+_IMAGE_CACHE_BYTES={}
 # Bound incoming JSON, upstream responses and stored image bytes separately.
 MAX_RPC_BYTES=1_000_000
 MAX_UPSTREAM_BYTES=8_000_000
@@ -187,8 +192,10 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         """Delete cache files and report the number removed to the Settings UI."""
         removed=0
         try:
-            for path in self.cache_dir.rglob('*'):
-                if path.is_file() or path.is_symlink(): path.unlink(); removed+=1
+            with _IMAGE_CACHE_LOCK:
+                for path in self.cache_dir.rglob('*'):
+                    if path.is_file() or path.is_symlink(): path.unlink(); removed+=1
+                _IMAGE_CACHE_BYTES.pop(str(self.cache_dir.resolve()),None)
             self._send_payload(200,json.dumps({'removed':removed}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except OSError as error: self._send_upstream_error(error)
     def _update_lms_url(self)->None:
@@ -322,7 +329,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                         if case: image.save(output,format='PNG')
                         else: image.save(output,format='JPEG',quality=85)
                         payload=output.getvalue(); content_type='image/png' if case else 'image/jpeg'
-                    self._store_artwork(variant,type_path,payload,content_type); self._prune_artwork_cache()
+                    self._store_artwork(variant,type_path,payload,content_type); self._prune_artwork_cache(force=False)
             self._send_payload(200,payload,content_type,cache_control='public, max-age=86400')
         except ValueError as error: self.send_error(400,str(error))
         except HTTPError as error: self._send_http_error(error)
@@ -337,7 +344,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         except (FileNotFoundError,OSError,UnicodeError): pass
         with urlopen(Request(self.lms_url+raw,method='GET'),timeout=15) as response:
             payload=self._read_limited(response,MAX_ARTWORK_BYTES); content_type=response.headers.get_content_type() or 'image/png'
-        self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache()
+        self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache(force=False)
         return key,payload,content_type
 
     def _serve_spotty_art_meta(self)->None:
@@ -499,7 +506,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 if case: image.save(output,format='PNG')
                 else: image.save(output,format='JPEG',quality=85)
             self._store_artwork(variant,variant.with_suffix('.type'),output.getvalue(),content_type)
-            self._prune_artwork_cache()
+            self._prune_artwork_cache(force=False)
         return variant,content_type
 
     def _serve_artwork_meta(self,artwork_id:str)->None:
@@ -567,7 +574,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             payload=self._read_limited(response,MAX_ARTWORK_BYTES)
             content_type=response.headers.get_content_type() or 'image/jpeg'
         self._store_artwork(cache_path,cache_path.with_suffix('.type'),payload,content_type)
-        self._prune_artwork_cache()
+        self._prune_artwork_cache(force=False)
 
     def _serve_artwork(self,artwork_id:str)->None:
         """Serve original LMS artwork from disk, fetching it only on a cache miss."""
@@ -577,33 +584,67 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if payload is not None: self._send_payload(200,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'HIT'}); return
         try:
             with urlopen(Request(f"{self.lms_url}/music/{quote(artwork_id,safe='')}/cover.jpg",method='GET'),timeout=10) as response:
-                payload=self._read_limited(response,MAX_ARTWORK_BYTES); content_type=response.headers.get_content_type() or 'image/jpeg'; self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache(); self._send_payload(response.status,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'MISS'})
+                payload=self._read_limited(response,MAX_ARTWORK_BYTES); content_type=response.headers.get_content_type() or 'image/jpeg'; self._store_artwork(cache_path,type_path,payload,content_type); self._prune_artwork_cache(force=False); self._send_payload(response.status,payload,content_type,cache_control='public, max-age=86400',extra_headers={'X-Album-Art-Cache':'MISS'})
         except HTTPError as error: self._send_http_error(error)
         except UpstreamPayloadTooLarge as error: self._send_upstream_error(error)
         except (URLError,TimeoutError,OSError) as error: self._send_upstream_error(error)
+    def _cache_image_bytes(self)->int:
+        """Lazy, process-local image byte counter, partitioned by cache directory."""
+        key=str(self.cache_dir.resolve())
+        with _IMAGE_CACHE_LOCK:
+            if key not in _IMAGE_CACHE_BYTES:
+                total=0
+                for path in self.cache_dir.glob('*.img'):
+                    try: total+=path.stat().st_size
+                    except OSError: continue
+                _IMAGE_CACHE_BYTES[key]=total
+            return _IMAGE_CACHE_BYTES[key]
+
     def _store_artwork(self,cache_path:Path,type_path:Path,payload:bytes,content_type:str)->None:
-        """Publish image bytes and their MIME sidecar via temporary-file replacements."""
-        if getattr(self,'background_warming',False):
-            used=sum(path.stat().st_size for path in self.cache_dir.glob('*.img') if path.exists())
-            if used+len(payload)>self._cache_limit_bytes(): raise CacheFull()
-        # Each file replacement is atomic; image and MIME sidecar are separate files.
-        suffix=f'.{os.getpid()}.{threading.get_ident()}.tmp'; image_temp=cache_path.with_name(cache_path.name+suffix); type_temp=type_path.with_name(type_path.name+suffix)
-        try: image_temp.write_bytes(payload); type_temp.write_text(content_type,encoding='ascii'); image_temp.replace(cache_path); type_temp.replace(type_path)
-        finally: image_temp.unlink(missing_ok=True); type_temp.unlink(missing_ok=True)
-    def _prune_artwork_cache(self)->None:
-        """Evict oldest-written images and matching sidecars until within the byte limit."""
+        """Atomically publish images while accounting for their byte delta."""
+        # Serialise cache writes and eviction, not image decoding/network I/O.
+        with _IMAGE_CACHE_LOCK:
+            key=str(self.cache_dir.resolve())
+            used=self._cache_image_bytes()
+            try: previous=cache_path.stat().st_size
+            except OSError: previous=0
+            proposed=used+len(payload)-previous
+            if getattr(self,'background_warming',False) and proposed>self._cache_limit_bytes(): raise CacheFull()
+            suffix=f'.{os.getpid()}.{threading.get_ident()}.tmp'
+            image_temp=cache_path.with_name(cache_path.name+suffix)
+            type_temp=type_path.with_name(type_path.name+suffix)
+            try:
+                image_temp.write_bytes(payload)
+                type_temp.write_text(content_type,encoding='ascii')
+                image_temp.replace(cache_path)
+                _IMAGE_CACHE_BYTES[key]=proposed
+                type_temp.replace(type_path)
+            finally:
+                image_temp.unlink(missing_ok=True)
+                type_temp.unlink(missing_ok=True)
+
+    def _prune_artwork_cache(self,force:bool=True)->None:
+        """Evict oldest images only when over budget; rescan on forced prune."""
         if getattr(self,'background_warming',False): return
-        entries=[]; total=0
-        for path in self.cache_dir.glob('*.img'):
-            try:
-                size=path.stat().st_size; entries.append((path.stat().st_mtime,path,size)); total+=size
-            except OSError: continue
-        # This is oldest-write eviction, not LRU: cache hits do not touch mtime.
-        for _,path,size in sorted(entries):
-            if total<=self._cache_limit_bytes(): break
-            try:
-                path.unlink(); path.with_suffix('.type').unlink(missing_ok=True); path.with_suffix('.meta').unlink(missing_ok=True); total-=size
-            except OSError: continue
+        with _IMAGE_CACHE_LOCK:
+            if not force and self._cache_image_bytes()<=self._cache_limit_bytes(): return
+            entries=[];total=0
+            for path in self.cache_dir.glob('*.img'):
+                try:
+                    info=path.stat()
+                    entries.append((info.st_mtime,path,info.st_size))
+                    total+=info.st_size
+                except OSError: continue
+            for _,path,size in sorted(entries):
+                if total<=self._cache_limit_bytes(): break
+                try:
+                    path.unlink()
+                    path.with_suffix('.type').unlink(missing_ok=True)
+                    path.with_suffix('.meta').unlink(missing_ok=True)
+                    total-=size
+                except OSError: continue
+            _IMAGE_CACHE_BYTES[str(self.cache_dir.resolve())]=total
+
     def _read_limited(self,response,limit:int)->bytes:
         """Bound buffered response bytes even when Content-Length is absent or incorrect."""
         content_length=response.headers.get('Content-Length')
