@@ -101,7 +101,8 @@ class ServerTests(unittest.TestCase):
             self.handler.path='/api/catalogue'
             self.handler._serve_catalogue()
         self.assertTrue(path.exists())
-        self.handler._invalidate_catalogue()
+        self.handler.path='/api/catalogue/invalidate'
+        self.handler.do_POST()
         self.assertEqual(json.loads(self.responses[-1][1]),{'invalidated':True})
         self.assertFalse(path.exists())
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
