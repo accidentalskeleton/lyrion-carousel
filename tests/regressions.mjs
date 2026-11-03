@@ -249,8 +249,8 @@ export async function runTests(sources) {
     album_id:20,album:'Album 020',albumartist:'Various Artists',
     artist:'Cast',title:'Walkaway',duration:215
   }],time:41});
-  assert(element('.bf-meta').children[0]?.children[1]?.textContent.includes('Various Artists'),
-    'compilation heading retains album artist');
+  assert(element('.bf-meta').children[0]?.children[1]?.textContent===' — Various Artists',
+    'Now Playing heading shows the album artist without a redundant Playing label');
   assert(element('.bf-meta').children[1]?.dataset.prefix==='Walkaway — Cast',
     'compilation now-playing line shows individual track artist');
 
@@ -266,6 +266,8 @@ export async function runTests(sources) {
     album_id:20,album:'Album 020',albumartist:'Artist',
     artist:'Artist',title:'Track',duration:60
   }],time:1});
+  assert(element('.bf-meta').children[0]?.children[1]?.textContent===' — Artist',
+    'single-artist Now Playing heading never adds a Playing suffix');
   assert(element('.bf-meta').children[1]?.dataset.prefix==='Track',
     'single-artist album does not repeat the artist alongside track title');
 
@@ -600,6 +602,8 @@ export async function runTests(sources) {
   assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
     'closed-cover interaction no longer dispatches open-case events');
+  assert(!sources.app.includes("isThisPlaying?' · Playing':'"),
+    'Now Playing heading never renders a redundant Playing status suffix');
   assert(sources.app.includes('beginShelfDrag(')&&sources.app.includes('moveShelfDrag(event,false)')&&
     sources.app.includes('finishShelfDrag(false)'),
     'cover reuses the existing spine drag and snap physics');
