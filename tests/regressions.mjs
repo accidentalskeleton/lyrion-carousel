@@ -24,7 +24,7 @@ export async function runTests(sources) {
   const {CometDClient, rpc:realRpc, resetRpcSession} = new Function('fetch', plain(sources.lms) + ';return {CometDClient,rpc,resetRpcSession};')(
     async () => ({ok:true,json:async () => ({result:{}})})
   );
-  const comet = new CometDClient(() => {}, () => {}, data => { assert(data.rescan === 0, 'scan payload forwarded'); libraryEvents++; });
+  const comet = new CometDClient(() => {}, () => {}, data => { assert(data.rescan === 0 || data.rescan === false, 'scan payload forwarded'); libraryEvents++; });
   comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:1}); comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:0});
   assert(libraryEvents === 1, 'one observation per completed scan');
   comet.handleServerStatus({rescan:true}); comet.handleServerStatus({rescan:false});
