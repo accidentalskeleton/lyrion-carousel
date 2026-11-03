@@ -4,6 +4,7 @@ from __future__ import annotations
 import time, io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sqlite3, sys, threading
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
+from contextlib import closing
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -583,7 +584,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         path=self._colour_index_path()
         if not path.is_file():return colours
         try:
-            with sqlite3.connect(path,timeout=5) as db:
+            with closing(sqlite3.connect(path,timeout=5)) as db:
                 for artwork_id,raw in db.execute('SELECT artwork_id, metadata FROM colours'):
                     try:details=json.loads(raw)
                     except (ValueError,TypeError,UnicodeError):continue
@@ -599,7 +600,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 for artwork_id,details in metadata.items()
                 if valid_colour_metadata(details)]
         if not values:return
-        with sqlite3.connect(self._colour_index_path(),timeout=5) as db:
+        with closing(sqlite3.connect(self._colour_index_path(),timeout=5)) as db, db:
             db.execute('CREATE TABLE IF NOT EXISTS colours ('
                        'artwork_id TEXT PRIMARY KEY, metadata TEXT NOT NULL)')
             db.executemany('INSERT OR REPLACE INTO colours (artwork_id,metadata) VALUES (?,?)',values)
@@ -609,7 +610,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         path=self._colour_index_path()
         if not path.is_file():return 0
         try:
-            with sqlite3.connect(path,timeout=5) as db:
+            with closing(sqlite3.connect(path,timeout=5)) as db:
                 return int(db.execute('SELECT count(*) FROM colours').fetchone()[0])
         except (sqlite3.Error,OSError):return 0
 
