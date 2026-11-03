@@ -252,7 +252,10 @@ frontPlay.onclick=async event=>{event.stopPropagation();const album=frontPreview
 // Dismiss from the exposed shelf without opening or playing the spine underneath.
 root.addEventListener('pointerdown',event=>{
     if(frontPreview.hidden||isPlayingCoverPinned()||event.button!==0)return;
-    if(event.target!==frontPreview&&!stage.contains(event.target))return;
+    // Do not consume a spine's pointerdown: that prevented an explicit spine
+    // click from opening its cover when a different preview was visible.
+    // Stage swipes dismiss non-playing previews via moveShelfDrag().
+    if(event.target!==frontPreview)return;
     event.preventDefault();event.stopPropagation();
     cancelLongPress();followingNowPlaying=false;closeFrontPreview();
 },true);
@@ -296,8 +299,9 @@ frontPreview.addEventListener('pointerup',event=>{
     cancelFrontPress();
     if(press.scrolling){
         finishShelfDrag(false);
-        const index=modulo(Math.round(target),totalAlbums);
-        if(albums[index])openFrontPreview(albums[index],index);
+        // Swiping the enlarged cover browses spines; it never opens the album
+        // at the destination. A playing album may remain pinned to the shelf.
+        if(!isPlayingCoverPinned())closeFrontPreview();
     }
     // A short click intentionally performs no action.
     resumeFrontTimeout();
@@ -452,24 +456,19 @@ async function handleLibraryEvent(){
 }
 const cometd=new CometDClient(applyStatus,state=>{root.dataset.liveUpdates=state==='live'?'true':state==='connecting'?'connecting':'false';emitStatus();if(state==='connecting')setConnection('Connecting to live updates…',false);else if(state==='live')setConnection(albumCountLabel()+' · live',true);else setConnection('Live updates lost · reconnecting',false)},handleLibraryEvent);
 function openSearch(){searchOverlay.hidden=false;searchInput.focus();searchInput.select()}function closeSearch(){searchOverlay.hidden=true;searchToken++;clearTimeout(searchTimer)}function centreAlbumIndex(index,animate=true){if(randomAnimating||!Number.isFinite(index)||index<0)return;stopFollowing();const destination=nearestPositionForIndex(index);if(animate){target=destination;schedule()}else{position=target=destination;draw()}}
-async function navigateToAlbum(id){searchStatus.textContent='Locating album…';try{let i=albums.findIndex(album=>album&&String(album[6])===String(id));if(i<0&&catalogueSource!=='spotify')i=await locateAlbum(id);if(i<0)throw 0;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;closeFrontPreview(true);const arrived=await scrollToAlbumIndex(i);if(arrived){position=target=nearestPositionForIndex(i);renderAlbums();draw();openFrontPreview(albums[i],i)}}catch(_){searchStatus.textContent='That album could not be located.'}}
+async function navigateToAlbum(id){searchStatus.textContent='Locating album…';try{let i=albums.findIndex(album=>album&&String(album[6])===String(id));if(i<0&&catalogueSource!=='spotify')i=await locateAlbum(id);if(i<0)throw 0;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;closeFrontPreview(true);const arrived=await scrollToAlbumIndex(i);if(arrived){position=target=nearestPositionForIndex(i);renderAlbums();draw()}}catch(_){searchStatus.textContent='That album could not be located.'}}
 function renderSearchResults(results){searchResults.replaceChildren();for(const album of results){const b=document.createElement('button');b.className='bf-search-result';b.type='button';const img=document.createElement('img');img.alt='';if(album[8])img.src=album[8];const c=document.createElement('span'),t=document.createElement('strong'),a=document.createElement('span');t.textContent=album[0];a.textContent=album[1];c.append(t,a);b.append(img,c);b.onclick=()=>selectSearchAlbum(album);searchResults.append(b)}}
-async function selectSearchAlbum(album){let existing=albums.find(a=>a&&String(a[6])===String(album[6]));if(!existing&&catalogueSource==='spotify'){album[15]='search-preview';albums.push(album);totalAlbums=albums.length;existing=album;catalogueGeneration++;renderAlbums();draw()}const i=albums.indexOf(existing);if(i<0)return;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;closeFrontPreview(true);const destination=nearestPositionForIndex(i);const arrived=await scrollToAlbumIndex(i);if(!arrived)return;position=target=destination;hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();openFrontPreview(albums[i]||existing,i)}
+async function selectSearchAlbum(album){let existing=albums.find(a=>a&&String(a[6])===String(album[6]));if(!existing&&catalogueSource==='spotify'){album[15]='search-preview';albums.push(album);totalAlbums=albums.length;existing=album;catalogueGeneration++;renderAlbums();draw()}const i=albums.indexOf(existing);if(i<0)return;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;closeFrontPreview(true);const destination=nearestPositionForIndex(i);const arrived=await scrollToAlbumIndex(i);if(!arrived)return;position=target=destination;hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw()}
 async function runSearch(query){const value=query.trim(),token=++searchToken;if(value.length<2){searchResults.replaceChildren();searchStatus.textContent='Type at least two characters.';return}searchStatus.textContent=catalogueSource==='spotify'?'Searching Spotify albums…':'Searching LMS…';try{if(catalogueSource==='spotify'){const result=await spotifyProvider.search(value);if(token!==searchToken)return;const matches=result.albums;renderSearchResults(matches);searchStatus.textContent=matches.length?matches.length+' Spotify album'+(matches.length===1?'':'s'):'No matching Spotify albums.';return}const result=await lmsProvider.search(value);if(token!==searchToken)return;const matches=result.albums;renderSearchResults(matches);searchStatus.textContent=matches.length?matches.length+' matches':'No matching albums.'}catch(error){if(token!==searchToken)return;console.error('Carousel album search failed:',error);const message=String(error?.message||error||'Unknown error');searchStatus.textContent=/LMS server changed during request/.test(message)?'LMS settings changed. Please retry search.':/HTTP 50[234]|Failed to fetch|NetworkError|Load failed/i.test(message)?'Cannot reach LMS search. Check the server connection.':'Album search failed: '+message.slice(0,140);}}
 async function jumpToLetter(letter){searchStatus.textContent='Finding '+letter+'…';try{for(let b=0;b<batchCount();b++){await fetchBatch(b);const i=albums.findIndex(a=>a&&String(a[9]).toUpperCase()===letter);if(i>=0){closeSearch();centreAlbumIndex(i);return}}searchStatus.textContent='No albums under '+letter+'.'}catch(_){scheduleReconnect()}}for(const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){const b=document.createElement('button');b.className='bf-letter';b.type='button';b.textContent=letter;b.onclick=()=>jumpToLetter(letter);alphabet.append(b)}
 function cancelFollowAnimation(){followRequest++;if(followAnimation){const animation=followAnimation;followAnimation=null;target=position;animation.resolve(false)}}
 function browseWithArrow(direction){
     if(!totalAlbums||orderBusy||libraryRefreshing)return;
-    const wasOpen=!frontPreview.hidden;
-    const openIndex=wasOpen?albums.findIndex(album=>album&&String(album[6])===String(frontPreviewAlbum?.[6])):-1;
     followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;
-    // Anchor to the preview when open, and to the destination on repeated keys.
-    const from=openIndex>=0?nearestPositionForIndex(openIndex):Math.round(target);
-    target=from+direction;
-    if(wasOpen){
-        const index=modulo(Math.round(target),totalAlbums);
-        if(albums[index])openFrontPreview(albums[index],index);
-    }
+    // Arrows move the spines only. Never turn the highlighted album into a
+    // new preview; the playing cover can remain pinned independently.
+    if(!frontPreview.hidden&&!isPlayingCoverPinned())closeFrontPreview();
+    target=Math.round(target)+direction;
     schedule();
 }
 function stopFollowing(){followingNowPlaying=false;cancelFollowAnimation();closeFrontPreview()}
@@ -683,7 +682,9 @@ function updateMeta(force=false){
     meta.replaceChildren(...content);updateProgressDisplay();
 }
 function draw(){if(raf){cancelAnimationFrame(raf);raf=0}if(!dragging){const error=target-position;if(followAnimation){const animation=followAnimation,p=clamp((performance.now()-animation.start)/animation.duration,0,1);position=animation.from+(animation.to-animation.from)*(1-Math.pow(1-p,3));if(p>=1){position=target=animation.to;followAnimation=null;animation.resolve(true)}}else if(randomAnimating&&randomAnimationDuration>0){const p=clamp((performance.now()-randomAnimationStart)/randomAnimationDuration,0,1),e=1-Math.pow(1-p,3);position=randomAnimationFrom+(randomAnimationTo-randomAnimationFrom)*e;if(p>=1)position=target}else{position+=error*.135;if(Math.abs(error)<.0004)position=target}}updateShelfWindow();updateMeta();prefetchAround(selectedIndex());prefetchCoverWindow(modulo(Math.round(target),totalAlbums));syncShelfDom();if(followAnimation||dragging||Math.abs(target-position)>.0004)raf=requestAnimationFrame(draw);else raf=0}function schedule(){if(!raf)raf=requestAnimationFrame(draw)}
-function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=position+delta*.0028;draw();clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{target=Math.round(position);schedule()},110)}
+let lastShelfScrollAt=-Infinity;
+function shelfIsScrolling(){return dragging&&moved||!!followAnimation||randomAnimating||Math.abs(target-position)>.04||performance.now()-lastShelfScrollAt<160}
+function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();lastShelfScrollAt=performance.now();if(!frontPreview.hidden&&!isPlayingCoverPinned())stopFollowing();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=position+delta*.0028;draw();clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{target=Math.round(position);schedule()},110)}
 // Shared pointer physics for shelf spines and the enlarged closed cover.
 function beginShelfDrag(event,pressedIndex=null,captureTarget=stage){
     if(randomAnimating)return false;
@@ -699,7 +700,7 @@ function moveShelfDrag(event,closePreviewOnMove=true){
     if(!dragging)return;
     const now=performance.now(),dx=event.clientX-startX;
     if(Math.abs(dx)>6){
-        moved=true;
+        moved=true;lastShelfScrollAt=now;
         if(closePreviewOnMove)stopFollowing();
         else {followingNowPlaying=false;cancelFollowAnimation();}
     }
@@ -727,7 +728,7 @@ previousTrack.onclick=()=>skipTrack(-1);nextTrack.onclick=()=>skipTrack(1);
 let focusClickIndex=null,focusClickX=0,focusClickY=0;
 stage.addEventListener('pointerdown',event=>{
     focusClickIndex=null;
-    if(randomAnimating||event.button!==0)return;
+    if(shelfIsScrolling()||event.button!==0)return;
     const element=event.target.closest('.bf-album');
     if(!element)return;
     focusClickIndex=Number(element.dataset.index);
@@ -737,7 +738,7 @@ stage.addEventListener('pointerup',event=>{
     const index=focusClickIndex;
     focusClickIndex=null;
     if(randomAnimating||!Number.isInteger(index))return;
-    const album=albums[index],wasClick=dragging&&!moved&&Math.hypot(event.clientX-focusClickX,event.clientY-focusClickY)<=6;
+    const album=albums[index],wasClick=dragging&&!moved&&performance.now()-lastShelfScrollAt>=160&&Math.abs(target-position)<.04&&Math.hypot(event.clientX-focusClickX,event.clientY-focusClickY)<=6;
     if(wasClick&&album){
         event.stopImmediatePropagation();dragging=false;moved=true;pressedAlbumIndex=null;
         stage.classList.remove('is-dragging');target=nearestPositionForIndex(index);
