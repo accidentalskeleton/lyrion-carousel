@@ -94,6 +94,101 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.handler.runtime_config['lms_url'],'http://test:9000')
         self.assertEqual(self.handler.lms_url,'http://test:9000')
 
+    def test_observed_unchanged_scan_reuses_catalogue_without_background_work(self):
+        rows=[{'id':1,'artist':'A','album':'Original','artwork_track_id':'art1'},
+              {'id':2,'artist':'B','album':'Second','artwork_track_id':'art2'}]
+        self.handler.runtime_config={'lms_url':self.handler.lms_url}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([rows])):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        key=self.handler._catalogue_snapshot_key()
+        snapshot=server._CATALOGUE_MEMORY[key]
+        order_key=('artistAlbum',())
+        original=snapshot['orders'][order_key]
+        snapshot['genres']['7']=['1']
+        snapshot['orders'][('album',(7,))]=b'temporary-genre-order'
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([list(reversed(rows))])):
+            with patch.object(server.COLOUR_INDEXER,'enqueue') as enqueue:
+                self.handler.path='/api/catalogue/reconcile'
+                self.handler._reconcile_catalogue()
+        result=json.loads(self.responses[-1][1])
+        self.assertFalse(result['changed'])
+        self.assertEqual(result['count'],2)
+        self.assertEqual(result['new_albums'],0)
+        self.assertIs(server._CATALOGUE_MEMORY[key],snapshot)
+        self.assertEqual(snapshot['orders'][order_key],original)
+        self.assertNotIn(('album',(7,)),snapshot['orders'])
+        self.assertFalse(snapshot['genres'])
+        enqueue.assert_not_called()
+
+    def test_observed_changed_scan_refreshes_snapshot_and_indexes_new_covers(self):
+        old=[{'id':1,'artist':'A','album':'First','artwork_track_id':'first'}]
+        updated=[old[0],{'id':2,'artist':'B','album':'New','artwork_track_id':'new-cover'}]
+        self.handler.runtime_config={'lms_url':self.handler.lms_url}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([old])):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([updated])):
+            with patch.object(server.COLOUR_INDEXER,'enqueue') as enqueue:
+                self.handler.path='/api/catalogue/reconcile'
+                self.handler.do_POST()
+        data=json.loads(self.responses[-1][1])
+        self.assertTrue(data['changed'])
+        self.assertEqual((data['count'],data['new_albums']),(2,1))
+        enqueue.assert_called_once()
+        self.assertEqual(list(enqueue.call_args.args[1]),['new-cover'])
+        snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
+        self.assertEqual(len(snapshot['albums']),2)
+        self.assertEqual(len(json.loads(self.handler._catalogue_snapshot_path().read_bytes())['albums']),2)
+
+    def test_observed_scan_detects_updates_when_catalogue_loaded_from_disk(self):
+        old=[{'id':1,'artist':'A','album':'Album','artwork_track_id':'a'}]
+        self.handler.runtime_config={'lms_url':self.handler.lms_url}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([old])):
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([old])):
+            with patch.object(server.COLOUR_INDEXER,'enqueue') as enqueue:
+                self.handler._reconcile_catalogue()
+        self.assertFalse(json.loads(self.responses[-1][1])['changed'])
+        enqueue.assert_not_called()
+
+    def test_failed_observed_scan_keeps_original_snapshot(self):
+        original=[{'id':10,'artist':'A','album':'Keep','artwork_track_id':'a'}]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([original])):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        snapshot_bytes=self.handler._catalogue_snapshot_path().read_bytes()
+        key=self.handler._catalogue_snapshot_key()
+        old=server._CATALOGUE_MEMORY[key]
+        with patch.object(self.handler,'_catalogue_pages',side_effect=OSError('LMS unreachable')):
+            with patch.object(self.handler,'_send_upstream_error') as fail:
+                with patch.object(server.COLOUR_INDEXER,'enqueue') as enqueue:
+                    self.handler._reconcile_catalogue()
+        fail.assert_called_once()
+        enqueue.assert_not_called()
+        self.assertIs(server._CATALOGUE_MEMORY[key],old)
+        self.assertEqual(self.handler._catalogue_snapshot_path().read_bytes(),snapshot_bytes)
+
+    def test_colour_indexer_runs_independently_and_processes_new_artwork(self):
+        indexer=server.CarouselColourIndexer()
+        indexer.last_foreground=float('-inf')
+        colour='#00ff00'
+        metadata={'spine_color':colour,'text_color':'#111417',
+                  'spine_font':server.SPINE_FONTS[0],
+                  'colour_index':server.colour_sort_index(colour)}
+        with patch.object(server.LyrionCarouselHandler,'_artwork_metadata',return_value=metadata) as analyse:
+            with patch.object(server.LyrionCarouselHandler,'_remember_catalogue_colours',return_value=1) as save:
+                indexer.enqueue(self.handler,['new','new','../invalid'])
+                indexer.thread.join(timeout=3)
+        self.assertFalse(indexer.thread.is_alive())
+        self.assertEqual(indexer.snapshot()['completed'],1)
+        self.assertEqual(indexer.snapshot()['failed'],0)
+        self.assertEqual(indexer.snapshot()['status'],'complete')
+        analyse.assert_called_once_with('new')
+        save.assert_called_once_with({'new':metadata})
+
     def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
         pages=[[{'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'},
                 {'id':2,'artist':'Alpha','album':'Zulu','artwork_track_id':'b'}]]
