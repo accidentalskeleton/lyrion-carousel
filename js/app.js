@@ -12,10 +12,36 @@ let DISPLAY_STYLE='shelf',COVER_SIZE=512;
 let PAGE_SIZE=40,DISPLAY_ALBUM_COUNT=30,IDLE_RETURN_MS=30000,MENU_TIMEOUT_MS=10000,FRONT_TIMEOUT_MS=10000,RECONNECT_MAX_MS=30000,RANDOM_SCROLL_MAX_MS=3000,SEARCH_LIMIT=100;
 const demoAlbums=[['Night Geometry','The Meridian','linear-gradient(145deg,#0f3155,#d14e45)','rgba(244,190,76,.9)','8%','18deg'],['Blue Hours','Harbour Lights','linear-gradient(145deg,#0e223a,#458ca5)','linear-gradient(90deg,#d5eef0 48%,#193a61 48%)','2px','-12deg'],['Still Moving','Northbound','linear-gradient(145deg,#4b1f2c,#de8a55)','rgba(30,16,24,.72)','50%','0deg'],['Parallel Lines','Signal Path','linear-gradient(145deg,#e8dfca,#9c2828)','repeating-linear-gradient(90deg,#181818 0 9px,transparent 9px 18px)','0','24deg'],['After Image','Low Season','linear-gradient(145deg,#192019,#557557)','radial-gradient(circle at 35% 35%,#e0c895 0 12%,transparent 13%),radial-gradient(circle,#182219 0 48%,transparent 49%)','50%','0deg']];
 let playerPower=null,powerPending=false;let playingSource='unknown',albums=demoAlbums.slice(),orderMode='artistAlbum',desiredOrderMode='artistAlbum',orderBusy=false,nodes=[],renderedWindowAnchor=-1,renderedWindowCount=0,prefetchedWindowPage=-1,playerId='',playingAlbumId=null,progressTimer=0,reconnectTimer=0,reconnectDelay=1000,connecting=false,totalAlbums=albums.length,libraryAlbumCount=albums.length,liveCatalogue=false,loadedBatches=new Set(),loadingBatches=new Map(),catalogueGeneration=0,albumPositionById=new Map(),positionIndexPromise=null,nowAlbumTitle='',nowAlbumArtist='',nowTrackTitle='',nowTrackArtist='',nowTrackNumber='',playbackSeconds=0,trackDuration=0,statusUpdatedAt=performance.now(),searchTimer=0,searchToken=0,idleTimer=0,idleReturnAlbumId=null,lastActivityAt=Date.now();
-const spineMetaCache=new Map(),spineMetaPending=new Map();let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
+const SPINE_META_CACHE_LIMIT=1024;
+const spineMetaCache=new Map(),spineMetaPending=new Map(),spineMetaBatchQueue=new Map();
+let spineMetaBatchTimer=0,spineMetaBatchesActive=0,spineMetaGeneration=0;
+const albumIndexCache=new Map();
+function rememberSpineMeta(url,meta){
+    if(!url||!meta)return;
+    spineMetaCache.delete(url);spineMetaCache.set(url,meta);
+    while(spineMetaCache.size>SPINE_META_CACHE_LIMIT)spineMetaCache.delete(spineMetaCache.keys().next().value);
+}
+function clearSpineMetadata(){
+    spineMetaGeneration++;clearTimeout(spineMetaBatchTimer);spineMetaBatchTimer=0;
+    for(const job of spineMetaBatchQueue.values())job.resolve(null);
+    spineMetaBatchQueue.clear();spineMetaCache.clear();spineMetaPending.clear();
+}
+function indexForAlbumId(id){
+    if(id===null||id===undefined)return -1;
+    const key=String(id),cached=albumIndexCache.get(key);
+    if(cached!==undefined&&albums[cached]&&String(albums[cached][6])===key)return cached;
+    const found=albums.findIndex(album=>album&&String(album[6])===key);
+    if(found<0)albumIndexCache.delete(key);else albumIndexCache.set(key,found);
+    return found;
+}
+function rebuildAlbumIndex(){
+    albumIndexCache.clear();
+    albums.forEach((album,index)=>{if(album?.[6]!=null)albumIndexCache.set(String(album[6]),index)});
+}
+let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
 const selectedIndex=()=>modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
-function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=3&server='+artworkNamespace:'';if(album.spine_metadata)spineMetaCache.set(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
+function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=3&server='+artworkNamespace:'';if(album.spine_metadata)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
 function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg','spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId]}
 const lmsProvider=createLmsProvider({
     mapAlbum:mapLyrionAlbum,getPlayerId:()=>playerId,getPageSize:()=>PAGE_SIZE,getSearchLimit:()=>SEARCH_LIMIT,
@@ -136,20 +162,67 @@ function pumpCoverQueue(){
         image.onload=()=>finish(true);image.onerror=()=>finish(false);image.src=url;
     }
 }
+function scheduleSpineMetaBatch(){
+    if(spineMetaBatchTimer||!spineMetaBatchQueue.size||spineMetaBatchesActive>=2)return;
+    spineMetaBatchTimer=setTimeout(()=>{spineMetaBatchTimer=0;flushSpineMetaBatch()},0);
+}
+async function flushSpineMetaBatch(){
+    if(!spineMetaBatchQueue.size||spineMetaBatchesActive>=2)return;
+    const jobs=[...spineMetaBatchQueue.values()].slice(0,64);
+    for(const job of jobs)spineMetaBatchQueue.delete(job.url);
+    spineMetaBatchesActive++;
+    scheduleSpineMetaBatch(); // Up to two batches in flight.
+    let result=null;
+    try{
+        const response=await fetch('/api/art-meta',{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({artwork_ids:jobs.map(job=>job.id)})
+        });
+        if(response.ok)result=(await response.json()).metadata||null;
+    }catch(_){/* Missing spine metadata must never prevent browsing. */}
+    for(const job of jobs){
+        const meta=job.generation===spineMetaGeneration?result?.[job.id]||null:null;
+        if(meta)rememberSpineMeta(job.url,meta);
+        if(spineMetaPending.get(job.url)===job.promise)spineMetaPending.delete(job.url);
+        job.resolve(meta);
+    }
+    spineMetaBatchesActive--;
+    scheduleSpineMetaBatch();
+}
 function fetchSpineMeta(album){
     const url=album?.[11];if(!url)return Promise.resolve(null);
-    if(spineMetaCache.has(url))return Promise.resolve(spineMetaCache.get(url));
+    if(spineMetaCache.has(url)){
+        const meta=spineMetaCache.get(url);
+        rememberSpineMeta(url,meta);return Promise.resolve(meta);
+    }
     if(spineMetaPending.has(url))return spineMetaPending.get(url);
-    const pending=(async()=>{
-        const response=await fetch(url,{cache:'force-cache'});
-        return response.ok?response.json():null;
-    })().then(meta=>{if(meta)spineMetaCache.set(url,meta);return meta}).catch(()=>null).finally(()=>{
-        if(spineMetaPending.get(url)===pending)spineMetaPending.delete(url);
-    });
+    const match=/^\/api\/art-meta\/([^?]+)/.exec(url);
+    let id=null;
+    if(match){try{id=decodeURIComponent(match[1])}catch(_){}}
+    if(id&&/^[A-Za-z0-9._:@%-]+$/.test(id)){
+        let resolve;const promise=new Promise(done=>{resolve=done});
+        spineMetaPending.set(url,promise);
+        spineMetaBatchQueue.set(url,{url,id,promise,resolve,generation:spineMetaGeneration});
+        scheduleSpineMetaBatch();
+        return promise;
+    }
+    // Spotify's existing metadata endpoint is not part of the LMS batch API.
+    const generation=spineMetaGeneration;
+    const pending=fetch(url,{cache:'force-cache'})
+        .then(response=>response.ok?response.json():null)
+        .then(meta=>{
+            if(generation!==spineMetaGeneration)return null;
+            if(meta)rememberSpineMeta(url,meta);
+            return meta;
+        }).catch(()=>null).finally(()=>{
+            if(spineMetaPending.get(url)===pending)spineMetaPending.delete(url);
+        });
     spineMetaPending.set(url,pending);return pending;
 }
 function loadSpineMeta(album,element){
+    const url=album?.[11];
     fetchSpineMeta(album).then(meta=>{
+        if(element.dataset.index===undefined||album[11]!==url)return;
         if(meta?.spine_color)element.style.setProperty('--spine-color',meta.spine_color);
         if(meta?.text_color)element.style.setProperty('--spine-text',meta.text_color);
         if(meta?.spine_font)element.style.setProperty('--spine-font-family',meta.spine_font);
@@ -378,12 +451,12 @@ window.addEventListener('lyrion-carousel-lms-change',event=>{
     closeSearch();closeAlbumMenu();closeTrackList();
     connecting=false;playerId='';liveCatalogue=false;orderBusy=false;randomAnimating=false;randomAnimationDuration=0;randomPlay.classList.remove('is-busy');
     albumPositionById=new Map();positionIndexPromise=null;prefetchedWindowPage=-1;
-    spineMetaCache.clear();spineMetaPending.clear();
+    clearSpineMetadata();
     if(appStarted){setConnection('Connecting to Lyrion Music Server…',false);connectLyrion()}
 });
 window.addEventListener('lyrion-carousel-cache-cleared',()=>{
     artworkNamespace=artworkNamespace.split('&cache=')[0]+'&cache='+Date.now();
-    spineMetaCache.clear();spineMetaPending.clear();handleLibraryEvent();
+    clearSpineMetadata();handleLibraryEvent();
 });
 function scheduleReconnect(){if(reconnectTimer)return;const delay=reconnectDelay;setConnection('Reconnecting to Lyrion Music Server in '+Math.ceil(delay/1000)+'s…',false);reconnectTimer=setTimeout(()=>{reconnectTimer=0;connectLyrion()},delay);reconnectDelay=Math.min(reconnectDelay*2,RECONNECT_MAX_MS)}function resetReconnect(){clearTimeout(reconnectTimer);reconnectTimer=0;reconnectDelay=1000}
 function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length)albums[start+o]=a});loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
