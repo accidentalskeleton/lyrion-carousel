@@ -72,6 +72,7 @@ export async function runTests(sources) {
   const setTimeout=fn=>{timers.set(++nextId,fn);return nextId;},clearTimeout=id=>timers.delete(id);
   const requestAnimationFrame=fn=>{frames.set(++nextId,fn);return nextId;},cancelAnimationFrame=id=>frames.delete(id);
   const rpcCalls=[];
+  const catalogueEvents=[];
   let tracksFixture=null;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
   const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums')return {count:library.length,albums_loop:library.slice(cmd[1],cmd[1]+cmd[2])};return {};};
@@ -80,7 +81,17 @@ export async function runTests(sources) {
   class PreloadImage{set src(url){this.url=url;imageRequests.push(this)}}
   let metadataFetch=async()=>({ok:false});
   const env={document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
-    ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>url.startsWith('/api/catalogue')?Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})}):metadataFetch(url,...args),rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},fanLayout:geometry.fanLayout,clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
+    ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>{
+      if(url==='/api/catalogue/invalidate'){
+        catalogueEvents.push({action:'invalidate',method:args[0]?.method});
+        return Promise.resolve({ok:true,json:async()=>({invalidated:true})});
+      }
+      if(url.startsWith('/api/catalogue')){
+        catalogueEvents.push({action:'read',url});
+        return Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})});
+      }
+      return metadataFetch(url,...args);
+    },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},fanLayout:geometry.fanLayout,clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
@@ -180,7 +191,12 @@ export async function runTests(sources) {
   await api.setDisplayOrder('random');
   const previous=api.state().albums.map(a=>a[6]);
   library.push({id:96,album:'New album',artist:'Artist'});
+  const beforeRefreshEvents=catalogueEvents.length;
   await api.refreshCatalogue();
+  const refreshEvents=catalogueEvents.slice(beforeRefreshEvents);
+  assert(refreshEvents[0]?.action==='invalidate'&&refreshEvents[0]?.method==='POST'&&
+    refreshEvents.some(event=>event.action==='read'),
+    'LMS rescan invalidates server snapshot before requesting new album ordering');
   assert(api.state().orderMode==='random'&&api.state().albums.slice(0,95).every((a,i)=>a[6]===previous[i]), 'refresh retains random order');
   api.applySetting('random',1000);
   // Actual connectLyrion() keeps connecting=true until startup completes;
@@ -659,6 +675,11 @@ export async function runTests(sources) {
   assert(sources.app.includes("'tags:altngidA'")&&sources.app.includes('trackGenres'),'LMS Album Information requests disc, artist and genre metadata');
 
   if (sources.server) {
+    assert(sources.server.includes('CATALOGUE_SNAPSHOT_TTL_SECONDS')&&
+      sources.server.includes('_load_catalogue_snapshot')&&
+      sources.server.includes('_catalogue_genre_ids')&&
+      sources.server.includes('_invalidate_catalogue_data'),
+      'server exposes persistent, expiring catalogue snapshots and indexed genre exclusions');
     assert(!sources.server.includes('from disc_artwork import')&&
       !sources.server.includes('/api/processed-disc/')&&
       !sources.server.includes('/api/local-artwork/'),
