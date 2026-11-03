@@ -23,7 +23,7 @@ Current application version: **0.10.0**. The canonical version is stored in [`VE
 - event-driven library refresh after LMS scans complete;
 - album/artist search and A–Z navigation;
 - shamrock random-album selection with configurable animation duration;
-- click/tap a spine to preview its realistic closed cover; click/tap the cover for Album Information or use its separate play button to start playback;
+- click/tap a spine to preview its realistic closed cover; drag/swipe the cover left or right to browse neighbouring albums; long-press the cover for the album menu (including Album Information), or use its separate play button to start playback;
 - long-press a cover to clear the playlist and play it, play it now, play it after the current album, add it to the queue, or open Album Information;
 - LMS CometD long-polling for live playback and server/library state;
 - current track, track number and locally advancing progress display;
