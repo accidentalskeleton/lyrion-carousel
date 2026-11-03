@@ -16,7 +16,9 @@ class ServerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.handler = object.__new__(server.LyrionCarouselHandler)
-        self.handler.cache_dir = Path(self.temp.name)
+        self.handler.cache_dir = Path(self.temp.name) / 'artwork'
+        self.handler.cache_dir.mkdir()
+        self.handler.lms_settings_path = Path(self.temp.name) / server.LMS_SETTINGS_FILENAME
         self.handler.lms_url = 'http://test:9000'
         self.responses = []
         self.handler._send_payload = lambda status, body, *args, **kwargs: self.responses.append((status, body))
@@ -24,6 +26,63 @@ class ServerTests(unittest.TestCase):
     def paths(self, artwork_id):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
         return self.handler.cache_dir / f'{key}.img', self.handler.cache_dir / f'{key}.meta'
+
+    def test_lms_selection_survives_restart_and_artwork_cache_clear(self):
+        self.handler.runtime_config={'lms_url':'http://test:9000'}
+        body=json.dumps({'lms_url':'http://streamer:9000/'}).encode()
+        self.handler.headers={'Content-Length':str(len(body))}
+        self.handler.rfile=io.BytesIO(body)
+        self.handler._update_lms_url()
+        self.assertEqual(self.responses[-1][0],200)
+        self.assertEqual(self.handler.runtime_config['lms_url'],'http://streamer:9000')
+        self.assertEqual(self.handler.lms_url,'http://streamer:9000')
+        path=self.handler.lms_settings_path
+        self.assertTrue(path.is_file())
+        self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
+                         'http://streamer:9000')
+        self.handler._clear_cache_files()
+        self.assertTrue(path.exists(),'Clear artwork must never discard selected LMS')
+        self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
+                         'http://streamer:9000')
+
+    def test_lms_settings_missing_or_corrupt_fall_back_to_service_default(self):
+        path=self.handler.lms_settings_path
+        self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
+                         'http://mrlazy:9000')
+        for payload in [b'not-json',b'{}',
+                        b'{"version":1,"lms_url":"file:///etc/passwd"}',
+                        b'{"version":1,"lms_url":"http://user:secret@host:9000"}',
+                        b'x'*5000]:
+            path.write_bytes(payload)
+            self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
+                             'http://mrlazy:9000')
+        server.save_lms_url(path,'http://streamer:9000')
+        self.assertEqual(server.load_saved_lms_url(path,'http://mrlazy:9000'),
+                         'http://streamer:9000')
+
+    def test_lms_change_rejects_bad_url_without_persisting(self):
+        self.handler.runtime_config={'lms_url':'http://test:9000'}
+        body=json.dumps({'lms_url':'http://user:password@bad:9000'}).encode()
+        self.handler.headers={'Content-Length':str(len(body))}
+        self.handler.rfile=io.BytesIO(body)
+        with patch.object(self.handler,'send_error') as error:
+            self.handler._update_lms_url()
+        error.assert_called_once()
+        self.assertEqual(error.call_args.args[0],400)
+        self.assertFalse(self.handler.lms_settings_path.exists())
+        self.assertEqual(self.handler.runtime_config['lms_url'],'http://test:9000')
+
+    def test_lms_settings_write_failure_does_not_switch_live_target(self):
+        self.handler.runtime_config={'lms_url':'http://test:9000'}
+        body=json.dumps({'lms_url':'http://streamer:9000'}).encode()
+        self.handler.headers={'Content-Length':str(len(body))}
+        self.handler.rfile=io.BytesIO(body)
+        with patch.object(server,'save_lms_url',side_effect=OSError('read only')):
+            with patch.object(self.handler,'_send_upstream_error') as error:
+                self.handler._update_lms_url()
+        error.assert_called_once()
+        self.assertEqual(self.handler.runtime_config['lms_url'],'http://test:9000')
+        self.assertEqual(self.handler.lms_url,'http://test:9000')
 
     def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
         pages=[[{'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'},
