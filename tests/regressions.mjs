@@ -57,6 +57,13 @@ export async function runTests(sources) {
   const element=selector=>{if(!elements.has(selector))elements.set(selector,new Element(selector));return elements.get(selector);};
   root.querySelector=selector=>selector.includes(':not(')?null:element(selector);
   const stage=element('.bf-stage'),preview=element('.bf-front-preview'),frontCase=new Element('case');
+  // Track hidden transitions as well as final state; a close/reopen flicker
+  // can otherwise pass assertions that inspect only the final DOM.
+  const previewHideWrites=[];
+  let previewHiddenState=preview.hidden;
+  Object.defineProperty(preview,'hidden',{get(){return previewHiddenState},set(value){
+    previewHideWrites.push(Boolean(value));previewHiddenState=Boolean(value);
+  }});
   preview.querySelector=()=>frontCase;
   const document=new Element('document');document.querySelectorAll=()=>[];document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
   const window=new Element('window');window.innerWidth=1000;window.innerHeight=600;
@@ -108,6 +115,27 @@ export async function runTests(sources) {
   await settle(api.selectStartupAlbum({mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1}));
   api.set({connecting:false});
   assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden&&api.state().frontTimer===0,'startup opens playing cover without timeout');
+  // Reproduce the configured idle return: browse away from Now Playing,
+  // then animate back. The playing cover must not be hidden even for a frame.
+  const firstPlayingCover=api.state().frontPreviewAlbum;
+  const firstPlayingIndex=api.state().albums.indexOf(firstPlayingCover);
+  const firstPlayingPosition=api.state().position;
+  api.set({position:firstPlayingPosition+7});
+  api.draw();
+  const offCentreTransform=frontCase.style.transform;
+  const hideStart=previewHideWrites.length;
+  const returning=api.returnToPlayingAlbum(true);
+  await Promise.resolve();
+  assert(api.state().frontPreviewAlbum===firstPlayingCover&&!preview.hidden,
+    'playing cover remains mounted as automatic return begins');
+  await settle(returning);
+  assert(api.state().frontPreviewAlbum===firstPlayingCover&&!preview.hidden&&
+    api.geometry().frontPreviewIndex===firstPlayingIndex,
+    'idle return keeps the identical playing cover open');
+  assert(!previewHideWrites.slice(hideStart).includes(true),
+    'idle return never hides the playing cover, even temporarily');
+  assert(frontCase.style.transform!==offCentreTransform,
+    'playing cover slides back with the shelf instead of reopening');
 
   // Short clicks are inert; dragging the enlarged cover scrolls the same
   // shelf with the same distance, momentum and snap as dragging the spines.
@@ -305,7 +333,10 @@ export async function runTests(sources) {
   api.set({hover:api.state().albums.findIndex(a=>a[6]!==20)});api.updateMeta(true);
   assert(element('.bf-meta').children.length===1,'hover omits unrelated track');
   api.set({hover:-1});api.updateMeta(true);assert(element('.bf-meta').children.length===3,'outside hover shows playing track');
-  api.applySetting('keepPlayingOpen',false);api.stopFollowing();assert(preview.hidden,'off restores dismissal');
+  api.applySetting('keepPlayingOpen',false);
+  api.stopFollowing();
+  assert(!preview.hidden&&api.state().KEEP_PLAYING_OPEN===true,
+    'playing cover cannot be dismissed or disabled while playback is active');
   for(const mode of ['pause','stop']){
     api.set({playing:true,playingAlbumId:20});
     const index=api.state().albums.findIndex(a=>a[6]===20);
@@ -351,10 +382,12 @@ export async function runTests(sources) {
   assert(!element('#settings-panel-about').hidden,'arrow key selects about settings tab');
   tabs[5].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
-  assert(window.__lyrionCarouselSettings.keepPlayingOpen===true,'keep-open defaults on');
+  assert(api.state().KEEP_PLAYING_OPEN===true,
+    'the playing cover is permanently pinned regardless of old preferences');
   assert(window.__lyrionCarouselSettings.idle===45000&&window.__lyrionCarouselSettings.random===2000,'unsaved settings respect runtime defaults');
-  const keep=element('.bf-keep-playing-open');keep.value='false';keep.listeners.change[0]();
-  assert(storage.get('albumBrowserKeepPlayingOpen')==='false','keep-open choice persisted');
+  assert(!sources.index.includes('bf-keep-playing-open')&&
+    !sources.settings.includes('keepPlayingOpen:'),
+    'obsolete setting to close playing cover has been removed');
   await settle(api.connectLyrion());
   assert(root.dataset.ready==='true'&&stage.children.length>0,'complete connection reveals shelf');
   assert(!preview.hidden&&api.state().frontPreviewAlbum[6]===20,'complete connection opens playing album');
@@ -404,8 +437,8 @@ export async function runTests(sources) {
   api.browseWithArrow(1);
   assert(preview.hidden&&Math.round(api.state().target)===lastAlbum+1,
     'arrow browsing wraps without opening the next album');
-  const previousKeepOpen=api.state().KEEP_PLAYING_OPEN;
-  api.applySetting('keepPlayingOpen',true);
+  assert(api.state().KEEP_PLAYING_OPEN===true,
+    'playing-cover pinning remains enabled during navigation');
   api.set({playing:true,playingAlbumId:20,position:5});
   const pinnedIndex=api.state().albums.findIndex(a=>a[6]===20);
   api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);
@@ -454,7 +487,8 @@ export async function runTests(sources) {
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:180,preventDefault(){}});
   assert(api.state().frontPreviewAlbum===api.state().albums[pinnedIndex]&&!preview.hidden,
     'wheel scrolling retains the currently playing cover without replacing it');
-  api.applySetting('keepPlayingOpen',previousKeepOpen);
+  assert(api.state().KEEP_PLAYING_OPEN===true,
+    'wheel browsing cannot disable permanent playing-cover pinning');
 
   assert(api.coverCache().active===2,'cover preloader limits concurrent downloads');
   assert(imageRequests.every(image=>image.fetchPriority==='low'&&image.decoding==='async'),'cover warming uses low priority and async decoding');
