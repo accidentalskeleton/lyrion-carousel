@@ -236,7 +236,16 @@ function playingCarouselIndex(){
     }
     return -1;
 }
-function isPlayingCoverPinned(){if(!KEEP_PLAYING_OPEN||!playing||frontPreview.hidden)return false;const i=playingCarouselIndex();return i>=0&&frontPreviewAlbum===albums[i]}
+function isPlayingCoverPinned(){
+    if(!playing||frontPreview.hidden||!frontPreviewAlbum)return false;
+    const i=playingCarouselIndex(),current=i>=0?albums[i]:null;
+    // Catalogue refreshes and reordering replace album-array objects.
+    // Matching the stable album ID prevents a temporary disappearance of
+    // the currently playing cover just because its object was rebuilt.
+    return !!current&&(frontPreviewAlbum===current||
+        (frontPreviewAlbum[6]!=null&&current[6]!=null&&
+        String(frontPreviewAlbum[6])===String(current[6])));
+}
 async function ensurePlayingCover(){
     const request=++pinnedRequest,id=playingAlbumId,generation=catalogueGeneration;
     frontPreview.dataset.pinned=String(isPlayingCoverPinned());
