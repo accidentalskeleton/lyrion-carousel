@@ -810,9 +810,9 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 for album in current:
                     before=old_by_id.get(str(album.get('id')))
                     artwork=album.get('artwork_track_id')
-                    if artwork and (before is None or
-                                    str(before.get('artwork_track_id'))!=str(artwork)) and
-                            str(artwork) not in already_indexed:
+                    if (artwork and
+                            (before is None or str(before.get('artwork_track_id'))!=str(artwork)) and
+                            str(artwork) not in already_indexed):
                         new_artwork_ids.append(str(artwork))
                 # Each scan can change genre assignments without changing album
                 # rows. Drop stale genre indexes; browsers with genre filters
