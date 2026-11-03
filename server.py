@@ -824,14 +824,19 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 } if changed or previous is None else previous
                 snapshot['created']=time.time()
                 snapshot['genres']={}
-                snapshot['orders'].clear()  # genre-aware prepared orders may be stale
+                # If album rows are unchanged, keep prepared unfiltered orders
+                # and discard only filtered orders (genre membership can move).
+                if changed:snapshot['orders'].clear()
+                else:
+                    for order_key in tuple(snapshot['orders']):
+                        if order_key[1]:snapshot['orders'].pop(order_key,None)
                 _CATALOGUE_MEMORY[self._catalogue_snapshot_key()]=snapshot
                 try:self._save_catalogue_snapshot(snapshot)
                 except OSError:pass
                 result={'changed':changed,'count':len(current),
                         'new_albums':sum(1 for a in current if str(a.get('id')) not in old_by_id)}
             # Do not hold the catalogue lock while starting background work.
-            if new_artwork_ids:
+            if new_artwork_ids and self.lms_url==self.runtime_config.get('lms_url',self.lms_url):
                 COLOUR_INDEXER.enqueue(self,dict.fromkeys(new_artwork_ids))
             self._send_payload(200,json.dumps(result).encode(),
                                'application/json; charset=utf-8',cache_control='no-store')
