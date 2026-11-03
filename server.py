@@ -220,6 +220,9 @@ class CarouselColourIndexer:
             self.queue.clear()
             self.queued.clear()
             self.target=None
+            # The old worker may be completing a network request; its stop
+            # event stays set while a future queue starts with a fresh worker.
+            self.thread=None
             self.status='stopped'
 
     def snapshot(self):
@@ -235,6 +238,7 @@ class CarouselColourIndexer:
                 self.stop_event.set()
                 self.stop_event=threading.Event()
                 self.target=target
+                self.thread=None
                 self.queue.clear()
                 self.queued.clear()
                 self.completed=0
@@ -264,7 +268,11 @@ class CarouselColourIndexer:
         """Yield to foreground browsing and the artwork warmer, one cover at a time."""
         while not event.is_set():
             with self.lock:
-                if self.target!=target or not self.queue:break
+                if self.target!=target or event is not self.stop_event:break
+                if not self.queue:
+                    self.status='complete'
+                    if self.thread is threading.current_thread():self.thread=None
+                    return
                 artwork_id=self.queue.popleft()
                 self.queued.discard(artwork_id)
             while not event.is_set() and time.monotonic()-self.last_foreground<1.5:
@@ -281,13 +289,14 @@ class CarouselColourIndexer:
                         raise ValueError('Artwork metadata unavailable')
             except (OSError,ValueError,URLError,UpstreamPayloadTooLarge,CacheFull):
                 with self.lock:
-                    if self.target==target:self.failed+=1
+                    if self.target==target and event is self.stop_event:self.failed+=1
             else:
                 with self.lock:
-                    if self.target==target:self.completed+=1
+                    if self.target==target and event is self.stop_event:self.completed+=1
             event.wait(.4)
         with self.lock:
-            if self.target==target:
+            if self.thread is threading.current_thread():self.thread=None
+            if self.target==target and event is self.stop_event:
                 self.status='cancelled' if event.is_set() else 'complete'
 
 COLOUR_INDEXER=CarouselColourIndexer()
