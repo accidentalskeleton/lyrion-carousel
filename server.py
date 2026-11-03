@@ -810,7 +810,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 for album in current:
                     before=old_by_id.get(str(album.get('id')))
                     artwork=album.get('artwork_track_id')
-                    if (artwork and
+                    if (previous is not None and artwork and
                             (before is None or str(before.get('artwork_track_id'))!=str(artwork)) and
                             str(artwork) not in already_indexed):
                         new_artwork_ids.append(str(artwork))
