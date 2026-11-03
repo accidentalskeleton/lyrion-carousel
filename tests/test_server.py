@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -252,6 +253,41 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(data['spine_color'], '#abcdef')
         self.assertIn(data['spine_font'], server.SPINE_FONTS)
         self.assertEqual(data, json.loads(meta_path.read_bytes()))
+
+    def test_colour_sqlite_connections_are_closed_on_success_and_errors(self):
+        """sqlite3's transaction context does not close connections in Python 3.13."""
+        colour='#00ff00'
+        details={'spine_color':colour,'text_color':'#111417',
+                 'spine_font':server.SPINE_FONTS[0],
+                 'colour_index':server.colour_sort_index(colour)}
+        original_connect=sqlite3.connect
+        connections=[]
+
+        class TrackingConnection(sqlite3.Connection):
+            was_closed=False
+
+            def close(self):
+                self.was_closed=True
+                return super().close()
+
+        def tracked_connect(*args,**kwargs):
+            kwargs['factory']=TrackingConnection
+            db=original_connect(*args,**kwargs)
+            connections.append(db)
+            return db
+
+        with patch.object(server.sqlite3,'connect',side_effect=tracked_connect):
+            self.handler._save_colour_index({'a':details})
+            self.assertEqual(self.handler._load_colour_index(),{'a':details})
+            self.assertEqual(self.handler._colour_index_count(),1)
+            path=self.handler._colour_index_path()
+            path.write_bytes(b'not a sqlite database')
+            self.assertEqual(self.handler._load_colour_index(),{})
+            self.assertEqual(self.handler._colour_index_count(),0)
+
+        self.assertGreaterEqual(len(connections),5)
+        self.assertTrue(all(db.was_closed for db in connections),
+                        'Every SQLite connection must be explicitly closed')
 
     def test_spine_metadata_post_populates_persistent_colour_index(self):
         colour='#ff00ff'
