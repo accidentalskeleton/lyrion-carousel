@@ -184,8 +184,9 @@ class ServerTests(unittest.TestCase):
                 indexer.stop()
                 indexer.last_foreground=float('-inf')
                 indexer.enqueue(self.handler,['current'])
-                indexer.thread.join(timeout=3)
-        self.assertFalse(indexer.thread is not None and indexer.thread.is_alive())
+                active_thread=indexer.thread
+                active_thread.join(timeout=3)
+        self.assertFalse(active_thread.is_alive())
         self.assertEqual(indexer.snapshot()['status'],'complete')
         self.assertEqual(indexer.snapshot()['completed'],1)
         self.assertEqual([call.args[0] for call in analyse.call_args_list],['current'])
@@ -220,8 +221,9 @@ class ServerTests(unittest.TestCase):
         with patch.object(server.LyrionCarouselHandler,'_artwork_metadata',return_value=metadata) as analyse:
             with patch.object(server.LyrionCarouselHandler,'_remember_catalogue_colours',return_value=1) as save:
                 indexer.enqueue(self.handler,['new','new','../invalid'])
-                indexer.thread.join(timeout=3)
-        self.assertFalse(indexer.thread.is_alive())
+                active_thread=indexer.thread
+                active_thread.join(timeout=3)
+        self.assertFalse(active_thread.is_alive())
         self.assertEqual(indexer.snapshot()['completed'],1)
         self.assertEqual(indexer.snapshot()['failed'],0)
         self.assertEqual(indexer.snapshot()['status'],'complete')
