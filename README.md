@@ -17,8 +17,8 @@ Current application version: **0.10.0**. The canonical version is stored in [`VE
 - saved Shelf/Fan display style and server-prepared artist/album, album-only, colour or random ordering; random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered;
-- paged album-ID → `sort:artflow` position index for direct jumps;
-- persistent server-side artwork and spine metadata cache, plus resized covers (128–1024 px);
+- paged album-ID → `sort:artflow` position index for direct jumps, plus validated in-memory ID-to-index lookups during animation;
+- persistent server-side artwork and spine metadata cache, plus resized covers (128–1024 px); local spine metadata is fetched in 64-ID batches, with at most two concurrent batches and a bounded browser-side metadata LRU;
 - browser-side caching of read-only LMS discovery and album RPCs; prepared ordering requires LMS connectivity;
 - event-driven library refresh after LMS scans complete;
 - album/artist search and A–Z navigation;
@@ -30,8 +30,8 @@ Current application version: **0.10.0**. The canonical version is stored in [`VE
 - compact previous, play/pause and next-track controls;
 - configurable application screen sleep with touch-to-wake protection against accidental commands;
 - swipe-up play queue with current-track highlighting and direct track selection;
-- configurable idle return that scrolls to and opens the playing album, bounded by the maximum scroll duration;
-- keep-playing-cover-open setting, enabled by default; the cover moves with its album when scrolling;
+- configurable idle return that scrolls back to the playing album without closing or reopening its enlarged cover, bounded by the maximum scroll duration;
+- permanently enlarged playing cover that moves with its album during scrolling;
 - saved player selection across browser sessions;
 - live configurable display count, preview/menu timeouts, idle return and maximum scroll duration;
 - Settings panel with explicit LMS, CometD/live-update, player, library, cache and application status;
