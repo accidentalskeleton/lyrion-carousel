@@ -2,7 +2,7 @@ import { rpc } from './lms.js?v=display-choice-1';
 
 const root=document.getElementById('book-fan-browser');
 const openButton=root?.querySelector('.bf-settings-open'),overlay=root?.querySelector('.bf-settings-overlay'),closeButton=root?.querySelector('.bf-settings-close');
-const player=root?.querySelector('.bf-player-select'),idle=root?.querySelector('.bf-idle-return'),menuTimeout=root?.querySelector('.bf-album-menu-timeout'),frontTimeout=root?.querySelector('.bf-front-timeout'),keepPlayingOpen=root?.querySelector('.bf-keep-playing-open'),random=root?.querySelector('.bf-random-duration'),displayCount=root?.querySelector('.bf-display-count'),lmsUrl=root?.querySelector('.bf-lms-url'),lmsConnect=root?.querySelector('.bf-lms-connect-button');
+const player=root?.querySelector('.bf-player-select'),idle=root?.querySelector('.bf-idle-return'),menuTimeout=root?.querySelector('.bf-album-menu-timeout'),frontTimeout=root?.querySelector('.bf-front-timeout'),random=root?.querySelector('.bf-random-duration'),displayCount=root?.querySelector('.bf-display-count'),lmsUrl=root?.querySelector('.bf-lms-url'),lmsConnect=root?.querySelector('.bf-lms-connect-button');
 const aboutConnection=root?.querySelector('.bf-about-connection'),aboutLive=root?.querySelector('.bf-about-live'),aboutPlayer=root?.querySelector('.bf-about-player'),aboutLibrary=root?.querySelector('.bf-about-library'),aboutCache=root?.querySelector('.bf-about-cache'),aboutVersion=root?.querySelector('.bf-about-version'),clearCacheButton=root?.querySelector('.bf-clear-cache'),cacheFeedback=root?.querySelector('.bf-cache-feedback');
 const cacheConfirm=root?.querySelector('.bf-cache-confirm'),cacheCancel=root?.querySelector('.bf-cache-cancel'),cacheConfirmClear=root?.querySelector('.bf-cache-confirm-clear');
 function dismissCacheConfirm(){if(cacheConfirm)cacheConfirm.hidden=true;if(clearCacheButton)clearCacheButton.hidden=false;}
@@ -36,7 +36,7 @@ settingsTabs.forEach((tab,index)=>{
         event.preventDefault();event.stopPropagation();selectSettingsTab(settingsTabs[next],true);
     });
 });
-const storage={displayStyle:'albumBrowserDisplayStyle',coverSize:'albumBrowserCoverSize',keepPlayingOpen:'albumBrowserKeepPlayingOpen',idle:'albumBrowserIdleReturnMs',menuTimeout:'albumBrowserAlbumMenuTimeoutMs',frontTimeout:'albumBrowserFrontPreviewTimeoutMs',random:'albumBrowserRandomScrollMs',displayCount:'albumBrowserDisplayCount',cacheLimit:'albumBrowserCacheLimitBytes',genres:'albumBrowserDisabledGenres',lms:'albumBrowserLmsUrl'}
+const storage={displayStyle:'albumBrowserDisplayStyle',coverSize:'albumBrowserCoverSize',idle:'albumBrowserIdleReturnMs',menuTimeout:'albumBrowserAlbumMenuTimeoutMs',frontTimeout:'albumBrowserFrontPreviewTimeoutMs',random:'albumBrowserRandomScrollMs',displayCount:'albumBrowserDisplayCount',cacheLimit:'albumBrowserCacheLimitBytes',genres:'albumBrowserDisabledGenres',lms:'albumBrowserLmsUrl'}
 function get(key,fallback){try{return localStorage.getItem(key)??fallback}catch(_){return fallback}}
 function set(key,value){try{localStorage.setItem(key,value)}catch(_){}}
 function disabledGenres(){try{const values=JSON.parse(get(storage.genres,'[]'));return new Set(Array.isArray(values)?values.filter(value=>typeof value==='string'):[])}catch(_){return new Set()}}
@@ -69,7 +69,7 @@ async function loadGenres(){
 function apply(value,name){set(storage[name],value);window.dispatchEvent(new CustomEvent('lyrion-carousel-setting',{detail:{name,value}}))}
 function refreshStatus(){const label=root.querySelector('.bf-connection-label')?.textContent?.trim()||'—',cached=root.dataset.catalogueSource==='cache';aboutConnection.textContent=root.dataset.connected==='true'?'Connected':'Not connected';if(aboutLive)aboutLive.textContent=root.dataset.liveUpdates==='true'?'Connected':root.dataset.liveUpdates==='connecting'?'Connecting…':'Disconnected';aboutLibrary.textContent=cached?label+' · cached':label;aboutPlayer.textContent=player?.selectedOptions?.[0]?.textContent||'—';if(aboutCache)aboutCache.textContent=cached?'Using cached catalogue':'Album cache enabled'}
 async function loadVersion(){try{const r=await fetch('VERSION',{cache:'no-store'});if(r.ok)aboutVersion.textContent='v'+(await r.text()).trim()}catch(_){aboutVersion.textContent=''}}
-function initialise(){displayStyle.value=get(storage.displayStyle,'shelf')==='fan'?'fan':'shelf';coverSize.value=get(storage.coverSize,'512');keepPlayingOpen.value=get(storage.keepPlayingOpen,'true');idle.value=get(storage.idle,'30000');menuTimeout.value=get(storage.menuTimeout,'10000');frontTimeout.value=get(storage.frontTimeout,'10000');random.value=get(storage.random,'3000');displayCount.value=get(storage.displayCount,'30');cacheLimit.value=get(storage.cacheLimit,'512000000');window.__lyrionCarouselSettings={displayStyle:displayStyle.value,coverSize:Number(coverSize.value),keepPlayingOpen:keepPlayingOpen.value==='true',idle:Number(idle.value),menuTimeout:Number(menuTimeout.value),frontTimeout:Number(frontTimeout.value),random:Number(random.value),displayCount:Number(displayCount.value)};loadVersion()}
+function initialise(){displayStyle.value=get(storage.displayStyle,'shelf')==='fan'?'fan':'shelf';coverSize.value=get(storage.coverSize,'512');idle.value=get(storage.idle,'30000');menuTimeout.value=get(storage.menuTimeout,'10000');frontTimeout.value=get(storage.frontTimeout,'10000');random.value=get(storage.random,'3000');displayCount.value=get(storage.displayCount,'30');cacheLimit.value=get(storage.cacheLimit,'512000000');window.__lyrionCarouselSettings={displayStyle:displayStyle.value,coverSize:Number(coverSize.value),idle:Number(idle.value),menuTimeout:Number(menuTimeout.value),frontTimeout:Number(frontTimeout.value),random:Number(random.value),displayCount:Number(displayCount.value)};loadVersion()}
 function validLmsUrl(value){return /^https?:\/\/[^/?#]+(?:\/[^?#]*)?$/.test(value)}
 function applyRuntimeDefault(select,name,value){
     if(get(storage[name],null)!==null||!Number.isFinite(Number(value)))return;
@@ -130,7 +130,6 @@ genresAll?.addEventListener('change',()=>{if(!genresAll.checked)return;genreList
 genresNone?.addEventListener('change',()=>{if(!genresNone.checked)return;genreList?.querySelectorAll('input').forEach(input=>input.checked=false);if(genresAll)genresAll.checked=false;applyGenres(true)});
 idle?.addEventListener('change',()=>apply(idle.value,'idle'));
 menuTimeout?.addEventListener('change',()=>apply(menuTimeout.value,'menuTimeout'));
-keepPlayingOpen?.addEventListener('change',()=>apply(keepPlayingOpen.value,'keepPlayingOpen'));
 frontTimeout?.addEventListener('change',()=>apply(frontTimeout.value,'frontTimeout'));
 random?.addEventListener('change',()=>apply(random.value,'random'));
 displayCount?.addEventListener('change',()=>apply(displayCount.value,'displayCount'));
