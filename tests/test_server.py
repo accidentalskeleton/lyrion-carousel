@@ -141,6 +141,35 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(len(snapshot['albums']),2)
         self.assertEqual(len(json.loads(self.handler._catalogue_snapshot_path().read_bytes())['albums']),2)
 
+    def test_observed_scan_detects_artwork_id_change_on_existing_album(self):
+        old=[{'id':1,'artist':'A','album':'Album','artwork_track_id':'previous'}]
+        current=[{'id':1,'artist':'A','album':'Album','artwork_track_id':'new-cover'}]
+        self.handler.runtime_config={'lms_url':self.handler.lms_url}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([old])):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([current])):
+            with patch.object(server.COLOUR_INDEXER,'enqueue') as enqueue:
+                self.handler.path='/api/catalogue/reconcile'
+                self.handler._reconcile_catalogue()
+        result=json.loads(self.responses[-1][1])
+        self.assertTrue(result['changed'])
+        self.assertEqual(result['new_albums'],0)
+        self.assertEqual(list(enqueue.call_args.args[1]),['new-cover'])
+
+    def test_first_observed_snapshot_does_not_bulk_index_entire_library(self):
+        rows=[{'id':i,'artist':'Artist','album':str(i),'artwork_track_id':str(i)}
+              for i in range(1000)]
+        self.handler.runtime_config={'lms_url':self.handler.lms_url}
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([rows])):
+            with patch.object(server.COLOUR_INDEXER,'enqueue') as enqueue:
+                self.handler.path='/api/catalogue/reconcile'
+                self.handler._reconcile_catalogue()
+        data=json.loads(self.responses[-1][1])
+        self.assertTrue(data['changed'])
+        self.assertEqual(data['count'],1000)
+        enqueue.assert_not_called()
+
     def test_observed_scan_detects_updates_when_catalogue_loaded_from_disk(self):
         old=[{'id':1,'artist':'A','album':'Album','artwork_track_id':'a'}]
         self.handler.runtime_config={'lms_url':self.handler.lms_url}
