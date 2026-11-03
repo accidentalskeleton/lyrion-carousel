@@ -25,6 +25,105 @@ class ServerTests(unittest.TestCase):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
         return self.handler.cache_dir / f'{key}.img', self.handler.cache_dir / f'{key}.meta'
 
+    def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
+        pages=[[{'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'},
+                {'id':2,'artist':'Alpha','album':'Zulu','artwork_track_id':'b'}]]
+        calls=[]
+        def fetch_pages(genre_id=None):
+            calls.append(genre_id)
+            return iter(pages)
+        with patch.object(self.handler,'_catalogue_pages',side_effect=fetch_pages):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        self.assertEqual(calls,[None])
+        self.assertEqual([a['id'] for a in json.loads(self.responses[0][1])['albums_loop']],[2,1])
+        self.assertEqual([a['id'] for a in json.loads(self.responses[1][1])['albums_loop']],[1,2])
+        self.assertEqual(self.responses[0][1],self.responses[2][1])
+        self.assertTrue(self.handler._catalogue_snapshot_path().exists())
+
+    def test_snapshot_survives_memory_reset_and_recovers_when_invalidated(self):
+        pages=[[{'id':1,'artist':'Z','album':'First'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)) as upstream:
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        upstream.assert_called_once()
+        key=self.handler._catalogue_snapshot_key()
+        server._CATALOGUE_MEMORY.pop(key,None)
+        with patch.object(self.handler,'_catalogue_pages',side_effect=AssertionError('Unexpected LMS scan')):
+            self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['album'],'First')
+        self.handler._invalidate_catalogue_data()
+        self.assertFalse(self.handler._catalogue_snapshot_path().exists())
+        newer=[[{'id':2,'artist':'A','album':'New Album'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(newer)):
+            self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['id'],2)
+
+    def test_excluded_genres_are_indexed_once_and_persisted(self):
+        albums=[{'id':i,'artist':'Artist','album':str(i)} for i in (1,2,3,4)]
+        calls=[]
+        def pages(genre_id=None):
+            calls.append(genre_id)
+            if genre_id is None:return iter([albums])
+            if genre_id==7:return iter([[albums[1],albums[2]]])
+            if genre_id==9:return iter([[albums[2]]])
+            raise AssertionError('unexpected genre request')
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            self.handler.path='/api/catalogue?order=album&exclude_genre_id=7'
+            self.handler._serve_catalogue()
+            self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,4])
+            self.handler.path='/api/catalogue?order=artistAlbum&exclude_genre_id=7&exclude_genre_id=9'
+            self.handler._serve_catalogue()
+        self.assertEqual(calls,[None,7,9])
+        server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
+        with patch.object(self.handler,'_catalogue_pages',side_effect=AssertionError('Unexpected genre rescan')):
+            self.handler._serve_catalogue()
+        self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,4])
+
+    def test_corrupt_saved_catalogue_falls_back_to_lms(self):
+        path=self.handler._catalogue_snapshot_path()
+        path.write_bytes(b'not-json')
+        pages=[[{'id':5,'artist':'A','album':'Recovered'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['id'],5)
+        self.assertEqual(json.loads(path.read_bytes())['version'],server.CATALOGUE_SNAPSHOT_VERSION)
+
+    def test_invalidation_endpoint_and_cache_clear_drop_snapshots(self):
+        path=self.handler._catalogue_snapshot_path()
+        pages=[[{'id':1,'artist':'A','album':'Example'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        self.assertTrue(path.exists())
+        self.handler._invalidate_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1]),{'invalidated':True})
+        self.assertFalse(path.exists())
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
+            self.handler._serve_catalogue()
+        self.handler._clear_cache_files()
+        self.assertFalse(path.exists())
+        self.assertNotIn(self.handler._catalogue_snapshot_key(),server._CATALOGUE_MEMORY)
+
+    def test_snapshot_status_does_not_scan_lms(self):
+        self.handler.path='/api/catalogue/status'
+        self.handler._serve_catalogue_status()
+        self.assertEqual(json.loads(self.responses[-1][1])['source'],'none')
+        pages=[[{'id':1,'artist':'Artist','album':'Example'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        self.handler._serve_catalogue_status()
+        status=json.loads(self.responses[-1][1])
+        self.assertTrue(status['cached'])
+        self.assertEqual(status['albums'],1)
+        self.assertEqual(status['source'],'memory')
+
     def test_new_metadata_is_stable_and_persisted(self):
         fonts = set()
         for i in range(20):
