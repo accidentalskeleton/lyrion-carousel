@@ -738,7 +738,7 @@ stage.addEventListener('pointerup',event=>{
     const index=focusClickIndex;
     focusClickIndex=null;
     if(randomAnimating||!Number.isInteger(index))return;
-    const album=albums[index],wasClick=dragging&&!moved&&performance.now()-lastShelfScrollAt>=160&&Math.abs(target-position)<.04&&Math.hypot(event.clientX-focusClickX,event.clientY-focusClickY)<=6;
+    const album=albums[index],wasClick=!moved&&performance.now()-lastShelfScrollAt>=160&&Math.abs(target-position)<.04&&Math.hypot(event.clientX-focusClickX,event.clientY-focusClickY)<=6;
     if(wasClick&&album){
         event.stopImmediatePropagation();dragging=false;moved=true;pressedAlbumIndex=null;
         stage.classList.remove('is-dragging');target=nearestPositionForIndex(index);
