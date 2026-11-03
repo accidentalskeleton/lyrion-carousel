@@ -298,6 +298,7 @@ frontPreview.addEventListener('lostpointercapture',cancelFrontGesture);
 frontCaseElement.addEventListener('click',event=>{
     if(frontPreview.hidden||!frontPreviewAlbum||!trackOverlay.hidden||event.target.closest('button'))return;
     if(performance.now()-lastFrontPointerHandledAt<400||frontPress?.long||frontPress?.cancelled)return;
+    lastFrontPointerHandledAt=performance.now();
     showTrackList(frontPreviewAlbum);
 });
 frontArt.addEventListener('keydown',event=>{
