@@ -16,7 +16,9 @@ class ServerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.handler = object.__new__(server.LyrionCarouselHandler)
-        self.handler.cache_dir = Path(self.temp.name)
+        self.handler.cache_dir = Path(self.temp.name) / 'artwork'
+        self.handler.cache_dir.mkdir()
+        self.handler.lms_settings_path = Path(self.temp.name) / server.LMS_SETTINGS_FILENAME
         self.handler.lms_url = 'http://test:9000'
         self.responses = []
         self.handler._send_payload = lambda status, body, *args, **kwargs: self.responses.append((status, body))
@@ -24,6 +26,202 @@ class ServerTests(unittest.TestCase):
     def paths(self, artwork_id):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
         return self.handler.cache_dir / f'{key}.img', self.handler.cache_dir / f'{key}.meta'
+
+    def test_lms_selection_survives_restart_and_artwork_cache_clear(self):
+        self.handler.runtime_config={'lms_url':'http://test:9000'}
+        body=json.dumps({'lms_url':'http://streamer:9000/'}).encode()
+        self.handler.headers={'Content-Length':str(len(body))}
+        self.handler.rfile=io.BytesIO(body)
+        self.handler._update_lms_url()
+        self.assertEqual(self.responses[-1][0],200)
+        self.assertEqual(self.handler.runtime_config['lms_url'],'http://streamer:9000')
+        self.assertEqual(self.handler.lms_url,'http://streamer:9000')
+        path=self.handler.lms_settings_path
+        self.assertTrue(path.is_file())
+        self.assertEqual(server.load_saved_lms_url(path,'http://other-lms:9000'),
+                         'http://streamer:9000')
+        self.handler._clear_cache_files()
+        self.assertTrue(path.exists(),'Clear artwork must never discard selected LMS')
+        self.assertEqual(server.load_saved_lms_url(path,'http://other-lms:9000'),
+                         'http://streamer:9000')
+
+    def test_lms_defaults_use_local_streamer_everywhere(self):
+        root=Path(__file__).resolve().parents[1]
+        service=(root/'packaging/debian/lyrion-carousel.service').read_text()
+        defaults=(root/'packaging/debian/lyrion-carousel.default').read_text()
+        server_source=(root/'server.py').read_text()
+        self.assertIn('Environment=LMS_URL=http://streamer:9000',service)
+        self.assertIn('LMS_URL=http://streamer:9000',defaults)
+        self.assertIn("parser.add_argument('--lms',default='http://streamer:9000'",server_source)
+
+    def test_lms_settings_missing_or_corrupt_fall_back_to_service_default(self):
+        path=self.handler.lms_settings_path
+        self.assertEqual(server.load_saved_lms_url(path,'http://streamer:9000'),
+                         'http://streamer:9000')
+        for payload in [b'not-json',b'{}',
+                        b'{"version":1,"lms_url":"file:///etc/passwd"}',
+                        b'{"version":1,"lms_url":"http://user:secret@host:9000"}',
+                        b'x'*5000]:
+            path.write_bytes(payload)
+            self.assertEqual(server.load_saved_lms_url(path,'http://streamer:9000'),
+                             'http://streamer:9000')
+        server.save_lms_url(path,'http://other-lms:9000')
+        self.assertEqual(server.load_saved_lms_url(path,'http://streamer:9000'),
+                         'http://other-lms:9000')
+
+    def test_lms_change_rejects_bad_url_without_persisting(self):
+        self.handler.runtime_config={'lms_url':'http://test:9000'}
+        body=json.dumps({'lms_url':'http://user:password@bad:9000'}).encode()
+        self.handler.headers={'Content-Length':str(len(body))}
+        self.handler.rfile=io.BytesIO(body)
+        with patch.object(self.handler,'send_error') as error:
+            self.handler._update_lms_url()
+        error.assert_called_once()
+        self.assertEqual(error.call_args.args[0],400)
+        self.assertFalse(self.handler.lms_settings_path.exists())
+        self.assertEqual(self.handler.runtime_config['lms_url'],'http://test:9000')
+
+    def test_lms_settings_write_failure_does_not_switch_live_target(self):
+        self.handler.runtime_config={'lms_url':'http://test:9000'}
+        body=json.dumps({'lms_url':'http://streamer:9000'}).encode()
+        self.handler.headers={'Content-Length':str(len(body))}
+        self.handler.rfile=io.BytesIO(body)
+        with patch.object(server,'save_lms_url',side_effect=OSError('read only')):
+            with patch.object(self.handler,'_send_upstream_error') as error:
+                self.handler._update_lms_url()
+        error.assert_called_once()
+        self.assertEqual(self.handler.runtime_config['lms_url'],'http://test:9000')
+        self.assertEqual(self.handler.lms_url,'http://test:9000')
+
+    def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
+        pages=[[{'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'},
+                {'id':2,'artist':'Alpha','album':'Zulu','artwork_track_id':'b'}]]
+        calls=[]
+        def fetch_pages(genre_id=None):
+            calls.append(genre_id)
+            return iter(pages)
+        with patch.object(self.handler,'_catalogue_pages',side_effect=fetch_pages):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        self.assertEqual(calls,[None])
+        self.assertEqual([a['id'] for a in json.loads(self.responses[0][1])['albums_loop']],[2,1])
+        self.assertEqual([a['id'] for a in json.loads(self.responses[1][1])['albums_loop']],[1,2])
+        self.assertEqual(self.responses[0][1],self.responses[2][1])
+        self.assertTrue(self.handler._catalogue_snapshot_path().exists())
+
+    def test_snapshot_survives_memory_reset_and_recovers_when_invalidated(self):
+        pages=[[{'id':1,'artist':'Z','album':'First'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)) as upstream:
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        upstream.assert_called_once()
+        key=self.handler._catalogue_snapshot_key()
+        server._CATALOGUE_MEMORY.pop(key,None)
+        with patch.object(self.handler,'_catalogue_pages',side_effect=AssertionError('Unexpected LMS scan')):
+            self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['album'],'First')
+        self.handler._invalidate_catalogue_data()
+        self.assertFalse(self.handler._catalogue_snapshot_path().exists())
+        newer=[[{'id':2,'artist':'A','album':'New Album'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(newer)):
+            self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['id'],2)
+
+    def test_excluded_genres_are_indexed_once_and_persisted(self):
+        albums=[{'id':i,'artist':'Artist','album':str(i)} for i in (1,2,3,4)]
+        calls=[]
+        def pages(genre_id=None):
+            calls.append(genre_id)
+            if genre_id is None:return iter([albums])
+            if genre_id==7:return iter([[albums[1],albums[2]]])
+            if genre_id==9:return iter([[albums[2]]])
+            raise AssertionError('unexpected genre request')
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            self.handler.path='/api/catalogue?order=album&exclude_genre_id=7'
+            self.handler._serve_catalogue()
+            self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,4])
+            self.handler.path='/api/catalogue?order=artistAlbum&exclude_genre_id=7&exclude_genre_id=9'
+            self.handler._serve_catalogue()
+        self.assertEqual(calls,[None,7,9])
+        server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
+        with patch.object(self.handler,'_catalogue_pages',side_effect=AssertionError('Unexpected genre rescan')):
+            self.handler._serve_catalogue()
+        self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,4])
+
+    def test_corrupt_saved_catalogue_falls_back_to_lms(self):
+        path=self.handler._catalogue_snapshot_path()
+        path.write_bytes(b'not-json')
+        pages=[[{'id':5,'artist':'A','album':'Recovered'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['id'],5)
+        self.assertEqual(json.loads(path.read_bytes())['version'],server.CATALOGUE_SNAPSHOT_VERSION)
+
+    def test_invalidation_endpoint_and_cache_clear_drop_snapshots(self):
+        path=self.handler._catalogue_snapshot_path()
+        pages=[[{'id':1,'artist':'A','album':'Example'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        self.assertTrue(path.exists())
+        self.handler.path='/api/catalogue/invalidate'
+        self.handler.do_POST()
+        self.assertEqual(json.loads(self.responses[-1][1]),{'invalidated':True})
+        self.assertFalse(path.exists())
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
+            self.handler._serve_catalogue()
+        self.handler._clear_cache_files()
+        self.assertFalse(path.exists())
+        self.assertNotIn(self.handler._catalogue_snapshot_key(),server._CATALOGUE_MEMORY)
+
+    def test_snapshot_status_does_not_scan_lms(self):
+        self.handler.path='/api/catalogue/status'
+        self.handler._serve_catalogue_status()
+        self.assertEqual(json.loads(self.responses[-1][1])['source'],'none')
+        pages=[[{'id':1,'artist':'Artist','album':'Example'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        self.handler._serve_catalogue_status()
+        status=json.loads(self.responses[-1][1])
+        self.assertTrue(status['cached'])
+        self.assertEqual(status['albums'],1)
+        self.assertEqual(status['source'],'memory')
+
+    def test_expired_snapshot_refreshes_instead_of_using_old_disk_data(self):
+        first=[[{'id':1,'artist':'A','album':'Expired'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(first)):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
+        snapshot['created']=server.time.time()-server.CATALOGUE_SNAPSHOT_TTL_SECONDS-30
+        self.handler._save_catalogue_snapshot(snapshot)
+        replacement=[[{'id':2,'artist':'B','album':'Fresh'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(replacement)) as remote:
+            self.handler._serve_catalogue()
+        remote.assert_called_once()
+        self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['album'],'Fresh')
+
+    def test_large_catalogue_sorting_does_not_rescan_upstream(self):
+        rows=[{'id':i,'artist':f'Artist {i%79:03d}','album':f'Album {10000-i:05d}'}
+              for i in range(10000)]
+        calls=[]
+        def pages(genre_id=None):
+            calls.append(genre_id)
+            for start in range(0,len(rows),200):yield rows[start:start+200]
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        self.assertEqual(calls,[None])
+        self.assertEqual(json.loads(self.responses[-1][1])['count'],10000)
+        self.assertEqual(len(json.loads(self.responses[-1][1])['albums_loop']),10000)
 
     def test_new_metadata_is_stable_and_persisted(self):
         fonts = set()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 import time, io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sys, threading
 from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -21,6 +22,18 @@ METADATA_WORKERS=ThreadPoolExecutor(max_workers=6,thread_name_prefix="album-meta
 # a disk baseline; explicit pruning/clearing reconciles the counter.
 _IMAGE_CACHE_LOCK=threading.RLock()
 _IMAGE_CACHE_BYTES={}
+# One snapshot for each LMS target and cache directory. Locks protect concurrent
+# catalogue HTTP requests; the on-disk snapshots survive application restarts.
+_CATALOGUE_LOCK=threading.RLock()
+_CATALOGUE_MEMORY={}
+CATALOGUE_SNAPSHOT_VERSION=1
+CATALOGUE_SNAPSHOT_TTL_SECONDS=900
+CATALOGUE_MAX_SNAPSHOT_BYTES=64_000_000
+CATALOGUE_SORT_CACHE_ENTRIES=4
+# The selected LMS belongs to the appliance, not solely to the web browser.
+# Keep it outside /artwork so Settings -> Clear Cache cannot reset it.
+LMS_SETTINGS_FILENAME='lyrion-carousel-lms.json'
+MAX_LMS_SETTINGS_BYTES=4096
 # Bound incoming JSON, upstream responses and stored image bytes separately.
 MAX_RPC_BYTES=1_000_000
 MAX_UPSTREAM_BYTES=8_000_000
@@ -43,6 +56,40 @@ def colour_sort_index(colour:str)->int:
     hue,saturation,value=colorsys.rgb_to_hsv(red,green,blue)
     hue_band=360 if saturation<.12 else min(359,int(hue*360))
     return hue_band*1_000_000+round(value*1000)*1000+round(saturation*1000)
+
+def validate_lms_url(value)->str:
+    """Normalise the same safe, unauthenticated LMS URL format used by Settings."""
+    if not isinstance(value,str):raise ValueError('LMS URL must be a string')
+    lms_url=value.strip().rstrip('/')
+    parsed=urlsplit(lms_url)
+    if (parsed.scheme not in ('http','https') or not parsed.hostname or
+            parsed.username or parsed.password or parsed.query or parsed.fragment):
+        raise ValueError('Invalid LMS URL')
+    # Trigger urllib validation for malformed numeric ports.
+    _=parsed.port
+    return lms_url
+
+def load_saved_lms_url(path:Path,fallback:str)->str:
+    """Use the persisted server choice, falling back to systemd/CLI on first run."""
+    try:
+        if path.stat().st_size>MAX_LMS_SETTINGS_BYTES:raise ValueError('Oversized LMS settings')
+        payload=json.loads(path.read_bytes())
+        if not isinstance(payload,dict) or payload.get('version')!=1:
+            raise ValueError('Unsupported LMS settings')
+        return validate_lms_url(payload.get('lms_url'))
+    except (OSError,ValueError,UnicodeError,TypeError,AttributeError):
+        return fallback
+
+def save_lms_url(path:Path,lms_url:str)->None:
+    """Atomically persist the LMS choice outside the artwork-cache tree."""
+    payload=json.dumps({'version':1,'lms_url':validate_lms_url(lms_url)}).encode('utf-8')
+    path.parent.mkdir(parents=True,exist_ok=True)
+    temporary=path.with_name(path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
+    try:
+        temporary.write_bytes(payload)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 class UpstreamPayloadTooLarge(Exception):
     pass
@@ -140,10 +187,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     server_version="LyrionCarousel/1.0"
     def __init__(self,*args,directory:str,lms_url:str,cache_dir:Path,runtime_config:dict[str,object],**kwargs):
         self.lms_url=lms_url.rstrip('/'); self.cache_dir=cache_dir; self.runtime_config=runtime_config
+        self.lms_settings_path=cache_dir.parent/LMS_SETTINGS_FILENAME
         super().__init__(*args,directory=directory,**kwargs)
     def end_headers(self)->None:
         """Revalidate application assets; image endpoints supply their own cache policy."""
-        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
+        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear','/api/catalogue','/api/catalogue/status','/api/catalogue/invalidate'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
             self.send_header('Cache-Control','no-cache')
         super().end_headers()
     def do_POST(self)->None:
@@ -151,6 +199,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=='/api/cache/warm': self._warm_cache(); return
         if path=='/api/art-meta': self._serve_metadata_batch(); return
+        if path=='/api/catalogue/invalidate': self._invalidate_catalogue(); return
         if path=='/api/cache/clear': self._clear_cache(); return
         if path=='/api/config/lms': self._update_lms_url(); return
         if path=='/api/config/cache': self._update_cache_limit(); return
@@ -192,10 +241,14 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         """Delete cache files and report the number removed to the Settings UI."""
         removed=0
         try:
-            with _IMAGE_CACHE_LOCK:
-                for path in self.cache_dir.rglob('*'):
-                    if path.is_file() or path.is_symlink(): path.unlink(); removed+=1
-                _IMAGE_CACHE_BYTES.pop(str(self.cache_dir.resolve()),None)
+            # Catalogue sorting may generate artwork and take the IMAGE lock.
+            # Take locks in that same order to avoid deadlocks during clearing.
+            with _CATALOGUE_LOCK:
+                with _IMAGE_CACHE_LOCK:
+                    for path in self.cache_dir.rglob('*'):
+                        if path.is_file() or path.is_symlink(): path.unlink(); removed+=1
+                    _IMAGE_CACHE_BYTES.pop(str(self.cache_dir.resolve()),None)
+                _CATALOGUE_MEMORY.clear()
             self._send_payload(200,json.dumps({'removed':removed}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except OSError as error: self._send_upstream_error(error)
     def _update_lms_url(self)->None:
@@ -205,14 +258,19 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if length<1 or length>MAX_RPC_BYTES: self.send_error(413,'Invalid request size'); return
             payload=json.loads(self.rfile.read(length))
             value=payload.get('lms_url') if isinstance(payload,dict) else None
-            lms_url=str(value).strip().rstrip('/')
-            parsed=urlsplit(lms_url)
-            if parsed.scheme not in {'http','https'} or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment: raise ValueError
+            lms_url=validate_lms_url(value)
+            # Keep the server and browser in agreement after restarts. Persist
+            # before returning 200; if the disk write fails, keep the old URL.
+            save_lms_url(getattr(self,'lms_settings_path',
+                              self.cache_dir.parent/LMS_SETTINGS_FILENAME),lms_url)
             ARTWORK_WARMER.stop()
+            # An earlier snapshot of this server can be stale after switching.
+            self._invalidate_catalogue_data(lms_url=lms_url)
             self.runtime_config['lms_url']=lms_url
             self.lms_url=lms_url
             self._send_payload(200,json.dumps({'lms_url':lms_url}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError): self.send_error(400,'Invalid LMS URL')
+        except OSError as error:self._send_upstream_error(error)
     def _update_cache_limit(self)->None:
         """Update the soft artwork-cache limit without exceeding the server ceiling."""
         try:
@@ -268,6 +326,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if path.startswith('/api/art/'):
             ARTWORK_WARMER.last_foreground=time.monotonic()
         if path=='/api/catalogue': self._serve_catalogue(); return
+        if path=='/api/catalogue/status': self._serve_catalogue_status(); return
         if path=='/api/diagnostics/spotty': self._serve_spotty_diagnostic(); return
         if path=='/api/diagnostics/now-playing': self._serve_now_playing_diagnostic(); return
         if path=='/api/spotty-art': self._serve_spotty_art(); return
@@ -444,33 +503,170 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if start>=int(result.get('count',start)): return
             if not page: raise ValueError('Incomplete catalogue')
 
+    def _catalogue_snapshot_path(self,lms_url:str|None=None)->Path:
+        namespace=hashlib.sha256((lms_url or self.lms_url).encode()).hexdigest()[:24]
+        return self.cache_dir/f'catalogue-v{CATALOGUE_SNAPSHOT_VERSION}-{namespace}.json'
+
+    def _catalogue_snapshot_key(self,lms_url:str|None=None):
+        return (str(self.cache_dir.resolve()),lms_url or self.lms_url)
+
+    def _save_catalogue_snapshot(self,snapshot)->None:
+        """Atomically persist the base catalogue and any indexed genre filters."""
+        path=self._catalogue_snapshot_path()
+        payload=json.dumps({
+            'version':CATALOGUE_SNAPSHOT_VERSION,
+            'lms_url':self.lms_url,
+            'created':snapshot['created'],
+            'albums':snapshot['albums'],
+            'genres':snapshot['genres']
+        },ensure_ascii=False,separators=(',',':')).encode('utf-8')
+        if len(payload)>CATALOGUE_MAX_SNAPSHOT_BYTES:return
+        temp=path.with_name(path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
+        try:
+            temp.write_bytes(payload)
+            temp.replace(path)
+        finally:
+            temp.unlink(missing_ok=True)
+
+    def _load_catalogue_snapshot(self):
+        """Read a valid snapshot, otherwise fetch the complete library exactly once."""
+        key=self._catalogue_snapshot_key()
+        now=time.time()
+        snapshot=_CATALOGUE_MEMORY.get(key)
+        if snapshot and 0<=now-snapshot['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS:
+            return snapshot
+        path=self._catalogue_snapshot_path()
+        try:
+            if path.stat().st_size>CATALOGUE_MAX_SNAPSHOT_BYTES:raise ValueError('Snapshot too large')
+            data=json.loads(path.read_bytes())
+            if (data.get('version')!=CATALOGUE_SNAPSHOT_VERSION or
+                    data.get('lms_url')!=self.lms_url or
+                    not isinstance(data.get('albums'),list) or
+                    not all(isinstance(album,dict) for album in data['albums']) or
+                    not isinstance(data.get('genres'),dict) or
+                    not all(isinstance(ids,list) and all(isinstance(i,str) for i in ids)
+                            for ids in data['genres'].values()) or
+                    not isinstance(data.get('created'),(int,float)) or
+                    not 0<=now-data['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS):
+                raise ValueError('Snapshot outdated')
+            snapshot={'created':data['created'],'albums':data['albums'],
+                      'genres':data['genres'],'orders':OrderedDict()}
+        except (OSError,ValueError,TypeError,AttributeError,UnicodeError):
+            albums=[album for page in self._catalogue_pages() for album in page]
+            snapshot={'created':time.time(),'albums':albums,'genres':{},'orders':OrderedDict()}
+            try:self._save_catalogue_snapshot(snapshot)
+            except OSError:pass  # Serving the live catalogue is more important than caching.
+        _CATALOGUE_MEMORY[key]=snapshot
+        return snapshot
+
+    def _catalogue_genre_ids(self,snapshot,genres:set[int])->set[str]:
+        """Index each excluded genre once; reuse across orders and restarts."""
+        excluded=set()
+        changed=False
+        for genre_id in sorted(genres):
+            key=str(genre_id)
+            if key not in snapshot['genres']:
+                ids={str(album['id']) for page in self._catalogue_pages(genre_id)
+                     for album in page if album.get('id') is not None}
+                snapshot['genres'][key]=sorted(ids)
+                changed=True
+            excluded.update(snapshot['genres'][key])
+        if changed:
+            try:self._save_catalogue_snapshot(snapshot)
+            except OSError:pass
+        return excluded
+
+    def _invalidate_catalogue_data(self,lms_url:str|None=None)->None:
+        """Forget memory and disk snapshots after an LMS rescan or source change."""
+        with _CATALOGUE_LOCK:
+            _CATALOGUE_MEMORY.pop(self._catalogue_snapshot_key(lms_url),None)
+            self._catalogue_snapshot_path(lms_url).unlink(missing_ok=True)
+
+    def _invalidate_catalogue(self)->None:
+        try:
+            self._invalidate_catalogue_data()
+            self._send_payload(200,b'{"invalidated":true}','application/json; charset=utf-8',cache_control='no-store')
+        except OSError as error:self._send_upstream_error(error)
+
+    def _serve_catalogue_status(self)->None:
+        """Lightweight diagnostics without triggering any LMS requests."""
+        key=self._catalogue_snapshot_key()
+        with _CATALOGUE_LOCK:
+            snapshot=_CATALOGUE_MEMORY.get(key)
+            if snapshot:
+                age=max(0,time.time()-snapshot['created'])
+                state={'cached':age<CATALOGUE_SNAPSHOT_TTL_SECONDS,
+                       'source':'memory','age_seconds':round(age,1),
+                       'albums':len(snapshot['albums']),
+                       'genre_indexes':len(snapshot['genres'])}
+            else:
+                path=self._catalogue_snapshot_path()
+                if path.is_file():
+                    # Checking the recorded creation date avoids reporting an
+                    # expired on-disk snapshot as warm. Never contact LMS here.
+                    try:
+                        data=json.loads(path.read_bytes())
+                        age=max(0,time.time()-float(data['created']))
+                        valid=(data.get('version')==CATALOGUE_SNAPSHOT_VERSION and
+                               data.get('lms_url')==self.lms_url and
+                               age<CATALOGUE_SNAPSHOT_TTL_SECONDS)
+                        state={'cached':valid,'source':'disk',
+                               'age_seconds':round(age,1),
+                               'albums':len(data.get('albums',[])),
+                               'genre_indexes':len(data.get('genres',{}))}
+                    except (OSError,ValueError,KeyError,TypeError,AttributeError):
+                        state={'cached':False,'source':'invalid'}
+                else:
+                    state={'cached':False,'source':'none'}
+        self._send_payload(200,json.dumps(state).encode(),'application/json; charset=utf-8',cache_control='no-store')
+
     def _serve_catalogue(self)->None:
-        """Fetch a fresh catalogue and return the requested order, prepared on the server."""
+        """Prepare an ordering from a shared, persistent LMS catalogue snapshot."""
         query=parse_qs(urlsplit(self.path).query)
         mode=query.get('order',['artistAlbum'])[0]
-        excluded_genre_ids={int(genre_id) for genre_id in query.get('exclude_genre_id',[]) if genre_id.isdecimal() and int(genre_id)>0}
+        excluded_genre_ids={int(genre_id) for genre_id in query.get('exclude_genre_id',[])
+                            if genre_id.isdecimal() and int(genre_id)>0}
         if mode not in ('artistAlbum','album','colour','random'):
-            self.send_error(400,'Invalid album order'); return
+            self.send_error(400,'Invalid album order');return
         try:
-            albums=[album for page in self._catalogue_pages() for album in page]
-            library_count=len(albums)
-            if excluded_genre_ids:
-                excluded_album_ids={str(album.get('id')) for genre_id in excluded_genre_ids for page in self._catalogue_pages(genre_id) for album in page}
-                albums=[album for album in albums if str(album.get('id')) not in excluded_album_ids]
-            if mode=='colour':
-                ids=list(dict.fromkeys(str(a['artwork_track_id']) for a in albums if a.get('artwork_track_id')))
-                metadata=dict(zip(ids,METADATA_WORKERS.map(self._artwork_metadata,ids)))
-                for album in albums: album['spine_metadata']=metadata.get(str(album.get('artwork_track_id')))
-            # Album IDs break name ties deterministically; missing colours sort last.
-            def key(album):
-                artist=str(album.get('artist','')).casefold(); title=str(album.get('album',album.get('title',''))).casefold()
-                tie=(artist,title,str(album.get('id','')))
-                if mode=='colour': return ((album.get('spine_metadata') or {}).get('colour_index',float('inf')),*tie)
-                return tie if mode=='artistAlbum' else (title,artist,tie[2])
-            if mode=='random': random.shuffle(albums)
-            else: albums.sort(key=key)
-            self._send_payload(200,json.dumps({'count':len(albums),'library_count':library_count,'albums_loop':albums}).encode(),'application/json; charset=utf-8',cache_control='no-store')
-        except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
+            with _CATALOGUE_LOCK:
+                snapshot=self._load_catalogue_snapshot()
+                order_key=(mode,tuple(sorted(excluded_genre_ids)))
+                cached=snapshot['orders'].get(order_key) if mode!='random' else None
+                if cached is not None:
+                    snapshot['orders'].move_to_end(order_key)
+                    payload=cached
+                else:
+                    excluded_ids=self._catalogue_genre_ids(snapshot,excluded_genre_ids)
+                    albums=[album for album in snapshot['albums']
+                            if str(album.get('id')) not in excluded_ids]
+                    library_count=len(snapshot['albums'])
+                    if mode=='colour':
+                        # Metadata is already stored individually in .meta files.
+                        # Retain its existing complete-colour ordering semantics.
+                        ids=list(dict.fromkeys(str(a['artwork_track_id']) for a in albums
+                                               if a.get('artwork_track_id')))
+                        metadata=dict(zip(ids,METADATA_WORKERS.map(self._artwork_metadata,ids)))
+                        albums=[dict(album,spine_metadata=metadata.get(str(album.get('artwork_track_id'))))
+                                for album in albums]
+                    def key(album):
+                        artist=str(album.get('artist','')).casefold()
+                        title=str(album.get('album',album.get('title',''))).casefold()
+                        tie=(artist,title,str(album.get('id','')))
+                        if mode=='colour':
+                            return ((album.get('spine_metadata') or {}).get('colour_index',float('inf')),*tie)
+                        return tie if mode=='artistAlbum' else (title,artist,tie[2])
+                    if mode=='random':random.shuffle(albums)
+                    else:albums.sort(key=key)
+                    payload=json.dumps({'count':len(albums),'library_count':library_count,
+                                        'albums_loop':albums},ensure_ascii=False).encode('utf-8')
+                    if mode!='random':
+                        snapshot['orders'][order_key]=payload
+                        while len(snapshot['orders'])>CATALOGUE_SORT_CACHE_ENTRIES:
+                            snapshot['orders'].popitem(last=False)
+            self._send_payload(200,payload,'application/json; charset=utf-8',cache_control='no-store')
+        except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
+            self._send_upstream_error(error)
 
     def _serve_sized_artwork(self,artwork_id:str,size:int,case:bool=False)->None:
         """Serve a cached resized/composited image, preparing it on the first request."""
@@ -683,7 +879,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
 def main()->int:
     """Read configuration, initialise the cache and run the threaded HTTP server."""
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--lms',default='http://mrlazy:9000',help='LMS base URL'); parser.add_argument('--bind',default='127.0.0.1',help='Address to listen on'); parser.add_argument('--port',type=int,default=8088,help='HTTP port')
+    parser.add_argument('--lms',default='http://streamer:9000',help='LMS base URL'); parser.add_argument('--bind',default='127.0.0.1',help='Address to listen on'); parser.add_argument('--port',type=int,default=8088,help='HTTP port')
     parser.add_argument('--batch-size',type=positive_int,default=40,help='Albums per LMS batch'); parser.add_argument('--idle-return-seconds',type=non_negative_int,default=30,help='Idle time before returning to the playing album; 0 disables')
     parser.add_argument('--reconnect-max-seconds',type=positive_int,default=30,help='Maximum reconnect backoff'); parser.add_argument('--random-scroll-max-seconds',type=positive_int,default=3,help='Maximum random and idle-return scroll duration'); parser.add_argument('--search-limit',type=positive_int,default=100,help='Maximum albums returned by a search'); parser.add_argument('--cache-dir',help='Persistent artwork cache directory (default: .cache/album-art)'); parser.add_argument('--cache-limit-mb',type=positive_int,default=MAX_ARTWORK_CACHE_BYTES//1_000_000,help='Default artwork cache limit in MB'); parser.add_argument('--cache-hard-limit-mb',type=positive_int,default=MAX_ARTWORK_CACHE_HARD_BYTES//1_000_000,help='Maximum artwork cache limit clients may select in MB'); parser.add_argument('--clear-cache',action='store_true',help='Clear the persistent artwork cache before starting'); args=parser.parse_args()
     if args.cache_limit_mb>args.cache_hard_limit_mb: parser.error('--cache-limit-mb must not exceed --cache-hard-limit-mb')
@@ -691,15 +887,16 @@ def main()->int:
     if args.clear_cache and cache_dir.exists():
         removed=sum(1 for path in cache_dir.rglob('*') if path.is_file()); shutil.rmtree(cache_dir); print(f"Cleared artwork cache: {removed} file{'s' if removed!=1 else ''} removed from {cache_dir}")
     cache_dir.mkdir(parents=True,exist_ok=True)
+    saved_lms_url=load_saved_lms_url(cache_dir.parent/LMS_SETTINGS_FILENAME,args.lms.rstrip('/'))
     # Shared mutable defaults are exposed to the browser. UI durations use ms;
     # CLI durations use seconds. The handler factory reads the current LMS target.
-    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'cache_limit_bytes':args.cache_limit_mb*1_000_000,'cache_hard_limit_bytes':args.cache_hard_limit_mb*1_000_000,'lms_url':args.lms.rstrip('/')}
+    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'cache_limit_bytes':args.cache_limit_mb*1_000_000,'cache_hard_limit_bytes':args.cache_hard_limit_mb*1_000_000,'lms_url':saved_lms_url}
     def handler(*handler_args,**handler_kwargs): return LyrionCarouselHandler(*handler_args,directory=str(static_dir),lms_url=runtime_config['lms_url'],cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
     # Long-poll connections must not block ordinary artwork and control requests.
     server=ThreadingHTTPServer((args.bind,args.port),handler)
     if args.bind in {'0.0.0.0','::'}: print('Lyrion Carousel listening on all network interfaces.'); print(f'Open: http://{socket.gethostname()}:{args.port}/ or http://<server-ip>:{args.port}/')
     else: print(f'Lyrion Carousel: http://{args.bind}:{args.port}/')
-    print(f'Lyrion server: {args.lms}'); print(f'Artwork cache: {cache_dir}'); print(f'Runtime config: batch={args.batch_size}, idle={args.idle_return_seconds}s, library-events=CometD, live-status=CometD, album-index=lightweight, random-scroll-max={args.random_scroll_max_seconds}s')
+    print(f'Lyrion server: {runtime_config["lms_url"]}'); print(f'Artwork cache: {cache_dir}'); print(f'Runtime config: batch={args.batch_size}, idle={args.idle_return_seconds}s, library-events=CometD, live-status=CometD, album-index=lightweight, random-scroll-max={args.random_scroll_max_seconds}s')
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nStopping.')
     finally: server.server_close()

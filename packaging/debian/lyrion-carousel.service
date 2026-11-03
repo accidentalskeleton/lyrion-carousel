@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-Environment=LMS_URL=http://mrlazy:9000
+Environment=LMS_URL=http://streamer:9000
 Environment=BIND_ADDRESS=0.0.0.0
 Environment=PORT=8088
 Environment=CACHE_DIR=/var/cache/lyrion-carousel/artwork

@@ -16,11 +16,11 @@ Current application version: **0.10.0**. The canonical version is stored in [`VE
 - circular CD shelf with artwork-derived spine colours, stable readable font choices, and configurable displayed-album count;
 - saved Shelf/Fan display style and server-prepared artist/album, album-only, colour or random ordering; random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
-- server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered;
+- server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered; a 15-minute persistent catalogue snapshot avoids rescanning LMS for every sort or genre-filter change;
 - paged album-ID → `sort:artflow` position index for direct jumps, plus validated in-memory ID-to-index lookups during animation;
 - persistent server-side artwork and spine metadata cache, plus resized covers (128–1024 px); local spine metadata is fetched in 64-ID batches, with at most two concurrent batches and a bounded browser-side metadata LRU;
 - browser-side caching of read-only LMS discovery and album RPCs; prepared ordering requires LMS connectivity;
-- event-driven library refresh after LMS scans complete;
+- event-driven library refresh after LMS scans complete, invalidating the server catalogue snapshot before reloading;
 - album/artist search and A–Z navigation;
 - shamrock random-album selection with configurable animation duration;
 - click/tap a spine to preview its realistic closed cover; drag/swipe the cover left or right to scroll spines without opening the next cover; the playing album stays enlarged throughout scrolling and automatic idle return, while clicking a spine can temporarily preview another album; long-press the cover for the album menu (including Album Information), or use its separate play button to start playback;
@@ -86,7 +86,7 @@ python3 server.py --bind 0.0.0.0
 
 | Option | Default | Purpose |
 | --- | ---: | --- |
-| `--lms` | `http://mrlazy:9000` | Lyrion Music Server base URL |
+| `--lms` | `http://streamer:9000` | Lyrion Music Server base URL |
 | `--bind` | `127.0.0.1` | Controller listening address |
 | `--port` | `8088` | Controller HTTP port |
 | `--cache-dir` | `.cache/album-art` | Persistent album cache location |
@@ -294,13 +294,43 @@ To prevent the service from starting at boot and stop it immediately:
 sudo systemctl disable --now lyrion-carousel.service
 ```
 
+## Large-library catalogue snapshots
+
+The first cold catalogue request still reads LMS in bounded 200-album pages. Subsequent sort changes reuse the same catalogue, including after restarting Carousel while the snapshot is still fresh. The snapshot lasts up to 15 minutes as a fallback when library events are unavailable; an LMS scan-complete event invalidates it immediately. Genre-exclusion album IDs are indexed only on first use and saved alongside the snapshot. Non-random prepared orders are retained in a four-entry in-memory response cache; random order is shuffled afresh each time.
+
+The snapshot is stored separately from image files under the existing Carousel cache directory. Clearing the artwork cache also removes catalogue snapshots, but **does not reset the selected LMS server**. Colour ordering still requires complete colour metadata preparation on its first uncached request; incremental background colour indexing is a future optimisation.
+
+### LMS URL across service restarts
+
+The installed systemd service uses `LMS_URL` from `/etc/default/lyrion-carousel` as the **initial fallback** (currently `http://streamer:9000`). Once the Connection settings page selects another LMS, Carousel now writes that choice to `/var/cache/lyrion-carousel/lyrion-carousel-lms.json` (the parent of the configured `CACHE_DIR`). The saved server takes precedence on subsequent restarts, even before any browser reconnects. It is deliberately outside the artwork cache so Settings → Clear Cache does not remove it.
+
+To use the local LMS on the streamer, change its URL in Carousel's Connection settings to `http://streamer:9000` after deploying this version, or POST:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8088/api/config/lms \
+  -H 'Content-Type: application/json' \
+  -d '{"lms_url":"http://streamer:9000"}' | python3 -m json.tool
+```
+
+Verify `/api/config` returns `streamer:9000` both before and after restarting `lyrion-carousel.service`. This prevents a restart from silently loading a different LMS's catalogue snapshot.
+
+Inspect the catalogue cache without triggering a new LMS scan:
+
+```bash
+curl -s http://127.0.0.1:8088/api/catalogue/status | python3 -m json.tool
+```
+
+The `cached` field should be `true` after the catalogue has loaded. To measure the improvement, compare a first cold sort against subsequent sort changes with the browser Network tab and watch the absence of repeated LMS catalogue page requests.
+
 ## Server endpoints
 
 `server.py` is intentionally small and is not a general-purpose proxy:
 
 - `/api/lms` → LMS JSON-RPC;
 - `/api/cometd` → LMS CometD;
-- `/api/catalogue?order=artistAlbum|album|colour|random` → server-prepared ordered catalogue;
+- `/api/catalogue?order=artistAlbum|album|colour|random` → server-prepared ordered catalogue from a disk-backed snapshot (15-minute TTL);
+- `/api/catalogue/status` → catalogue snapshot state, age and album count (GET, never contacts LMS);
+- `/api/catalogue/invalidate` → discard the catalogue snapshot after an LMS library scan completes (POST);
 - `/api/art/<artwork-id>?size=512` → cached resized cover; omit size for original artwork;
 - `/api/art-meta/<artwork-id>` → cached spine colour, text contrast, font and colour index;
 - `/api/art-meta` → prepare metadata for up to 64 artwork IDs (POST);
