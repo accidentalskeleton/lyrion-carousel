@@ -61,6 +61,15 @@ def colour_sort_index(colour:str)->int:
     hue_band=360 if saturation<.12 else min(359,int(hue*360))
     return hue_band*1_000_000+round(value*1000)*1000+round(saturation*1000)
 
+def valid_colour_metadata(details)->bool:
+    if not isinstance(details,dict):return False
+    colour=details.get('spine_color')
+    if not isinstance(colour,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',colour):
+        return False
+    return (details.get('colour_index')==colour_sort_index(colour)
+            and isinstance(details.get('text_color'),str)
+            and isinstance(details.get('spine_font'),str))
+
 def validate_lms_url(value)->str:
     """Normalise the same safe, unauthenticated LMS URL format used by Settings."""
     if not isinstance(value,str):raise ValueError('LMS URL must be a string')
@@ -554,9 +563,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     not all(isinstance(ids,list) and all(isinstance(i,str) for i in ids)
                             for ids in data['genres'].values()) or
                     not isinstance(data.get('colours'),dict) or
-                    not all(isinstance(k,str) and isinstance(v,dict) and
-                            isinstance(v.get('colour_index'),int) and
-                            re.fullmatch(r'#[0-9a-fA-F]{6}',str(v.get('spine_color','')))
+                    not all(isinstance(k,str) and valid_colour_metadata(v)
                             for k,v in data['colours'].items()) or
                     not isinstance(data.get('created'),(int,float)) or
                     not 0<=now-data['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS):
@@ -583,8 +590,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 return 0
             changed=0
             for artwork_id,details in metadata.items():
-                if not isinstance(details,dict) or not isinstance(details.get('colour_index'),int):
-                    continue
+                if not valid_colour_metadata(details):continue
                 if snapshot['colours'].get(artwork_id)!=details:
                     snapshot['colours'][artwork_id]=details
                     changed+=1
