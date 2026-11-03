@@ -109,6 +109,44 @@ export async function runTests(sources) {
   api.set({connecting:false});
   assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden&&api.state().frontTimer===0,'startup opens playing cover without timeout');
 
+  // The photographic cover is now a direct Album Information control, not an
+  // animated opening case. Keep pointer, keyboard, fallback click and long press.
+  const trackOverlay=element('.bf-track-overlay');
+  const coverTarget={closest:selector=>selector==='.bf-front-case'?frontCase:null};
+  const playbackBefore=rpcCalls.filter(command=>command[0]==='playlistcontrol').length;
+  assert(trackOverlay.hidden,'Album Information initially closed');
+  frontCase.dispatchEvent({type:'click',target:{closest:()=>null}});
+  assert(!trackOverlay.hidden,'native cover click opens Album Information');
+  api.closeTrackList();
+
+  let prevented=false;
+  element('.bf-front-art').dispatchEvent({type:'keydown',key:'Enter',preventDefault(){prevented=true;}});
+  assert(prevented&&!trackOverlay.hidden,'keyboard Enter opens Album Information from the cover');
+  api.closeTrackList();
+  prevented=false;
+  element('.bf-front-art').dispatchEvent({type:'keydown',key:' ',preventDefault(){prevented=true;}});
+  assert(prevented&&!trackOverlay.hidden,'keyboard Space opens Album Information from the cover');
+  api.closeTrackList();
+
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:31,clientX:80,clientY:90});
+  preview.dispatchEvent({type:'pointerup',pointerId:31});
+  assert(!trackOverlay.hidden,'normal short tap opens Album Information without opening a case');
+  api.closeTrackList();
+  frontCase.dispatchEvent({type:'click',target:{closest:()=>null}});
+  assert(trackOverlay.hidden,'synthetic click after pointerup does not reopen Album Information');
+
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:32,clientX:80,clientY:90});
+  preview.dispatchEvent({type:'pointermove',pointerId:32,clientX:125,clientY:90});
+  preview.dispatchEvent({type:'pointerup',pointerId:32});
+  assert(trackOverlay.hidden,'dragging the cover does not open Album Information');
+  const playTarget={closest:selector=>selector==='button'?element('.bf-front-play'):frontCase};
+  preview.dispatchEvent({type:'pointerdown',button:0,target:playTarget,pointerId:33,clientX:80,clientY:90});
+  frontCase.dispatchEvent({type:'click',target:playTarget});
+  assert(trackOverlay.hidden,'Play button does not activate the cover information control');
+  assert(rpcCalls.filter(command=>command[0]==='playlistcontrol').length===playbackBefore,
+    'cover information interactions never change playback');
+
+
   const compilationAlbum=api.state().albums.find(album=>album?.[6]===20);
   const originalAlbumArtist=compilationAlbum[1];
   compilationAlbum[1]='Various Artists';
@@ -354,6 +392,12 @@ export async function runTests(sources) {
   }
   if (sources.index) {
     assert(sources.index.includes('data-source="library"')&&sources.index.includes('data-source="spotify"'),'Library and Spotify source controls present');
+    assert(sources.index.includes('role="button" tabindex="0" aria-label="Show album information"'),
+      'closed cover exposes an accessible Album Information action');
+    assert(!sources.index.includes('gsap-jewel-poc')&&!sources.index.includes('cdn.jsdelivr.net/npm/gsap'),
+      'production page has no GSAP or open-case experiment dependencies');
+    assert(sources.index.includes('class="bf-front-play"'),
+      'separate Play button remains on the closed photographic case');
     assert(sources.index.includes('settings-panel-coffee')&&sources.index.includes('https://buymeacoffee.com/stuliet'),'Coffee settings panel present');
   }
   if (sources.albumBrowserCss) {
@@ -384,6 +428,8 @@ export async function runTests(sources) {
   }
   assert(sources.app.includes("'tags:altngidA'")&&sources.app.includes('trackGenres'),'LMS Album Information requests disc, artist and genre metadata');
   assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
+  assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
+    'closed-cover interaction no longer dispatches open-case events');
   assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
 
   return checks;
