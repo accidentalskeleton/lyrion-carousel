@@ -171,6 +171,45 @@ class ServerTests(unittest.TestCase):
         self.assertIs(server._CATALOGUE_MEMORY[key],old)
         self.assertEqual(self.handler._catalogue_snapshot_path().read_bytes(),snapshot_bytes)
 
+    def test_background_indexer_can_restart_after_cancellation_for_same_lms(self):
+        indexer=server.CarouselColourIndexer()
+        # Ensure the old worker never reaches artwork I/O before cancellation.
+        indexer.last_foreground=server.time.monotonic()+10
+        metadata={'spine_color':'#00ff00','text_color':'#111417',
+                  'spine_font':server.SPINE_FONTS[0],
+                  'colour_index':server.colour_sort_index('#00ff00')}
+        with patch.object(server.LyrionCarouselHandler,'_artwork_metadata',return_value=metadata) as analyse:
+            with patch.object(server.LyrionCarouselHandler,'_remember_catalogue_colours',return_value=1):
+                indexer.enqueue(self.handler,['stale'])
+                indexer.stop()
+                indexer.last_foreground=float('-inf')
+                indexer.enqueue(self.handler,['current'])
+                indexer.thread.join(timeout=3)
+        self.assertFalse(indexer.thread is not None and indexer.thread.is_alive())
+        self.assertEqual(indexer.snapshot()['status'],'complete')
+        self.assertEqual(indexer.snapshot()['completed'],1)
+        self.assertEqual([call.args[0] for call in analyse.call_args_list],['current'])
+
+    def test_background_indexer_resumes_after_finishing_previous_queue(self):
+        indexer=server.CarouselColourIndexer()
+        indexer.last_foreground=float('-inf')
+        metadata={'spine_color':'#ff0000','text_color':'#111417',
+                  'spine_font':server.SPINE_FONTS[0],
+                  'colour_index':server.colour_sort_index('#ff0000')}
+        with patch.object(server.LyrionCarouselHandler,'_artwork_metadata',return_value=metadata) as analyse:
+            with patch.object(server.LyrionCarouselHandler,'_remember_catalogue_colours',return_value=1):
+                indexer.enqueue(self.handler,['first'])
+                first=indexer.thread
+                first.join(timeout=3)
+                self.assertFalse(first.is_alive())
+                indexer.enqueue(self.handler,['second'])
+                second=indexer.thread
+                second.join(timeout=3)
+                self.assertFalse(second.is_alive())
+        self.assertIsNot(first,second)
+        self.assertEqual(indexer.snapshot()['completed'],2)
+        self.assertEqual([call.args[0] for call in analyse.call_args_list],['first','second'])
+
     def test_colour_indexer_runs_independently_and_processes_new_artwork(self):
         indexer=server.CarouselColourIndexer()
         indexer.last_foreground=float('-inf')
