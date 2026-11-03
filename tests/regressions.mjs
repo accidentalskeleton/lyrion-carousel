@@ -145,8 +145,8 @@ export async function runTests(sources) {
   preview.dispatchEvent({type:'pointerup',pointerId:32});
   assert(trackOverlay.hidden&&!stage.classList.contains('is-dragging')&&api.state().target>originalCoverPosition,
     'releasing the cover drag snaps toward a neighbouring album without showing info');
-  assert(api.state().frontPreviewAlbum!==originalCover,
-    'dragging the cover updates the enlarged preview to the newly selected album');
+  assert(api.state().frontPreviewAlbum===originalCover&&!preview.hidden,
+    'swiping a pinned playing cover never opens the destination album');
   api.set({position:originalCoverPosition});
   api.openFrontPreview(originalCover,originalCoverIndex);
 
@@ -391,21 +391,55 @@ export async function runTests(sources) {
   api.openFrontPreview(api.state().albums[5],5);
   const playbackCalls=rpcCalls.filter(c=>c[0]==='playlistcontrol').length;
   api.browseWithArrow(1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[6],'right arrow advances open cover');
+  assert(preview.hidden&&api.state().frontPreviewAlbum===null&&Math.round(api.state().target)===6,
+    'arrow navigation closes a manually opened cover without opening the next');
   api.browseWithArrow(1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[7],'repeated arrow advances before animation finishes');
+  assert(preview.hidden&&Math.round(api.state().target)===7,
+    'repeated arrows move selection without opening covers');
   api.browseWithArrow(-1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[6],'left arrow reverses open preview');
-  api.openFrontPreview(api.state().albums.at(-1),api.state().albums.length-1);
+  assert(preview.hidden&&Math.round(api.state().target)===6,
+    'reverse arrow moves spines without opening a cover');
+  const lastAlbum=api.state().albums.length-1;
+  api.set({position:lastAlbum});
   api.browseWithArrow(1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[0],'keyboard preview wraps around catalogue');
-  api.closeFrontPreview();api.browseWithArrow(1);
-  assert(preview.hidden,'closed covers stay closed on arrow navigation');
-  api.set({playing:true,playingAlbumId:20});
+  assert(preview.hidden&&Math.round(api.state().target)===lastAlbum+1,
+    'arrow browsing wraps without opening the next album');
+  api.set({playing:true,playingAlbumId:20,position:5});
   const pinnedIndex=api.state().albums.findIndex(a=>a[6]===20);
-  api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);api.browseWithArrow(1);
-  assert(api.state().frontPreviewAlbum===api.state().albums[(pinnedIndex+1)%api.state().albums.length],'arrow browses away from pinned playing cover');
-  assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===playbackCalls,'keyboard previews do not start playback');
+  api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);
+  api.browseWithArrow(1);
+  assert(api.state().frontPreviewAlbum===api.state().albums[pinnedIndex]&&!preview.hidden,
+    'arrow navigation leaves the currently playing cover pinned');
+  assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===playbackCalls,
+    'keyboard browsing never starts playback');
+
+  // Wheel browsing must never promote a spine to a preview. Once it stops,
+  // a deliberate tap on a spine is still allowed to open that album.
+  api.set({playing:false,position:5});
+  api.openFrontPreview(api.state().albums[5],5);
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:180,preventDefault(){}});
+  assert(preview.hidden&&api.state().frontPreviewAlbum===null,
+    'wheel scrolling dismisses a manually previewed album without opening another');
+  const wheelPosition=api.state().position;
+  const idleIndex=(Math.round(wheelPosition)+2)%api.state().albums.length;
+  const idleSpine={dataset:{index:String(idleIndex)}};
+  const idleTarget={closest:selector=>selector==='.bf-album'?idleSpine:null};
+  stage.dispatchEvent({type:'pointerdown',button:0,target:idleTarget,pointerId:51,clientX:100,clientY:80});
+  stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:51,clientX:100,clientY:80,stopImmediatePropagation(){}});
+  assert(preview.hidden,'spine press during wheel scrolling cannot open a cover');
+  time+=250;
+  api.set({position:Math.round(wheelPosition)});
+  stage.dispatchEvent({type:'pointerdown',button:0,target:idleTarget,pointerId:52,clientX:100,clientY:80});
+  stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:52,clientX:100,clientY:80,stopImmediatePropagation(){}});
+  assert(api.state().frontPreviewAlbum===api.state().albums[idleIndex]&&!preview.hidden,
+    'deliberate spine click opens its cover once scrolling has stopped');
+
+  api.set({playing:true,playingAlbumId:20,position:5});
+  api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:180,preventDefault(){}});
+  assert(api.state().frontPreviewAlbum===api.state().albums[pinnedIndex]&&!preview.hidden,
+    'wheel scrolling retains the currently playing cover without replacing it');
+
   assert(api.coverCache().active===2,'cover preloader limits concurrent downloads');
   assert(imageRequests.every(image=>image.fetchPriority==='low'&&image.decoding==='async'),'cover warming uses low priority and async decoding');
   api.prefetchCoverWindow(10);api.prefetchCoverWindow(30);
