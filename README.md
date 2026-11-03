@@ -294,13 +294,29 @@ To prevent the service from starting at boot and stop it immediately:
 sudo systemctl disable --now lyrion-carousel.service
 ```
 
+## Large-library catalogue snapshots
+
+The first cold catalogue request still reads LMS in bounded 200-album pages. Subsequent sort changes reuse the same catalogue, including after restarting Carousel while the snapshot is still fresh. The snapshot lasts up to 15 minutes as a fallback when library events are unavailable; an LMS scan-complete event invalidates it immediately. Genre-exclusion album IDs are indexed only on first use and saved alongside the snapshot. Non-random prepared orders are retained in a four-entry in-memory response cache; random order is shuffled afresh each time.
+
+The snapshot is stored separately from image files under the existing Carousel cache directory. Clearing the cache also removes catalogue snapshots. Colour ordering still requires complete colour metadata preparation on its first uncached request; incremental background colour indexing is a future optimisation.
+
+Inspect the catalogue cache without triggering a new LMS scan:
+
+```bash
+curl -s http://127.0.0.1:8088/api/catalogue/status | python3 -m json.tool
+```
+
+The `cached` field should be `true` after the catalogue has loaded. To measure the improvement, compare a first cold sort against subsequent sort changes with the browser Network tab and watch the absence of repeated LMS catalogue page requests.
+
 ## Server endpoints
 
 `server.py` is intentionally small and is not a general-purpose proxy:
 
 - `/api/lms` → LMS JSON-RPC;
 - `/api/cometd` → LMS CometD;
-- `/api/catalogue?order=artistAlbum|album|colour|random` → server-prepared ordered catalogue;
+- `/api/catalogue?order=artistAlbum|album|colour|random` → server-prepared ordered catalogue from a disk-backed snapshot (15-minute TTL);
+- `/api/catalogue/status` → catalogue snapshot state, age and album count (GET, never contacts LMS);
+- `/api/catalogue/invalidate` → discard the catalogue snapshot after an LMS library scan completes (POST);
 - `/api/art/<artwork-id>?size=512` → cached resized cover; omit size for original artwork;
 - `/api/art-meta/<artwork-id>` → cached spine colour, text contrast, font and colour index;
 - `/api/art-meta` → prepare metadata for up to 64 artwork IDs (POST);
