@@ -1,0 +1,81 @@
+name: Build Debian release package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: debian-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-deb:
+    name: Test, build and attach .deb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Verify release tag matches VERSION
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$RELEASE_TAG" != "v$version" && "$RELEASE_TAG" != "$version" ]]; then
+            echo "::error::Release tag '$RELEASE_TAG' does not match VERSION '$version' (expected v$version or $version)"
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Python test dependencies
+        run: python -m pip install "Pillow>=10,<13"
+
+      - name: Check Python syntax
+        run: python -m py_compile server.py tests/test_server.py
+
+      - name: Test JavaScript
+        run: node tests/regressions.mjs
+
+      - name: Test Python
+        run: python -W always::ResourceWarning -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Build Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./packaging/debian/build-deb.sh
+          version="$(tr -d '[:space:]' < VERSION)"
+          package="dist/lyrion-carousel_${version}_all.deb"
+          test -s "$package"
+          dpkg-deb --info "$package"
+          sha256sum "$package" > "$package.sha256"
+
+      - name: Attach package and checksum to GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          package="dist/lyrion-carousel_${version}_all.deb"
+          gh release upload "$RELEASE_TAG" "$package" "$package.sha256" --repo "$GITHUB_REPOSITORY"
