@@ -235,9 +235,11 @@ function fetchSpineMeta(album){
     spineMetaPending.set(url,pending);return pending;
 }
 function loadSpineMeta(album,element){
-    const url=album?.[11];
+    const url=album?.[11],index=element.dataset.index;
     fetchSpineMeta(album).then(meta=>{
-        if(element.dataset.index===undefined||album[11]!==url)return;
+        // A pooled element may already represent another album by the time an
+        // asynchronous metadata batch finishes. Never recolour the new spine.
+        if(element.dataset.index!==index||element._boundAlbum!==album||album[11]!==url)return;
         if(meta?.spine_color)element.style.setProperty('--spine-color',meta.spine_color);
         if(meta?.text_color)element.style.setProperty('--spine-text',meta.text_color);
         if(meta?.spine_font)element.style.setProperty('--spine-font-family',meta.spine_font);
@@ -254,26 +256,78 @@ function shelfWindowCount(){
     const buffer=Math.ceil(Math.max(0,coverWidth-pitch)/(2*Math.max(1,pitch)))+2;
     return Math.min(albums.length,DISPLAY_ALBUM_COUNT+2*buffer);
 }
-function renderAlbums(){stage.querySelectorAll('.bf-album').forEach(el=>el.remove());nodes=[];const count=shelfWindowCount(),anchor=selectedIndex();for(let offset=0;offset<count;offset++){const index=modulo(anchor+offset-Math.floor(count/2),totalAlbums),album=albums[index];if(!album)continue;const el=document.createElement('div');el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');el.role='option';el.dataset.index=String(index);el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');el.title=el.getAttribute('aria-label');el.style.setProperty('--art',album[2]);if(DISPLAY_STYLE==='fan'){const front=document.createElement('div');front.className='bf-jewel-front';const art=document.createElement('div');art.className='bf-jewel-art';const gloss=document.createElement('div');gloss.className='bf-jewel-gloss';front.append(art,gloss);el.append(front)}else{
-    // The background colour comes from existing cover-derived metadata;
-    // a shared transparent shell provides the photographic jewel-case detail.
-    // Artist and album remain a single live CSS text line.
-    const label=document.createElement('span');
-    label.className='bf-spine-label';
-    label.textContent=orderMode==='artistAlbum'
-        ?(album[1]||'Unknown artist')+' — '+(album[0]||'Untitled')
-        :(album[0]||'Untitled')+' — '+(album[1]||'Unknown artist');
-    label.title=label.textContent;
-    el.append(label);
-    const shell=document.createElement('img');
-    shell.className='bf-spine-shell';
-    shell.src='/assets/jewel-case-spine-v1.svg';
-    shell.alt='';
-    shell.setAttribute('aria-hidden','true');
-    shell.draggable=false;
-    el.append(shell);
-    loadSpineMeta(album,el);
-}stage.append(el);nodes.push({el,index})}renderedWindowAnchor=anchor;renderedWindowCount=count;}
+// Reuse the same bounded DOM pool as the visible window advances. Album
+// changes or style switches rebind content; ordinary scrolling moves nodes.
+let renderedStyle=null;
+function bindAlbumNode(node,album,index){
+    const el=node.el;
+    node.index=index;node.album=album;node.order=orderMode;
+    node.cachedPitch=null;
+    el._boundAlbum=album;
+    el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');
+    el.role='option';
+    el.dataset.index=String(index);
+    el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));
+    el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
+    el.title=el.getAttribute('aria-label');
+    el.style.setProperty('--art',album[2]);
+    // Reset colours from a previously pooled spine while the new batch loads.
+    el.style.setProperty('--spine-color','#202628');
+    el.style.setProperty('--spine-text','#f5f2ea');
+    el.style.setProperty('--spine-font-family','Arial,Helvetica,sans-serif');
+    if(DISPLAY_STYLE==='fan'){
+        if(!node.front){
+            const front=document.createElement('div');
+            front.className='bf-jewel-front';
+            const art=document.createElement('div');art.className='bf-jewel-art';
+            const gloss=document.createElement('div');gloss.className='bf-jewel-gloss';
+            front.append(art,gloss);el.append(front);node.front=front;
+        }
+    }else{
+        if(!node.label){
+            const label=document.createElement('span');label.className='bf-spine-label';
+            el.append(label);node.label=label;
+            const shell=document.createElement('img');shell.className='bf-spine-shell';
+            shell.src='/assets/jewel-case-spine-v1.svg';shell.alt='';
+            shell.setAttribute('aria-hidden','true');shell.draggable=false;
+            el.append(shell);
+        }
+        node.label.textContent=orderMode==='artistAlbum'
+            ?(album[1]||'Unknown artist')+' — '+(album[0]||'Untitled')
+            :(album[0]||'Untitled')+' — '+(album[1]||'Unknown artist');
+        node.label.title=node.label.textContent;
+        loadSpineMeta(album,el);
+    }
+}
+function renderAlbums(){
+    if(renderedStyle!==DISPLAY_STYLE){
+        nodes.forEach(node=>node.el.remove());
+        nodes=[];renderedStyle=DISPLAY_STYLE;
+    }
+    const count=shelfWindowCount(),anchor=selectedIndex();
+    const desired=[];
+    for(let offset=0;offset<count;offset++){
+        const index=modulo(anchor+offset-Math.floor(count/2),totalAlbums);
+        if(albums[index])desired.push(index);
+    }
+    const desiredSet=new Set(desired);
+    const retained=new Map(nodes.filter(node=>desiredSet.has(node.index)).map(node=>[node.index,node]));
+    const spare=nodes.filter(node=>!desiredSet.has(node.index));
+    const next=[];
+    for(const index of desired){
+        const album=albums[index];
+        let node=retained.get(index);
+        if(!node)node=spare.pop()||{el:document.createElement('div'),index:-1,album:null,order:null,cachedPitch:null};
+        if(node.album!==album||node.order!==orderMode||node.index!==index){
+            bindAlbumNode(node,album,index);
+        }
+        if(!node.el.parent)stage.append(node.el);
+        next.push(node);
+    }
+    spare.forEach(node=>node.el.remove());
+    nodes=next;
+    renderedWindowAnchor=anchor;renderedWindowCount=count;
+}
 let shelfDomFrame=0;
 function setDisplayStyle(value){
     DISPLAY_STYLE=value==='fan'?'fan':'shelf';
@@ -328,9 +382,12 @@ function syncShelfDom(){
         const sideShift=d<frontDelta?-gapShift:d>frontDelta?gapShift:0;
         const hiddenSpine=open&&node.index===frontPreviewIndex;
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
-        node.el.style.setProperty('width',pitch+'px','important');
-        node.el.style.setProperty('--spine-width',pitch+'px');
-        node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(pitch-8)*.56))+'px');
+        if(node.cachedPitch!==pitch){
+            node.el.style.setProperty('width',pitch+'px','important');
+            node.el.style.setProperty('--spine-width',pitch+'px');
+            node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(pitch-8)*.56))+'px');
+            node.cachedPitch=pitch;
+        }
         node.el.style.setProperty('transform',`translate3d(${d*pitch-pitch/2+sideShift}px,0,0)`,'important');
         node.el.style.zIndex=String(100-Math.round(Math.abs(d)));
         node.el.style.opacity=hiddenSpine?'0':String(clamp(1-Math.max(0,Math.abs(d)-nodes.length*.36)*.12,.18,1));
