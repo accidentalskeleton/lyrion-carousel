@@ -129,7 +129,7 @@ The detail area shows the album under the pointer; outside the shelf it shows th
 
 ## Shelf display and cover resolution
 
-Carousel now has a single **Shelf** display. The experimental Fan view and its setting have been retired. **Settings → Displayed albums** controls shelf density. Existing browser preferences for Fan are ignored, so users upgrading automatically receive the Shelf layout.
+Carousel uses a single **Shelf** display. **Settings → Displayed albums** controls shelf density. Existing obsolete browser display-mode preferences are ignored automatically.
 
 **Settings → Album cover size** selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls image resolution, not the displayed case size. Server-generated JPEG variants preserve aspect ratio and never upscale. Originals remain available for spine-colour calculation.
 
