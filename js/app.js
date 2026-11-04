@@ -235,14 +235,24 @@ function fetchSpineMeta(album){
     spineMetaPending.set(url,pending);return pending;
 }
 function loadSpineMeta(album,element){
-    const url=album?.[11];
+    const url=album?.[11],index=element.dataset.index;
     fetchSpineMeta(album).then(meta=>{
-        if(element.dataset.index===undefined||album[11]!==url)return;
+        // A pooled element may already represent another album by the time an
+        // asynchronous metadata batch finishes. Never recolour the new spine.
+        if(element.dataset.index!==index||element._boundAlbum!==album||album[11]!==url)return;
         if(meta?.spine_color)element.style.setProperty('--spine-color',meta.spine_color);
         if(meta?.text_color)element.style.setProperty('--spine-text',meta.text_color);
         if(meta?.spine_font)element.style.setProperty('--spine-font-family',meta.spine_font);
         if(Number.isFinite(meta?.colour_index))album[12]=meta.colour_index;
     });
+}
+const measuredFrontCase=frontPreview.querySelector('.bf-front-case');
+let cachedFrontCaseWidth=null;
+function invalidateFrontCaseWidth(){cachedFrontCaseWidth=null}
+function frontCaseWidth(){
+    if(cachedFrontCaseWidth===null)
+        cachedFrontCaseWidth=measuredFrontCase?.getBoundingClientRect().width||0;
+    return cachedFrontCaseWidth;
 }
 function shelfPitch(){return stage.clientWidth/Math.max(1,Math.min(DISPLAY_ALBUM_COUNT,totalAlbums))}
 function shelfWindowCount(){
@@ -250,37 +260,89 @@ function shelfWindowCount(){
     // An open cover displaces neighbouring spines by up to half its width.
     // Keep enough extra albums beyond both edges to fill that displacement.
     const pitch=shelfPitch();
-    const coverWidth=!frontPreview.hidden?frontPreview.querySelector('.bf-front-case').getBoundingClientRect().width:0;
+    const coverWidth=!frontPreview.hidden?frontCaseWidth():0;
     const buffer=Math.ceil(Math.max(0,coverWidth-pitch)/(2*Math.max(1,pitch)))+2;
     return Math.min(albums.length,DISPLAY_ALBUM_COUNT+2*buffer);
 }
-function renderAlbums(){stage.querySelectorAll('.bf-album').forEach(el=>el.remove());nodes=[];const count=shelfWindowCount(),anchor=selectedIndex();for(let offset=0;offset<count;offset++){const index=modulo(anchor+offset-Math.floor(count/2),totalAlbums),album=albums[index];if(!album)continue;const el=document.createElement('div');el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');el.role='option';el.dataset.index=String(index);el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');el.title=el.getAttribute('aria-label');el.style.setProperty('--art',album[2]);if(DISPLAY_STYLE==='fan'){const front=document.createElement('div');front.className='bf-jewel-front';const art=document.createElement('div');art.className='bf-jewel-art';const gloss=document.createElement('div');gloss.className='bf-jewel-gloss';front.append(art,gloss);el.append(front)}else{
-    // The background colour comes from existing cover-derived metadata;
-    // a shared transparent shell provides the photographic jewel-case detail.
-    // Artist and album remain a single live CSS text line.
-    const label=document.createElement('span');
-    label.className='bf-spine-label';
-    label.textContent=orderMode==='artistAlbum'
-        ?(album[1]||'Unknown artist')+' — '+(album[0]||'Untitled')
-        :(album[0]||'Untitled')+' — '+(album[1]||'Unknown artist');
-    label.title=label.textContent;
-    el.append(label);
-    const shell=document.createElement('img');
-    shell.className='bf-spine-shell';
-    shell.src='/assets/jewel-case-spine-v1.svg';
-    shell.alt='';
-    shell.setAttribute('aria-hidden','true');
-    shell.draggable=false;
-    el.append(shell);
-    loadSpineMeta(album,el);
-}stage.append(el);nodes.push({el,index})}renderedWindowAnchor=anchor;renderedWindowCount=count;}
+// Reuse the same bounded DOM pool as the visible window advances. Album
+// changes or style switches rebind content; ordinary scrolling moves nodes.
+let renderedStyle=null;
+function bindAlbumNode(node,album,index){
+    const el=node.el;
+    node.index=index;node.album=album;node.order=orderMode;
+    node.cachedPitch=null;
+    el._boundAlbum=album;
+    el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');
+    el.role='option';
+    el.dataset.index=String(index);
+    el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));
+    el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
+    el.title=el.getAttribute('aria-label');
+    el.style.setProperty('--art',album[2]);
+    // Reset colours from a previously pooled spine while the new batch loads.
+    el.style.setProperty('--spine-color','#202628');
+    el.style.setProperty('--spine-text','#f5f2ea');
+    el.style.setProperty('--spine-font-family','Arial,Helvetica,sans-serif');
+    if(DISPLAY_STYLE==='fan'){
+        if(!node.front){
+            const front=document.createElement('div');
+            front.className='bf-jewel-front';
+            const art=document.createElement('div');art.className='bf-jewel-art';
+            const gloss=document.createElement('div');gloss.className='bf-jewel-gloss';
+            front.append(art,gloss);el.append(front);node.front=front;
+        }
+    }else{
+        if(!node.label){
+            const label=document.createElement('span');label.className='bf-spine-label';
+            el.append(label);node.label=label;
+            const shell=document.createElement('img');shell.className='bf-spine-shell';
+            shell.src='/assets/jewel-case-spine-v1.svg';shell.alt='';
+            shell.setAttribute('aria-hidden','true');shell.draggable=false;
+            el.append(shell);
+        }
+        node.label.textContent=orderMode==='artistAlbum'
+            ?(album[1]||'Unknown artist')+' — '+(album[0]||'Untitled')
+            :(album[0]||'Untitled')+' — '+(album[1]||'Unknown artist');
+        node.label.title=node.label.textContent;
+        loadSpineMeta(album,el);
+    }
+}
+function renderAlbums(){
+    if(renderedStyle!==DISPLAY_STYLE){
+        nodes.forEach(node=>node.el.remove());
+        nodes=[];renderedStyle=DISPLAY_STYLE;
+    }
+    const count=shelfWindowCount(),anchor=selectedIndex();
+    const desired=[];
+    for(let offset=0;offset<count;offset++){
+        const index=modulo(anchor+offset-Math.floor(count/2),totalAlbums);
+        if(albums[index])desired.push(index);
+    }
+    const desiredSet=new Set(desired);
+    const retained=new Map(nodes.filter(node=>desiredSet.has(node.index)).map(node=>[node.index,node]));
+    const spare=nodes.filter(node=>!desiredSet.has(node.index));
+    const next=[];
+    for(const index of desired){
+        const album=albums[index];
+        let node=retained.get(index);
+        if(!node)node=spare.pop()||{el:document.createElement('div'),index:-1,album:null,order:null,cachedPitch:null};
+        if(node.album!==album||node.order!==orderMode||node.index!==index){
+            bindAlbumNode(node,album,index);
+        }
+        if(node.el.parentElement!==stage&&node.el.parent!==stage)stage.append(node.el);
+        next.push(node);
+    }
+    spare.forEach(node=>node.el.remove());
+    nodes=next;
+    renderedWindowAnchor=anchor;renderedWindowCount=count;
+}
 let shelfDomFrame=0;
 function setDisplayStyle(value){
     DISPLAY_STYLE=value==='fan'?'fan':'shelf';
     root.dataset.displayStyle=DISPLAY_STYLE;
     stage.classList.remove('bf-shelf-active','bf-fan-active');
     stage.classList.add(DISPLAY_STYLE==='fan'?'bf-fan-active':'bf-shelf-active');
-    hoveredAlbumIndex=-1;lastSelected=-1;
+    hoveredAlbumIndex=-1;lastSelected=-1;invalidateFrontCaseWidth();
     renderAlbums();draw();
 }
 function syncFanDom(){
@@ -319,7 +381,7 @@ function syncShelfDom(){
     const pitch=shelfPitch(),frontCase=frontPreview.querySelector('.bf-front-case');
     const open=!frontPreview.hidden&&frontPreviewIndex>=0;
     const frontDelta=open?circularDelta(frontPreviewIndex,position,totalAlbums):0;
-    const frontWidth=frontCase?.getBoundingClientRect().width||0;
+    const frontWidth=frontCaseWidth();
     // The cover and its gap share the album's shelf coordinate, not the viewport centre.
     if(frontCase)frontCase.style.transform=`translate3d(${frontDelta*pitch}px,0,0)`;
     const gapShift=open?Math.max(0,(frontWidth-pitch)/2):0;
@@ -328,9 +390,12 @@ function syncShelfDom(){
         const sideShift=d<frontDelta?-gapShift:d>frontDelta?gapShift:0;
         const hiddenSpine=open&&node.index===frontPreviewIndex;
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
-        node.el.style.setProperty('width',pitch+'px','important');
-        node.el.style.setProperty('--spine-width',pitch+'px');
-        node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(pitch-8)*.56))+'px');
+        if(node.cachedPitch!==pitch){
+            node.el.style.setProperty('width',pitch+'px','important');
+            node.el.style.setProperty('--spine-width',pitch+'px');
+            node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(pitch-8)*.56))+'px');
+            node.cachedPitch=pitch;
+        }
         node.el.style.setProperty('transform',`translate3d(${d*pitch-pitch/2+sideShift}px,0,0)`,'important');
         node.el.style.zIndex=String(100-Math.round(Math.abs(d)));
         node.el.style.opacity=hiddenSpine?'0':String(clamp(1-Math.max(0,Math.abs(d)-nodes.length*.36)*.12,.18,1));
@@ -370,8 +435,8 @@ async function ensurePlayingCover(){
         if(request===pinnedRequest&&generation===catalogueGeneration&&KEEP_PLAYING_OPEN&&playing&&index>=0)openFrontPreview(albums[index],index);
     }catch(_){/* A later playback update can retry when the catalogue is available. */}
 }
-function closeFrontPreview(suppressReopen=false){if(isPlayingCoverPinned()&&!suppressReopen)return;cancelFrontPress();clearTimeout(frontTimer);frontTimer=0;frontPreviewIndex=-1;frontPreviewAlbum=null;frontPreview.hidden=true;frontPreview.dataset.visible='false';frontPreview.setAttribute('aria-hidden','true');syncShelfDom();if(!suppressReopen&&KEEP_PLAYING_OPEN&&playing&&playingCarouselIndex()>=0)ensurePlayingCover()}
-function openFrontPreview(album,index){if(!album)return;clearTimeout(frontTimer);frontPreviewIndex=index;frontPreviewAlbum=album;prefetchCoverWindow(index);frontArt.style.background=album[2];frontPreview.hidden=false;frontPreview.dataset.visible='true';frontPreview.setAttribute('aria-hidden','false');frontPreview.dataset.pinned=String(isPlayingCoverPinned());syncShelfDom();resumeFrontTimeout()}
+function closeFrontPreview(suppressReopen=false){if(isPlayingCoverPinned()&&!suppressReopen)return;invalidateFrontCaseWidth();cancelFrontPress();clearTimeout(frontTimer);frontTimer=0;frontPreviewIndex=-1;frontPreviewAlbum=null;frontPreview.hidden=true;frontPreview.dataset.visible='false';frontPreview.setAttribute('aria-hidden','true');syncShelfDom();if(!suppressReopen&&KEEP_PLAYING_OPEN&&playing&&playingCarouselIndex()>=0)ensurePlayingCover()}
+function openFrontPreview(album,index){if(!album)return;invalidateFrontCaseWidth();clearTimeout(frontTimer);frontPreviewIndex=index;frontPreviewAlbum=album;prefetchCoverWindow(index);frontArt.style.background=album[2];frontPreview.hidden=false;frontPreview.dataset.visible='true';frontPreview.setAttribute('aria-hidden','false');frontPreview.dataset.pinned=String(isPlayingCoverPinned());syncShelfDom();resumeFrontTimeout()}
 frontPlay.onclick=async event=>{event.stopPropagation();const album=frontPreviewAlbum;if(!album)return;try{await loadAlbum(album);closeFrontPreview()}catch(_){setConnection('Could not play album',false);scheduleReconnect()}};
 // Dismiss from the exposed shelf without opening or playing the spine underneath.
 root.addEventListener('pointerdown',event=>{
@@ -479,7 +544,7 @@ function updateHoveredAlbumFromPoint(force=false){
 }
 function updateShelfWindow(){if(selectedIndex()!==renderedWindowAnchor||shelfWindowCount()!==renderedWindowCount)renderAlbums()}
 function scheduleShelfDom(){if(!shelfDomFrame)shelfDomFrame=requestAnimationFrame(syncShelfDom)}
-window.addEventListener('resize',scheduleShelfDom);root.addEventListener('pointermove',scheduleShelfDom,{capture:true,passive:true});root.addEventListener('pointerup',scheduleShelfDom,{capture:true});root.addEventListener('wheel',scheduleShelfDom,{capture:true,passive:true});document.addEventListener('keydown',scheduleShelfDom,{capture:true});setTimeout(scheduleShelfDom,0);
+window.addEventListener('resize',()=>{invalidateFrontCaseWidth();scheduleShelfDom()});new ResizeObserver(()=>{invalidateFrontCaseWidth();scheduleShelfDom()}).observe(measuredFrontCase);root.addEventListener('pointermove',scheduleShelfDom,{capture:true,passive:true});root.addEventListener('pointerup',scheduleShelfDom,{capture:true});root.addEventListener('wheel',scheduleShelfDom,{capture:true,passive:true});document.addEventListener('keydown',scheduleShelfDom,{capture:true});setTimeout(scheduleShelfDom,0);
 async function ensurePositionIndex(){if(albumPositionById.size)return albumPositionById;if(positionIndexPromise)return positionIndexPromise;const generation=catalogueGeneration;positionIndexPromise=buildAlbumPositionIndex(rpc,totalAlbums,generation,()=>catalogueGeneration,PAGE_SIZE).then(index=>{if(index&&generation===catalogueGeneration)albumPositionById=index;return index}).finally(()=>{if(generation===catalogueGeneration)positionIndexPromise=null});return positionIndexPromise}
 async function loadRuntimeConfig(){try{const r=await fetch('/api/config',{cache:'no-store'});if(!r.ok)throw 0;const c=await r.json(),pos=(v,f)=>Number(v)>0?Number(v):f,non=(v,f)=>Number(v)>=0?Number(v):f;artworkNamespace=encodeURIComponent(c.lms_url||'');PAGE_SIZE=pos(c.batch_size,PAGE_SIZE);IDLE_RETURN_MS=non(c.idle_return_ms,IDLE_RETURN_MS);RECONNECT_MAX_MS=pos(c.reconnect_max_ms,RECONNECT_MAX_MS);RANDOM_SCROLL_MAX_MS=pos(c.random_scroll_max_ms,RANDOM_SCROLL_MAX_MS);SEARCH_LIMIT=pos(c.search_limit,SEARCH_LIMIT)}catch(_){}const s=window.__lyrionCarouselSettings||{};setDisplayStyle(s.displayStyle);COVER_SIZE=[128,256,384,512,768,1024].includes(Number(s.coverSize))?Number(s.coverSize):512;DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(s.displayCount)||30));try{const saved=localStorage.getItem('albumBrowserOrderMode');desiredOrderMode=['artistAlbum','album','random','colour'].includes(saved)?saved:localStorage.getItem('albumBrowserRandomOrder')==='true'?'random':'artistAlbum'}catch(_){}if(Number.isFinite(Number(s.idle)))IDLE_RETURN_MS=Number(s.idle);if(Number.isFinite(Number(s.frontTimeout)))FRONT_TIMEOUT_MS=Math.max(0,Number(s.frontTimeout)||0);if(Number(s.random)>0)RANDOM_SCROLL_MAX_MS=Number(s.random);if(Number.isFinite(Number(s.menuTimeout)))MENU_TIMEOUT_MS=Math.max(0,Number(s.menuTimeout))}
 function applySetting(name,value){if(name==='displayStyle'){setDisplayStyle(value)}else if(name==='coverSize'){COVER_SIZE=[128,256,384,512,768,1024].includes(Number(value))?Number(value):512;for(const album of albums){if(!album?.[8])continue;album[8]=album[8].replace(/size=\d+/, 'size='+COVER_SIZE);album[2]=`url("${album[8]}") center / contain no-repeat`;}if(frontPreviewAlbum)frontArt.style.background=frontPreviewAlbum[2];renderAlbums();draw()}else if(name==='displayCount'){DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(value)||30));renderAlbums();draw()}else if(name==='frontTimeout'){FRONT_TIMEOUT_MS=Math.max(0,Number(value)||0);if(!frontPreview.hidden){resumeFrontTimeout()}}else if(name==='idle'){IDLE_RETURN_MS=Math.max(0,Number(value)||0);armIdleReturn()}else if(name==='menuTimeout'){MENU_TIMEOUT_MS=Math.max(0,Number(value)||0);if(typeof albumMenu!=='undefined'&&!albumMenu.hidden){clearTimeout(menuIdleTimer);menuIdleTimer=MENU_TIMEOUT_MS>0?setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS):0}}else if(name==='random'){const n=Number(value);if(n>0)RANDOM_SCROLL_MAX_MS=n}}

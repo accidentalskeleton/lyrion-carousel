@@ -37,7 +37,7 @@ export async function runTests(sources) {
     constructor(name='') {
       this.name=name;this.children=[];this.hidden=/overlay|menu|front-preview/.test(name);
       this.dataset={};this.attributes={};this.listeners={};this.value='';this.clientWidth=1000;this.clientHeight=400;
-      this.style={setProperty(k,v){this[k]=v;},getPropertyValue(k){return this[k]||'';}};
+      this.style={writes:{},setProperty(k,v){this[k]=v;this.writes[k]=(this.writes[k]||0)+1;},getPropertyValue(k){return this[k]||'';}};
       const classes=new Set();this.classList={add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x)};
     }
     get options(){return this.children;}
@@ -107,7 +107,7 @@ export async function runTests(sources) {
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
-      prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -131,6 +131,36 @@ export async function runTests(sources) {
   assert(firstSpine?.className?.includes('bf-album'), 'spines retain the normal cover-derived colour metadata path');
   assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
   assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
+
+  // Phase 4: advancing the shelf should recycle the same physical elements
+  // rather than destroying and constructing a row of new image/text nodes.
+  const originalPosition=api.state().position;
+  const initialPool=api.geometry().nodes.map(node=>node.el);
+  const cachedCoverWidth=api.frontCaseWidth();
+  assert(api.frontCaseWidth()===cachedCoverWidth,'case width is cached across redraws');
+  const initialPoolSize=initialPool.length;
+  api.set({position:originalPosition+1});api.draw();
+  const movedPool=api.geometry().nodes;
+  assert(movedPool.length===initialPoolSize,'phase 4 keeps a bounded visible spine pool');
+  assert(movedPool.every(node=>initialPool.includes(node.el)),
+    'scrolling by one album recycles existing shelf nodes');
+  assert(new Set(movedPool.map(node=>node.el)).size===movedPool.length,
+    'each pooled shelf node is used exactly once');
+  assert(stage.children.length===movedPool.length,
+    'recycled spines are not appended twice to the shelf');
+  assert(movedPool.every(node=>Number(node.el.dataset.index)===node.index),
+    'recycled nodes keep their current album index for interactions');
+  const stableNode=movedPool[Math.floor(movedPool.length/2)];
+  const pitchWrites=stableNode.el.style.writes['--spine-width'];
+  api.draw();api.draw();
+  assert(stableNode.el.style.writes['--spine-width']===pitchWrites,
+    'unchanged spine width is not written on every animation frame');
+  api.set({position:originalPosition+20});api.draw();
+  assert(stage.children.length===api.geometry().nodes.length,
+    'long jumps preserve bounded DOM without leaking stale spines');
+  assert(api.geometry().nodes.every(node=>node.el._boundAlbum===api.state().albums[node.index]),
+    'pooled nodes are rebound to the correct album after a long jump');
+  api.set({position:originalPosition});api.draw();
 
   // Phase 1: existing backend supports at most 64 local spine metadata IDs
   // per request. A large visible window should not issue one GET per spine.
@@ -472,6 +502,7 @@ export async function runTests(sources) {
   assert(frontCase.style.transform!=='translate3d(0px,0,0)','open cover moves with shelf');
   for(const coverWidth of [300,1200]){
     frontCase.coverWidth=coverWidth;
+    api.invalidateFrontCaseWidth();
     for(const offset of [-70,-20,-2,.49,2,20,70]){
       api.set({position:oldPosition+offset});api.draw();
       const x=style=>Number(/translate3d\(([-\d.]+)px/.exec(style.transform)[1]);
@@ -481,6 +512,7 @@ export async function runTests(sources) {
     }
   }
   frontCase.coverWidth=300;
+  api.invalidateFrontCaseWidth();
   api.set({hover:api.state().albums.findIndex(a=>a[6]!==20)});api.updateMeta(true);
   assert(element('.bf-meta').children.length===1,'hover omits unrelated track');
   api.set({hover:-1});api.updateMeta(true);assert(element('.bf-meta').children.length===3,'outside hover shows playing track');
@@ -802,8 +834,112 @@ export async function runTests(sources) {
   [largeAlbums[1],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[1]];
   assert(api.indexForAlbumId('large-19999')===1&&api.indexForAlbumId('large-1')===19999,
     'album index cache detects reordered positions and self-corrects');
+  // The 20k-album browse simulation must keep the allocated spine set
+  // bounded even after repeated long jumps across the library.
+  api.set({playing:false});
+  api.closeFrontPreview(true);
+  api.applySetting('displayStyle','shelf');
+  api.replaceAlbumsForTest(largeAlbums);
+  api.set({position:0});
+  api.draw();
+  const hugePool=new Set(stage.children);
+  for(let i=1;i<=120;i++){
+    api.set({position:(i*151)%largeAlbums.length});
+    api.draw();
+    assert(stage.children.length===hugePool.size,
+      '20k-album browse keeps constant visible DOM size at jump '+i);
+    assert(stage.children.every(el=>hugePool.has(el)),
+      '20k-album browse reuses existing elements at jump '+i);
+  }
   api.replaceAlbumsForTest(savedAlbums);
+  api.set({position:0});api.draw();
 
+
+  // Phase 4: optional browser measurements must stay completely dormant
+  // until requested, then generate a portable deterministic report.
+  if(sources.performance){
+    let clock=0,frameId=0,frameCallback=null,scheduled=0,cancelled=0;
+    const observed=[],handlers=new Map();
+    const eventTarget=prefix=>({
+      addEventListener(name,fn){handlers.set(prefix+':'+name,fn)},
+      removeEventListener(name,fn){if(handlers.get(prefix+':'+name)===fn)handlers.delete(prefix+':'+name)}
+    });
+    const stageElement=Object.assign(eventTarget('stage'),{
+      querySelectorAll:()=>Array.from({length:36},()=>({}))
+    });
+    const perfDocument=Object.assign(eventTarget('document'),{
+      visibilityState:'visible',querySelector:()=>stageElement
+    });
+    class FakeObserver {
+      constructor(callback){this.callback=callback;observed.push(this);}
+      observe(){} disconnect(){} takeRecords(){return [];}
+    }
+    const perfWindow={};
+    const perfConsole={info(){},warn(){},table(){}};
+    const perfCode=sources.performance.replace('window.lyrionPerf=','window.lyrionPerf=');
+    const browser=new Function('window','document','console','performance',
+      'MutationObserver','PerformanceObserver','requestAnimationFrame',
+      'cancelAnimationFrame','location','URL','setTimeout',
+      perfCode+';return window.lyrionPerf;')(
+        perfWindow,perfDocument,perfConsole,
+        {now:()=>clock},
+        class{observe(){} disconnect(){} takeRecords(){return []}},
+        FakeObserver,callback=>{scheduled++;frameCallback=callback;return ++frameId},
+        ()=>{cancelled++},{href:'http://streamer:8088'},class FakeURL {constructor(name){this.pathname=name.split('?')[0].replace(/^https?:\/\/[^/]+/,'')}},()=>0
+      );
+    assert(scheduled===0,'Phase 4 measurement has zero idle animation frames');
+    assert(browser.active===false,'browser profiler is opt-in');
+    browser.start({label:'phase4-test'});
+    assert(browser.active&&scheduled===1,'profiler starts one animation chain only on request');
+    for(let i=0;i<60;i++){clock+=16.667;const tick=frameCallback;tick(clock);}
+    const report=browser.stop();
+    assert(!browser.active&&cancelled===1,'profiler cancels its animation chain on stop');
+    assert(report.sampledFrames===59&&report.dom.initialSpines===36,
+      'profiler returns sampled frames and visible DOM count');
+    assert(report.frameMs.p95>=16&&report.frameMs.p95<18,
+      'profiler calculates frame-time percentiles in milliseconds');
+    assert(report.estimatedDroppedFrames===0,'smooth frames produce no dropped-frame estimate');
+    assert(report.detectedFps>=59&&report.detectedFps<=61,
+      'profiler detects 60Hz from observed rAF samples');
+    assert(report.activeScrolling.sampledFrames===0,
+      'idle frames do not count as active scrolling frames');
+    assert(report.suspensions.count===0,'normal rAF intervals are not suspensions');
+    assert(handlers.size===0,'profiler cleans up every temporary input listener');
+
+    // A 144Hz sample with a multi-second browser suspension should report
+    // normal active FPS without inventing hundreds of dropped frames.
+    browser.start({label:'144Hz-test'});
+    for(let i=0;i<40;i++){
+      clock+=1000/144;const tick=frameCallback;tick(clock);
+    }
+    handlers.get('stage:wheel')();
+    for(let i=0;i<90;i++){
+      clock+=1000/144;const tick=frameCallback;tick(clock);
+    }
+    clock+=4534.8;frameCallback(clock);
+    for(let i=0;i<35;i++){
+      clock+=1000/144;const tick=frameCallback;tick(clock);
+    }
+    const fastReport=browser.stop();
+    assert(fastReport.detectedFps>=143&&fastReport.detectedFps<=145,
+      'profiler detects a high-refresh display rather than assuming 60Hz');
+    assert(fastReport.effectiveFps===fastReport.detectedFps,
+      'automatic refresh detection selects the frame budget');
+    assert(fastReport.suspensions.count===1&&fastReport.suspensions.longestMs>4500,
+      'multi-second rAF gaps are reported separately as suspensions');
+    assert(fastReport.estimatedDroppedFrames===0&&fastReport.frameMs.max<8,
+      'suspensions do not inflate the missed-frame estimate or frame-time maximum');
+    assert(fastReport.activeScrolling.sampledFrames>0&&
+      fastReport.activeScrolling.estimatedFps>=140,
+      'active browsing FPS excludes idle time and suspended intervals');
+    assert(handlers.size===0,'second capture also removes its event listeners');
+    assert(browser.lastReport===fastReport,'profiler exposes its most recent report');
+    assert(browser.compare(report,report)['Frame p95 (ms)'].improvementPercent===0,
+      'profiler comparison works for equal baseline and candidate');
+    let invalidFps=false;
+    try{browser.start({targetFps:0})}catch(_){invalidFps=true}
+    assert(invalidFps&&!browser.active,'profiler rejects invalid refresh targets');
+  }
 
   return checks;
 }
@@ -816,5 +952,6 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
   sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
   sources.debianBuild=await readFile(new URL('../packaging/debian/build-deb.sh',import.meta.url),'utf8');
+  sources.performance=await readFile(new URL('../js/performance.js',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }
