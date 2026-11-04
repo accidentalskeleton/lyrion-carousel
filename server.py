@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
-import time, io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sqlite3, sys, threading
+import time, io, random, argparse, colorsys, hashlib, ipaddress, json, os, re, shutil, socket, sqlite3, sys, threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
@@ -132,6 +132,29 @@ def validate_lms_url(value)->str:
     # Trigger urllib validation for malformed numeric ports.
     _=parsed.port
     return lms_url
+
+def is_local_request_host(value:str|None)->bool:
+    """Allow browser Host names used for local/private access, not public DNS names."""
+    if not value:return False
+    try:
+        parsed=urlsplit('//'+value)
+        if not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:return False
+        _=parsed.port
+    except ValueError:return False
+    hostname=parsed.hostname.rstrip('.').lower()
+    try:
+        address=ipaddress.ip_address(hostname)
+        return address.is_loopback or address.is_private or address.is_link_local
+    except ValueError:
+        labels=hostname.split('.')
+        if not hostname or len(hostname)>253 or any(
+            not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?',label)
+            for label in labels
+        ):
+            return False
+        if hostname=='localhost.localdomain':return True
+        if hostname=='localhost' or hostname.endswith('.localhost'):return hostname=='localhost'
+        return len(labels)==1 or hostname.endswith(('.local','.lan','.home.arpa'))
 
 def load_saved_lms_url(path:Path,fallback:str)->str:
     """Use the persisted server choice, falling back to systemd/CLI on first run."""
@@ -355,6 +378,13 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         self.lms_url=lms_url.rstrip('/'); self.cache_dir=cache_dir; self.runtime_config=runtime_config
         self.lms_settings_path=cache_dir.parent/LMS_SETTINGS_FILENAME
         super().__init__(*args,directory=directory,**kwargs)
+    def parse_request(self)->bool:
+        """Reject public Host names before serving static files or proxy APIs."""
+        if not super().parse_request():return False
+        if not is_local_request_host(self.headers.get('Host')):
+            self.send_error(403,'Host must be a local or private address')
+            return False
+        return True
     def end_headers(self)->None:
         """Revalidate application assets; image endpoints supply their own cache policy."""
         if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear','/api/catalogue','/api/catalogue/status','/api/catalogue/invalidate','/api/catalogue/reconcile'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):

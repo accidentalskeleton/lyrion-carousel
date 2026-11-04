@@ -81,6 +81,7 @@ python3 server.py --bind 0.0.0.0
 ```
 
 `0.0.0.0` is a listening address, not a browser destination. Do not expose this server directly to the internet.
+Requests are accepted only when the browser `Host` is a loopback/private IP, an unqualified intranet name, or a `.local`, `.lan` or `.home.arpa` name. Public DNS hostnames are rejected to prevent DNS-rebinding access to the LMS proxy; use the controller's local IP or an intranet hostname when connecting.
 
 ## Runtime options
 

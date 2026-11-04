@@ -86,6 +86,20 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(server.load_saved_lms_url(path,'http://other-lms:9000'),
                          'http://streamer:9000')
 
+    def test_request_host_allows_local_access_and_rejects_public_dns(self):
+        allowed=['localhost','localhost:8088','127.0.0.1:8088','192.168.1.12',
+                 '[::1]:8088','controller','carousel.local','music.lan',
+                 'carousel.home.arpa']
+        rejected=[None,'attacker.example','localhost.attacker.example',
+                  '192.168.1.12.attacker.example','bad host','user@localhost',
+                  'localhost:invalid-port']
+        for host in allowed:
+            with self.subTest(host=host):
+                self.assertTrue(server.is_local_request_host(host))
+        for host in rejected:
+            with self.subTest(host=host):
+                self.assertFalse(server.is_local_request_host(host))
+
     def test_lms_defaults_use_local_streamer_everywhere(self):
         root=Path(__file__).resolve().parents[1]
         service=(root/'packaging/debian/lyrion-carousel.service').read_text()
