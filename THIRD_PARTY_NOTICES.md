@@ -56,7 +56,7 @@ licenses and copyright/notice obligations.**
 | `assets/lyrion-carousel-icon.svg` | Vector UI icon committed with the project; SVG markup contains simple shapes, no third-party links | Confirm author/rights holder |
 | `assets/lyrion-carousel-banner.jpg` | **Created by Stuart Roberts**, confirmed by the project owner on 4 November 2026 | Creator attribution confirmed. Check whether the finished banner incorporates third-party album covers, logos or photography before granting redistribution rights to its contents |
 | `assets/lyrion-carousel-feature-tour.mp4` | **Created by Stuart Roberts**, confirmed by the project owner on 4 November 2026 | Creator attribution confirmed; **the creator confirms the video is silent** and contains no soundtrack. Review any displayed commercial album covers, logos or other third-party visual material |
-| `assets/jewel-case-overlay.svg` | Deprecated vector overlay used by an early prototype | Removed from the forthcoming shelf-only release in PR #28; old Git commits may still contain the asset |
+| `assets/jewel-case-overlay.svg` | Deprecated vector overlay used by an early prototype | Removed from current `main` in merged PR #28; old Git commits may still contain the asset |
 
 The source uses local system font families rather than bundling font binaries.
 The README support badge is served by Shields.io at view time; its remote
@@ -82,6 +82,8 @@ release screenshots, demonstration videos or sample library datasets.
 3. Check current Spotify attribution/link-back requirements against the actual
    Spotify/Spotty display behaviour; availability through LMS does not
    necessarily establish that every developer-policy requirement is met.
-4. Before creating a public release, inspect past commits, tags and branches for
-   removed assets, private content and embedded secrets; deleting a current
-   file does **not** erase its Git history.
+4. Before changing repository visibility to public, inspect past commits, tags
+   and branches for removed assets, private content and embedded secrets;
+   deleting a current file does **not** erase its Git history. A Gitleaks scan
+   of 544 commits found no secrets on 4 November 2026, but manual review of
+   private material remains worthwhile.
