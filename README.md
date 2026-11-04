@@ -147,7 +147,7 @@ Before deployment to a dedicated controller, exercise this sequence against the 
 
 ## Performance
 
-The signature interaction is intentionally based on compositor-friendly `translate3d`/rotation transforms. Only the configured window of spines is constructed. Catalogue records are retained for ordering, while artwork is fetched for visible albums. Geometry helpers are pure and do not create an extra renderer or idle animation loop.
+The signature interaction is intentionally based on compositor-friendly `translate3d`/rotation transforms. Only the configured window of spines is constructed, and Phase 4 recycles those DOM nodes as browsing advances. Static spine geometry is updated only when the pitch changes, while the open-case width is cached and invalidated on resize or preview changes. Catalogue records are retained for ordering, while artwork is fetched for visible albums. Geometry helpers are pure and do not create an extra renderer or idle animation loop.
 
 `js/performance.js` uses `PerformanceObserver` where supported to report main-thread tasks of 100 ms or longer to the developer console. It does **not** run a permanent `requestAnimationFrame` loop or add polling while the carousel is idle. Final acceptance should include measured frame-rate/memory testing on the intended controller/display hardware with the full library.
 
