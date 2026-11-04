@@ -107,7 +107,7 @@ export async function runTests(sources) {
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
-      prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -136,6 +136,8 @@ export async function runTests(sources) {
   // rather than destroying and constructing a row of new image/text nodes.
   const originalPosition=api.state().position;
   const initialPool=api.geometry().nodes.map(node=>node.el);
+  const cachedCoverWidth=api.frontCaseWidth();
+  assert(api.frontCaseWidth()===cachedCoverWidth,'case width is cached across redraws');
   const initialPoolSize=initialPool.length;
   api.set({position:originalPosition+1});api.draw();
   const movedPool=api.geometry().nodes;
@@ -500,6 +502,7 @@ export async function runTests(sources) {
   assert(frontCase.style.transform!=='translate3d(0px,0,0)','open cover moves with shelf');
   for(const coverWidth of [300,1200]){
     frontCase.coverWidth=coverWidth;
+    api.invalidateFrontCaseWidth();
     for(const offset of [-70,-20,-2,.49,2,20,70]){
       api.set({position:oldPosition+offset});api.draw();
       const x=style=>Number(/translate3d\(([-\d.]+)px/.exec(style.transform)[1]);
@@ -509,6 +512,7 @@ export async function runTests(sources) {
     }
   }
   frontCase.coverWidth=300;
+  api.invalidateFrontCaseWidth();
   api.set({hover:api.state().albums.findIndex(a=>a[6]!==20)});api.updateMeta(true);
   assert(element('.bf-meta').children.length===1,'hover omits unrelated track');
   api.set({hover:-1});api.updateMeta(true);assert(element('.bf-meta').children.length===3,'outside hover shows playing track');
