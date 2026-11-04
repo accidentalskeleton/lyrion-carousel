@@ -2,6 +2,10 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased
+
+- Show an exact Spotify album link within Album Information when a verified album URL or URI is available, otherwise offer a clearly labelled Spotify album-search link (local albums remain unaffected).
+
 ## Unreleased — Shelf-only experience
 
 - Standardise on the CD shelf display and remove the obsolete alternate-view selector.
