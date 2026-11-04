@@ -811,21 +811,6 @@ body {
         width:218px;
         height:192px
     }
-    .bf-jewel-art {
-        left:30px;
-        top:6px;
-        width:180px;
-        height:180px
-    }
-    .bf-jewel-spine {
-        width:20px
-    }
-    .bf-jewel-edge {
-        height:188px
-    }
-    .bf-jewel-top,.bf-jewel-bottom {
-        width:214px
-    }
     .bf-stage {
         perspective:1100px
     }
