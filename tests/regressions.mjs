@@ -121,6 +121,14 @@ export async function runTests(sources) {
     if(error)throw error;if(!done)throw Error('Animation did not finish');
   }
   await api.loadInitialCatalogue();
+  const firstSpine=stage.children.find(node=>node.className?.includes('bf-album'));
+  const spineLabel=firstSpine?.children.find(node=>node.className==='bf-spine-label');
+  const spineShell=firstSpine?.children.find(node=>node.className==='bf-spine-shell');
+  const spineCover=firstSpine?.children.find(node=>node.className==='bf-spine-cover');
+  assert(spineLabel?.textContent?.includes('Artist — Album'), 'one continuous artist and album spine label');
+  assert(spineShell?.src==='/assets/jewel-case-spine-v1.svg', 'all spines use shared static shell image');
+  assert(!spineCover, 'spines do not request or display cropped cover artwork');
+  assert(firstSpine?.className?.includes('bf-album'), 'spines retain the normal cover-derived colour metadata path');
   assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
   assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
 
@@ -446,6 +454,17 @@ export async function runTests(sources) {
   const otherIndex=api.state().albums.findIndex(album=>album[6]!==20);
   api.openFrontPreview(api.state().albums[otherIndex],otherIndex);
   assert(api.state().frontPreviewAlbum[6]!==20&&api.state().frontTimer!==0,'other album can preview while keep-open enabled');
+  // Playing cover -> manual album #2 -> click album #3 must replace the
+  // preview in one click. The overlay CSS must allow pointer hit-testing
+  // to reach the neighbouring spine (checked by the Python CSS test).
+  const thirdIndex=(otherIndex+1)%api.state().albums.length;
+  api.set({position:otherIndex});api.draw();time+=250;
+  const thirdSpine={dataset:{index:String(thirdIndex)}};
+  const thirdTarget={closest:selector=>selector==='.bf-album'?thirdSpine:null};
+  stage.dispatchEvent({type:'pointerdown',button:0,target:thirdTarget,pointerId:81,clientX:120,clientY:80});
+  stage.dispatchEvent({type:'pointerup',target:thirdTarget,pointerId:81,clientX:120,clientY:80,stopImmediatePropagation(){}});
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===api.state().albums[thirdIndex],
+    'clicking a third spine switches directly from the second preview');
   api.closeFrontPreview();await Promise.resolve();await Promise.resolve();
   assert(!preview.hidden&&api.state().frontPreviewAlbum[6]===20,'closing preview restores playing cover');
 
@@ -555,20 +574,21 @@ export async function runTests(sources) {
   api.set({playing:false,position:5});
   api.openFrontPreview(api.state().albums[5],5);
   const playbackCalls=rpcCalls.filter(c=>c[0]==='playlistcontrol').length;
+  const manualArrowCover=api.state().frontPreviewAlbum;
   api.browseWithArrow(1);
-  assert(preview.hidden&&api.state().frontPreviewAlbum===null&&Math.round(api.state().target)===6,
-    'arrow navigation closes a manually opened cover without opening the next');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===manualArrowCover&&Math.round(api.state().target)===6,
+    'arrow navigation preserves a manual cover while moving spines');
   api.browseWithArrow(1);
-  assert(preview.hidden&&Math.round(api.state().target)===7,
-    'repeated arrows move selection without opening covers');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===manualArrowCover&&Math.round(api.state().target)===7,
+    'repeated arrows keep the same manual cover open');
   api.browseWithArrow(-1);
-  assert(preview.hidden&&Math.round(api.state().target)===6,
-    'reverse arrow moves spines without opening a cover');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===manualArrowCover&&Math.round(api.state().target)===6,
+    'reverse arrow scroll keeps the manual cover open');
   const lastAlbum=api.state().albums.length-1;
   api.set({position:lastAlbum});
   api.browseWithArrow(1);
-  assert(preview.hidden&&Math.round(api.state().target)===lastAlbum+1,
-    'arrow browsing wraps without opening the next album');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===manualArrowCover&&Math.round(api.state().target)===lastAlbum+1,
+    'arrow wrapping preserves an open manual cover');
   assert(api.state().KEEP_PLAYING_OPEN===true,
     'playing-cover pinning remains enabled during navigation');
   api.set({playing:true,playingAlbumId:20,position:5});
@@ -584,23 +604,27 @@ export async function runTests(sources) {
   // a deliberate tap on a spine is still allowed to open that album.
   api.set({playing:false,position:5});
   api.openFrontPreview(api.state().albums[5],5);
+  const wheelPreviewTimer=api.state().frontTimer;
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:180,preventDefault(){}});
-  assert(preview.hidden&&api.state().frontPreviewAlbum===null,
-    'wheel scrolling dismisses a manually previewed album without opening another');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===api.state().albums[5],
+    'wheel scrolling preserves the manually previewed album');
+  assert(api.state().frontTimer===wheelPreviewTimer&&timers.has(wheelPreviewTimer),
+    'wheel scrolling does not cancel or extend the manual preview timeout');
   const wheelPosition=api.state().position;
   const idleIndex=(Math.round(wheelPosition)+2)%api.state().albums.length;
   const idleSpine={dataset:{index:String(idleIndex)}};
   const idleTarget={closest:selector=>selector==='.bf-album'?idleSpine:null};
   stage.dispatchEvent({type:'pointerdown',button:0,target:idleTarget,pointerId:51,clientX:100,clientY:80});
   stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:51,clientX:100,clientY:80,stopImmediatePropagation(){}});
-  assert(preview.hidden,'spine press during wheel scrolling cannot open a cover');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===api.state().albums[5],
+    'spine press during wheel scrolling cannot replace the open cover');
   time+=250;
   api.set({position:Math.round(wheelPosition)});
   stage.dispatchEvent({type:'pointerdown',button:0,target:idleTarget,pointerId:52,clientX:100,clientY:80});
   stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:52,clientX:100,clientY:80,stopImmediatePropagation(){}});
   assert(api.state().frontPreviewAlbum===api.state().albums[idleIndex]&&!preview.hidden,
     'deliberate spine click opens its cover once scrolling has stopped');
-  // A subsequent spine drag must close the manually selected preview and
+  // A subsequent spine drag must preserve the manually selected preview and
   // should never promote the spine under the pointer at release.
   api.set({playing:false,position:10});
   api.openFrontPreview(api.state().albums[10],10);
@@ -611,8 +635,23 @@ export async function runTests(sources) {
   stage.dispatchEvent({type:'pointermove',target:scrollTarget,pointerId:53,clientX:180,clientY:80});
   stage.dispatchEvent({type:'pointerup',target:scrollTarget,pointerId:53,clientX:180,clientY:80,
     stopImmediatePropagation(){}});
-  assert(preview.hidden&&api.state().frontPreviewAlbum===null,
-    'drag-scrolling the spines closes a manual cover and never opens a replacement');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===api.state().albums[10],
+    'drag-scrolling the spines preserves a manual cover without opening a replacement');
+
+  // The idle return must wait for a non-playing preview's timeout rather
+  // than replacing it during scrolling or before its preview timer expires.
+  api.set({playing:true,playingAlbumId:20,position:10});
+  api.openFrontPreview(api.state().albums[10],10);
+  const previewBeforeIdle=api.state().frontPreviewAlbum;
+  await api.returnToPlayingAlbum(true);
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===previewBeforeIdle,
+    'idle return does not preempt the manual cover before timeout');
+  const timeoutId=api.state().frontTimer;
+  assert(timeoutId&&timers.has(timeoutId),'non-playing preview has an active timeout');
+  const expirePreview=timers.get(timeoutId);timers.delete(timeoutId);expirePreview();
+  for(let i=0;i<15;i++)await Promise.resolve();
+  assert(api.state().frontPreviewAlbum?.[6]===20&&!preview.hidden,
+    'manual preview timeout restores the playing case');
 
   api.set({playing:true,playingAlbumId:20,position:5});
   api.openFrontPreview(api.state().albums[pinnedIndex],pinnedIndex);

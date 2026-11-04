@@ -44,8 +44,8 @@ function rebuildAlbumIndex(){
 let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
 const selectedIndex=()=>modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
-function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=3&server='+artworkNamespace:'';if(album.spine_metadata)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
-function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg','spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId]}
+function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=5&server='+artworkNamespace:'';if(album.spine_metadata?.text_style_version===3)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
+function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?version=3&path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg','spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId]}
 const lmsProvider=createLmsProvider({
     mapAlbum:mapLyrionAlbum,getPlayerId:()=>playerId,getPageSize:()=>PAGE_SIZE,getSearchLimit:()=>SEARCH_LIMIT,
     getDisabledGenres:()=>disabledGenres,getOrderMode:()=>orderMode,getLibraryCount:()=>libraryAlbumCount,
@@ -254,7 +254,26 @@ function shelfWindowCount(){
     const buffer=Math.ceil(Math.max(0,coverWidth-pitch)/(2*Math.max(1,pitch)))+2;
     return Math.min(albums.length,DISPLAY_ALBUM_COUNT+2*buffer);
 }
-function renderAlbums(){stage.querySelectorAll('.bf-album').forEach(el=>el.remove());nodes=[];const count=shelfWindowCount(),anchor=selectedIndex();for(let offset=0;offset<count;offset++){const index=modulo(anchor+offset-Math.floor(count/2),totalAlbums),album=albums[index];if(!album)continue;const el=document.createElement('div');el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');el.role='option';el.dataset.index=String(index);el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');el.title=el.getAttribute('aria-label');el.style.setProperty('--art',album[2]);if(DISPLAY_STYLE==='fan'){const front=document.createElement('div');front.className='bf-jewel-front';const art=document.createElement('div');art.className='bf-jewel-art';const gloss=document.createElement('div');gloss.className='bf-jewel-gloss';front.append(art,gloss);el.append(front)}else loadSpineMeta(album,el);stage.append(el);nodes.push({el,index})}renderedWindowAnchor=anchor;renderedWindowCount=count;}
+function renderAlbums(){stage.querySelectorAll('.bf-album').forEach(el=>el.remove());nodes=[];const count=shelfWindowCount(),anchor=selectedIndex();for(let offset=0;offset<count;offset++){const index=modulo(anchor+offset-Math.floor(count/2),totalAlbums),album=albums[index];if(!album)continue;const el=document.createElement('div');el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');el.role='option';el.dataset.index=String(index);el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');el.title=el.getAttribute('aria-label');el.style.setProperty('--art',album[2]);if(DISPLAY_STYLE==='fan'){const front=document.createElement('div');front.className='bf-jewel-front';const art=document.createElement('div');art.className='bf-jewel-art';const gloss=document.createElement('div');gloss.className='bf-jewel-gloss';front.append(art,gloss);el.append(front)}else{
+    // The background colour comes from existing cover-derived metadata;
+    // a shared transparent shell provides the photographic jewel-case detail.
+    // Artist and album remain a single live CSS text line.
+    const label=document.createElement('span');
+    label.className='bf-spine-label';
+    label.textContent=orderMode==='artistAlbum'
+        ?(album[1]||'Unknown artist')+' — '+(album[0]||'Untitled')
+        :(album[0]||'Untitled')+' — '+(album[1]||'Unknown artist');
+    label.title=label.textContent;
+    el.append(label);
+    const shell=document.createElement('img');
+    shell.className='bf-spine-shell';
+    shell.src='/assets/jewel-case-spine-v1.svg';
+    shell.alt='';
+    shell.setAttribute('aria-hidden','true');
+    shell.draggable=false;
+    el.append(shell);
+    loadSpineMeta(album,el);
+}stage.append(el);nodes.push({el,index})}renderedWindowAnchor=anchor;renderedWindowCount=count;}
 let shelfDomFrame=0;
 function setDisplayStyle(value){
     DISPLAY_STYLE=value==='fan'?'fan':'shelf';
@@ -311,7 +330,7 @@ function syncShelfDom(){
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
         node.el.style.setProperty('width',pitch+'px','important');
         node.el.style.setProperty('--spine-width',pitch+'px');
-        node.el.style.setProperty('--spine-font-size',Math.min(24,Math.max(10,(pitch-8)*.48))+'px');
+        node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(pitch-8)*.56))+'px');
         node.el.style.setProperty('transform',`translate3d(${d*pitch-pitch/2+sideShift}px,0,0)`,'important');
         node.el.style.zIndex=String(100-Math.round(Math.abs(d)));
         node.el.style.opacity=hiddenSpine?'0':String(clamp(1-Math.max(0,Math.abs(d)-nodes.length*.36)*.12,.18,1));
@@ -359,7 +378,8 @@ root.addEventListener('pointerdown',event=>{
     if(frontPreview.hidden||isPlayingCoverPinned()||event.button!==0)return;
     // Do not consume a spine's pointerdown: that prevented an explicit spine
     // click from opening its cover when a different preview was visible.
-    // Stage swipes dismiss non-playing previews via moveShelfDrag().
+    // Scrolling leaves any open case visible; only its timeout or a new
+    // explicit spine selection replaces a manual preview.
     if(event.target!==frontPreview)return;
     event.preventDefault();event.stopPropagation();
     cancelLongPress();followingNowPlaying=false;closeFrontPreview();
@@ -404,9 +424,8 @@ frontPreview.addEventListener('pointerup',event=>{
     cancelFrontPress();
     if(press.scrolling){
         finishShelfDrag(false);
-        // Swiping the enlarged cover browses spines; it never opens the album
-        // at the destination. A playing album may remain pinned to the shelf.
-        if(!isPlayingCoverPinned())closeFrontPreview();
+        // Swiping the enlarged cover only moves the shelf. Both playing and
+        // manually selected cases remain open until their normal transition.
     }
     // A short click intentionally performs no action.
     resumeFrontTimeout();
@@ -598,9 +617,7 @@ function cancelFollowAnimation(){followRequest++;if(followAnimation){const anima
 function browseWithArrow(direction){
     if(!totalAlbums||orderBusy||libraryRefreshing)return;
     followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;
-    // Arrows move the spines only. Never turn the highlighted album into a
-    // new preview; the playing cover can remain pinned independently.
-    if(!frontPreview.hidden&&!isPlayingCoverPinned())closeFrontPreview();
+    // Arrow scrolling never closes or replaces an open jewel case.
     target=Math.round(target)+direction;
     schedule();
 }
@@ -620,6 +637,9 @@ async function returnToPlayingAlbum(immediate=false){
     if(!immediate&&Date.now()-lastActivityAt<IDLE_RETURN_MS){armIdleReturn();return}
     if(randomAnimating||dragging||orderBusy||libraryRefreshing||root.querySelector('.bf-settings-overlay:not([hidden])')||!searchOverlay.hidden||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden){clearTimeout(idleTimer);idleTimer=setTimeout(()=>returnToPlayingAlbum(immediate),1000);return}
     if(!playing)return;
+    // A manual preview owns the visible case until its own timeout or the
+    // user selects another spine. The idle return must not preempt it.
+    if(!frontPreview.hidden&&!isPlayingCoverPinned())return;
     cancelFollowAnimation();
     const request=followRequest,expected=playingAlbumId==null?'':String(playingAlbumId),snapshot=lastActivityAt;
     followingNowPlaying=true;
@@ -739,7 +759,7 @@ document.addEventListener('pointerdown',event=>{if(randomAnimating)return;const 
 document.addEventListener('pointermove',event=>{if(longPressTimer&&Math.hypot(event.clientX-longPressX,event.clientY-longPressY)>10)cancelLongPress()},true);
 document.addEventListener('pointerdown',event=>{if(event.button!==0)cancelLongPress()},true);
 document.addEventListener('pointerup',cancelLongPress,true);document.addEventListener('pointercancel',cancelLongPress,true);
-document.addEventListener('wheel',event=>{if(!stage.contains(event.target)&&!frontPreview.contains(event.target))return;stopFollowing();if(!albumMenu.hidden)closeAlbumMenu();if(!orderMenu.hidden)closeOrderMenu()},true);
+document.addEventListener('wheel',event=>{if(!stage.contains(event.target)&&!frontPreview.contains(event.target))return;followingNowPlaying=false;cancelFollowAnimation();if(!albumMenu.hidden)closeAlbumMenu();if(!orderMenu.hidden)closeOrderMenu()},true);
 document.addEventListener('contextmenu',event=>{const element=event.target.closest('.bf-album');if(!element)return;event.preventDefault();const album=albums[Number(element.dataset.index)];if(album)openAlbumMenu(album,event)},true);
 document.addEventListener('pointerdown',event=>{if(!albumMenu.hidden&&!albumMenu.contains(event.target))closeAlbumMenu();if(!orderMenu.hidden&&!orderMenu.contains(event.target)&&event.target!==orderToggle)closeOrderMenu()},true);document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!trackOverlay.hidden)closeTrackList();else if(event.key==='Escape'&&!albumMenu.hidden)closeAlbumMenu();else if(event.key==='Escape'&&!orderMenu.hidden)closeOrderMenu();else if(event.key==='Escape'&&!frontPreview.hidden)closeFrontPreview()});
 async function playRandomAlbum(){
@@ -822,7 +842,7 @@ function updateMeta(force=false){
 function draw(){if(raf){cancelAnimationFrame(raf);raf=0}if(!dragging){const error=target-position;if(followAnimation){const animation=followAnimation,p=clamp((performance.now()-animation.start)/animation.duration,0,1);position=animation.from+(animation.to-animation.from)*(1-Math.pow(1-p,3));if(p>=1){position=target=animation.to;followAnimation=null;animation.resolve(true)}}else if(randomAnimating&&randomAnimationDuration>0){const p=clamp((performance.now()-randomAnimationStart)/randomAnimationDuration,0,1),e=1-Math.pow(1-p,3);position=randomAnimationFrom+(randomAnimationTo-randomAnimationFrom)*e;if(p>=1)position=target}else{position+=error*.135;if(Math.abs(error)<.0004)position=target}}updateShelfWindow();updateMeta();prefetchAround(selectedIndex());prefetchCoverWindow(modulo(Math.round(target),totalAlbums));syncShelfDom();if(followAnimation||dragging||Math.abs(target-position)>.0004)raf=requestAnimationFrame(draw);else raf=0}function schedule(){if(!raf)raf=requestAnimationFrame(draw)}
 let lastShelfScrollAt=-Infinity;
 function shelfIsScrolling(){return dragging&&moved||!!followAnimation||randomAnimating||Math.abs(target-position)>.04||performance.now()-lastShelfScrollAt<160}
-function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();lastShelfScrollAt=performance.now();if(!frontPreview.hidden&&!isPlayingCoverPinned())stopFollowing();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=position+delta*.0028;draw();clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{target=Math.round(position);schedule()},110)}
+function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();lastShelfScrollAt=performance.now();followingNowPlaying=false;cancelFollowAnimation();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=position+delta*.0028;draw();clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{target=Math.round(position);schedule()},110)}
 // Shared pointer physics for shelf spines and the enlarged closed cover.
 function beginShelfDrag(event,pressedIndex=null,captureTarget=stage){
     if(randomAnimating)return false;
@@ -839,8 +859,9 @@ function moveShelfDrag(event,closePreviewOnMove=true){
     const now=performance.now(),dx=event.clientX-startX;
     if(Math.abs(dx)>6){
         moved=true;lastShelfScrollAt=now;
-        if(closePreviewOnMove)stopFollowing();
-        else {followingNowPlaying=false;cancelFollowAnimation();}
+        // Both the stage and open-cover drag surfaces scroll without closing
+        // the open album; the boolean is kept for existing gesture callers.
+        followingNowPlaying=false;cancelFollowAnimation();
     }
     position=startPosition-dx/175;target=position;
     pointerVelocity=(event.clientX-lastX)/Math.max(1,now-lastTime);

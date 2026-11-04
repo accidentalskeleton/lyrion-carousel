@@ -28,6 +28,46 @@ class ServerTests(unittest.TestCase):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
         return self.handler.cache_dir / f'{key}.img', self.handler.cache_dir / f'{key}.meta'
 
+    def test_spine_coloured_text_meets_accessible_contrast(self):
+        backgrounds=['#000000','#ffffff','#808080','#eacb43','#397da3',
+                     '#63424f','#efe9df','#202628','#d02a3f','#32944e']
+        all_colours=set()
+        for background in backgrounds:
+            colours={server.select_spine_text_colour(background,f'album-{i}')
+                     for i in range(40)}
+            all_colours.update(colours)
+            for colour in colours:
+                self.assertGreaterEqual(server.spine_contrast_ratio(colour,background),4.5)
+                self.assertRegex(colour,r'#[0-9a-fA-F]{6}')
+        self.assertGreater(len(all_colours),10)
+        self.assertEqual(server.select_spine_text_colour('#234567','same-id'),
+                         server.select_spine_text_colour('#234567','same-id'))
+        self.assertEqual(server.SPINE_TEXT_STYLE_VERSION,3)
+    def test_spine_text_style_uses_cover_metadata(self):
+        css=(Path(__file__).resolve().parents[1]/'css/shelf.css').read_text()
+        app=(Path(__file__).resolve().parents[1]/'js/app.js').read_text()
+        self.assertIn('color:var(--spine-text,#f5f2ea)',css)
+        self.assertIn('var(--spine-font-family,Arial,Helvetica,sans-serif)',css)
+        self.assertIn("element.style.setProperty('--spine-text',meta.text_color)",app)
+        self.assertIn("element.style.setProperty('--spine-font-family',meta.spine_font)",app)
+        self.assertNotIn('color:#fff;',css.split('.bf-spine-label {',1)[1].split('}',1)[0])
+
+    def test_spine_text_is_centered_independently_of_font(self):
+        css=(Path(__file__).resolve().parents[1]/'css/shelf.css').read_text()
+        label=css.split('.bf-spine-label {',1)[1].split('}',1)[0]
+        self.assertIn('left:50%;',label)
+        self.assertIn('transform:translateX(-50%)!important;',label)
+        self.assertIn('width:max-content;',label)
+        self.assertIn('writing-mode:vertical-rl;',label)
+        self.assertNotIn('inset:19px 4px;',label)
+
+    def test_open_case_wrapper_does_not_block_other_spine_clicks(self):
+        css=(Path(__file__).resolve().parents[1]/'css/shelf.css').read_text()
+        preview=css.split('.bf-front-preview {',1)[1].split('}',1)[0]
+        case=css.split('.bf-front-case {',1)[1].split('}',1)[0]
+        self.assertIn('pointer-events:none;',preview)
+        self.assertIn('pointer-events:auto;',case)
+
     def test_lms_selection_survives_restart_and_artwork_cache_clear(self):
         self.handler.runtime_config={'lms_url':'http://test:9000'}
         body=json.dumps({'lms_url':'http://streamer:9000/'}).encode()
@@ -597,7 +637,10 @@ class ServerTests(unittest.TestCase):
         meta_path.write_text('broken')
         self.handler._serve_artwork_meta('cold')
         self.assertEqual(self.responses[-1][0], 200)
-        self.assertEqual(json.loads(self.responses[-1][1])['text_color'], '#111417')
+        metadata=json.loads(self.responses[-1][1])
+        self.assertEqual(metadata['text_style_version'],server.SPINE_TEXT_STYLE_VERSION)
+        self.assertGreaterEqual(server.spine_contrast_ratio(
+            metadata['text_color'],metadata['spine_color']),4.5)
 
     def test_cold_metadata_fetches_artwork_once_and_returns_only_metadata(self):
         from email.message import Message

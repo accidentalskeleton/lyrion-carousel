@@ -18,6 +18,15 @@ All notable changes to Lyrion Carousel are documented here.
 
 ### Additional refinements
 
+- Calculate each spine's text colour dynamically from its background hue and lightness, adjusting to maintain a minimum 4.5:1 contrast ratio. Upgrade cached metadata without re-downloading artwork.
+
+- Preserve playing and non-playing open jewel cases during wheel, arrow and drag scrolling; close manual previews only via timeout or explicit replacement and prevent idle return from preempting them.
+
+- Allow direct spine-to-spine preview selection while music is playing by making the open-case wrapper click-through outside the actual jewel case.
+
+- Render CD spines with a solid colour extracted from each album cover beneath a shared transparent jewel-case shell image and a single live CSS Artist — Album label; restore cover-derived contrasting text colours and deterministic varied font families without per-album generated graphics.
+- Log failed colour-index artwork IDs for easier troubleshooting.
+
 - Show current artwork cache usage and its limit in Settings, with total metadata usage in the detail tooltip.
 
 - Rename Artist / Album ordering and match spine label order to the selected sorting mode.

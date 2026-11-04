@@ -56,6 +56,53 @@ SPINE_FONTS=(
     'Georgia, "DejaVu Serif", serif',
     '"Palatino Linotype", "Book Antiqua", "Liberation Serif", serif',
 )
+SPINE_TEXT_STYLE_VERSION=3
+def spine_relative_luminance(colour:str)->float:
+    components=[int(colour[i:i+2],16)/255 for i in (1,3,5)]
+    linear=[v/12.92 if v<=.04045 else ((v+.055)/1.055)**2.4 for v in components]
+    return .2126*linear[0]+.7152*linear[1]+.0722*linear[2]
+
+def spine_contrast_ratio(a:str,b:str)->float:
+    bright,dark=sorted((spine_relative_luminance(a),spine_relative_luminance(b)),reverse=True)
+    return (bright+.05)/(dark+.05)
+
+def select_spine_text_colour(spine_colour:str,artwork_key:str)->str:
+    """Compute a cover-related coloured ink with >=4.5:1 luminance contrast.
+
+    Rotate the cover hue and adapt ink lightness to its actual background.
+    Near-grey covers get a reproducible hue instead of arbitrary black/white.
+    A tiny album-specific hue offset prevents otherwise identical rows.
+    """
+    red,green,blue=(int(spine_colour[i:i+2],16)/255 for i in (1,3,5))
+    hue,lightness,saturation=colorsys.rgb_to_hls(red,green,blue)
+    digest=hashlib.sha256(artwork_key.encode()).digest()
+    if saturation<.12:
+        hue=int.from_bytes(digest[:2],'big')/65536
+    hue=(hue+.5+(digest[2]/255-.5)*.13)%1
+    ink_saturation=.68 if saturation>.12 else .58
+
+    def colour_at(ink_lightness):
+        channels=colorsys.hls_to_rgb(hue,ink_lightness,ink_saturation)
+        return '#'+''.join(f'{round(c*255):02x}' for c in channels)
+
+    # Find the most saturated-looking readable shade near an ideal ink tone,
+    # avoiding unnecessarily pale or dark text. Search either contrast side.
+    luminance=spine_relative_luminance(spine_colour)
+    prefer_light=luminance<.179  # midpoint in luminance where 4.5:1 flips
+    candidates=[]
+    for i in range(3,98):
+        l=i/100
+        colour=colour_at(l)
+        if spine_contrast_ratio(colour,spine_colour)>=4.5:
+            ideal=.74 if prefer_light else .28
+            candidates.append((abs(l-ideal),abs(l-.5),colour))
+    if candidates:
+        return min(candidates)[2]
+    # Last resort guarantees minimum contrast even after RGB rounding.
+    white='#ffffff'
+    black='#000000'
+    return white if spine_contrast_ratio(white,spine_colour)>=spine_contrast_ratio(black,spine_colour) else black
+
 # Accept LMS identifiers, but never path separators supplied in an artwork URL.
 ARTWORK_ID=re.compile(r"^[A-Za-z0-9._:@%-]+$")
 def colour_sort_index(colour:str)->int:
@@ -287,7 +334,8 @@ class CarouselColourIndexer:
                         worker._remember_catalogue_colours({artwork_id:details})
                     else:
                         raise ValueError('Artwork metadata unavailable')
-            except (OSError,ValueError,URLError,UpstreamPayloadTooLarge,CacheFull):
+            except (OSError,ValueError,URLError,UpstreamPayloadTooLarge,CacheFull) as error:
+                print(f'Colour indexing failed for artwork {artwork_id}: {type(error).__name__}: {error}',file=sys.stderr,flush=True)
                 with self.lock:
                     if self.target==target and event is self.stop_event:self.failed+=1
             else:
@@ -538,12 +586,18 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             try:
                 metadata=json.loads(meta_path.read_bytes())
                 if not isinstance(metadata,dict) or not re.fullmatch(r'#[0-9a-fA-F]{6}',str(metadata.get('spine_color',''))): raise ValueError
+                if metadata.get('text_style_version')!=SPINE_TEXT_STYLE_VERSION:
+                    metadata['text_color']=select_spine_text_colour(metadata['spine_color'],raw)
+                    metadata['text_style_version']=SPINE_TEXT_STYLE_VERSION
+                    temp=meta_path.with_name(meta_path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
+                    try: temp.write_bytes(json.dumps(metadata).encode()); temp.replace(meta_path)
+                    finally: temp.unlink(missing_ok=True)
             except (OSError,ValueError,UnicodeError,json.JSONDecodeError):
                 with Image.open(io.BytesIO(payload)) as image:
                     red,green,blue=ImageStat.Stat(image.convert('RGB').resize((1,1),getattr(Image,'Resampling',Image).BILINEAR)).mean
-                spine_color=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'; luminance=(.299*red+.587*green+.114*blue)/255
+                spine_color=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'
                 font=SPINE_FONTS[int(hashlib.sha256(raw.encode()).hexdigest()[:8],16)%len(SPINE_FONTS)]
-                metadata={'spine_color':spine_color,'text_color':'#111417' if luminance>.62 else '#f5f2ea','spine_font':font,'colour_index':colour_sort_index(spine_color)}
+                metadata={'spine_color':spine_color,'text_color':select_spine_text_colour(spine_color,raw),'text_style_version':SPINE_TEXT_STYLE_VERSION,'spine_font':font,'colour_index':colour_sort_index(spine_color)}
                 temp=meta_path.with_name(meta_path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
                 try: temp.write_bytes(json.dumps(metadata).encode()); temp.replace(meta_path)
                 finally: temp.unlink(missing_ok=True)
@@ -1015,7 +1069,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if not isinstance(metadata,dict) or not all(k in metadata for k in ('spine_color','text_color')) or not re.fullmatch(r'#[0-9a-fA-F]{6}',str(metadata.get('spine_color',''))):
                 metadata=None
         except (OSError,ValueError,UnicodeError): metadata=None
-        if metadata is not None and metadata.get('spine_font')==font and metadata.get('colour_index')==colour_sort_index(metadata['spine_color']):
+        if metadata is not None and metadata.get('text_style_version')==SPINE_TEXT_STYLE_VERSION and metadata.get('spine_font')==font and metadata.get('colour_index')==colour_sort_index(metadata['spine_color']):
             return metadata
         try:
             # Upgrade existing colour caches without decoding or fetching artwork again.
@@ -1027,8 +1081,9 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     sample=image.convert('RGB').resize((1,1),getattr(Image,'Resampling',Image).BILINEAR)
                     red,green,blue=ImageStat.Stat(sample).mean
                 spine_color=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'
-                luminance=(0.299*red+0.587*green+0.114*blue)/255
-                metadata={'spine_color':spine_color,'text_color':'#111417' if luminance>.62 else '#f5f2ea'}
+                metadata={'spine_color':spine_color}
+            metadata['text_color']=select_spine_text_colour(metadata['spine_color'],artwork_id)
+            metadata['text_style_version']=SPINE_TEXT_STYLE_VERSION
             metadata['spine_font']=font
             metadata['colour_index']=colour_sort_index(metadata['spine_color'])
             payload=json.dumps(metadata).encode()
