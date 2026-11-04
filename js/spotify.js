@@ -1,6 +1,6 @@
 // Spotty/LMS catalogue provider.
 // Keeps Spotify playback inside LMS: Carousel -> LMS -> Spotty -> selected LMS player.
-import { rpc } from './lms.js?v=0.10.0';
+import { rpc } from './lms.js?v=0.11.0';
 
 const asArray=value=>Array.isArray(value)?value:[];
 export const spottyLoop=result=>result?.loop_loop||result?.item_loop||result?.items_loop||result?.items||[];
