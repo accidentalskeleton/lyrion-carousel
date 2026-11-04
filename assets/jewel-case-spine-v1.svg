@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 600" preserveAspectRatio="none">
+<defs>
+  <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#070b0f" stop-opacity=".94"/>
+    <stop offset=".09" stop-color="#e4f5fb" stop-opacity=".55"/>
+    <stop offset=".18" stop-color="#82929b" stop-opacity=".24"/>
+    <stop offset=".28" stop-color="#fff" stop-opacity=".04"/>
+    <stop offset=".73" stop-color="#fff" stop-opacity=".02"/>
+    <stop offset=".86" stop-color="#d7edf6" stop-opacity=".22"/>
+    <stop offset=".94" stop-color="#0d1215" stop-opacity=".65"/>
+    <stop offset="1" stop-color="#020507" stop-opacity=".95"/>
+  </linearGradient>
+  <linearGradient id="cap" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff" stop-opacity=".67"/>
+    <stop offset=".18" stop-color="#637780" stop-opacity=".67"/>
+    <stop offset=".36" stop-color="#11181c" stop-opacity=".84"/>
+    <stop offset=".66" stop-color="#384950" stop-opacity=".63"/>
+    <stop offset="1" stop-color="#d7e4e8" stop-opacity=".51"/>
+  </linearGradient>
+</defs>
+<!-- A single reusable transparent photographed-style plastic shell. -->
+<rect x=".5" y="0" width="43" height="600" fill="url(#edge)"/>
+<rect x="3.5" y="14" width="37" height="572" fill="none" stroke="#b8d2da" stroke-opacity=".23" stroke-width=".8"/>
+<rect x="0" y="0" width="44" height="15" fill="url(#cap)"/>
+<rect x="0" y="585" width="44" height="15" fill="url(#cap)"/>
+<path d="M1 0V600 M43 0V600" stroke="#020508" stroke-opacity=".82" stroke-width="2"/>
+<path d="M4 15V585 M40 15V585" stroke="#f3fbff" stroke-opacity=".35" stroke-width=".7"/>
+<path d="M8 16V584" stroke="#fff" stroke-opacity=".10" stroke-width="1"/>
+</svg>
