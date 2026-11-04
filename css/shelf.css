@@ -31,7 +31,18 @@
 .bf-stage.bf-shelf-active .bf-spine-label {
     position:absolute;
     z-index:2;
-    inset:19px 4px;
+    /* Centre the actual vertical line box, not its containing inset.
+       Fonts have different intrinsic widths, so an inset alone leaves
+       their glyphs offset inside the case. */
+    top:19px;
+    bottom:19px;
+    left:50%;
+    right:auto;
+    transform:translateX(-50%)!important;
+    display:block;
+    width:max-content;
+    max-width:calc(100% - 8px);
+    box-sizing:border-box;
     writing-mode:vertical-rl;
     text-orientation:mixed;
     white-space:nowrap;
