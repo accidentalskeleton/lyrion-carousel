@@ -35,8 +35,8 @@ Repository owner: `accidentalskeleton`
 - [ ] Review the deployment defaults: `BIND_ADDRESS=0.0.0.0` listens
       on all interfaces; **never port-forward 8088 to the internet**.
       Configure LAN firewall or localhost binding as appropriate.
-- [ ] Choose a software licence and add an explicit `LICENSE` file.
-      Do not assume public visibility grants reuse rights.
+- [x] Select **GPL-3.0-only** for original source code and add the official complete `LICENSE` text.
+- [ ] Confirm copyright ownership/contributor rights and audit third-party assets before publishing. The repository licence does not grant rights to material you do not own.
 - [ ] Check third-party artwork, fonts, image templates, sample screenshots
       and video assets for publication and redistribution rights.
 - [ ] Verify local host names/URLs, documentation and tests contain no
