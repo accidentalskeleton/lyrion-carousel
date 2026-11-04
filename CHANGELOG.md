@@ -2,6 +2,13 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased — Shelf-only experience
+
+- Retire the experimental Fan display and its Settings control; Carousel now always renders the CD shelf.
+- Ignore existing saved Fan preferences without requiring users to clear browser storage.
+- Remove obsolete fan renderer, geometry, stylesheet and unused fan-only jewel-case overlay assets.
+- Keep the playing cover, scrolling behaviour and all album actions unchanged; update JavaScript regressions and documentation.
+
 ## Unreleased — Large-library navigation and cache bounds
 
 - Pre-index first album positions for A–Z to make alphabet navigation constant-time with a loaded catalogue, while preserving a partial-catalogue fallback.
