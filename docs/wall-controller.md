@@ -62,7 +62,7 @@ The [Waveshare 12.3inch HDMI LCD (22841)](https://www.waveshare.com/12.3inch-hdm
 
 The same dimensions and compatibility claims are listed by independent suppliers including [Kiwi Electronics](https://www.kiwi-electronics.com/en/12-3inch-capacitive-touch-display-1920x720-20597) and [Malina314](https://malina314.com/proizvod/12-3inch-capacitive-touch-screen-lcd-1920x720-hdmi-ips-toughened-glass-panel/).
 
-The Waveshare retains the full 720-pixel vertical resolution needed by the carousel, transport controls and swipe-up queue, but provides 25% fewer horizontal pixels than the Corsair. Validate both Shelf and Fan modes, the chosen displayed-album count, minimum spine width, queue gestures, long-press menus and Chromium kiosk operation at a 1920 × 720 viewport with 100% display scaling.
+The Waveshare retains the full 720-pixel vertical resolution needed by the carousel, transport controls and swipe-up queue, but provides 25% fewer horizontal pixels than the Corsair. Validate shelf navigation, the chosen displayed-album count, minimum spine width, queue gestures, long-press menus and Chromium kiosk operation at a 1920 × 720 viewport with 100% display scaling.
 
 This is an embedded-style assembly rather than a finished consumer monitor. Its controller/button board, 12 V supply, cabling and wall mounting must be incorporated into the final enclosure.
 
