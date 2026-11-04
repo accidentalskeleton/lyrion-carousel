@@ -18,6 +18,9 @@ All notable changes to Lyrion Carousel are documented here.
 
 ### Additional refinements
 
+- Add cached, high-resolution artwork-derived spine inserts beneath live album typography, preserving the plastic jewel-case overlay and CSS fallback.
+- Log failed colour-index artwork IDs for easier troubleshooting.
+
 - Show current artwork cache usage and its limit in Settings, with total metadata usage in the detail tooltip.
 
 - Rename Artist / Album ordering and match spine label order to the selected sorting mode.
