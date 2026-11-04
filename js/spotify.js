@@ -22,6 +22,15 @@ export function spotifyAlbumUrl(value){
   return match?'https://open.spotify.com/album/'+match[1]:'';
 }
 
+// Fallback navigation when Spotty/LMS omits the actual album URI. This is
+// deliberately a Spotify search, never presented as a direct album permalink.
+export function spotifyAlbumSearchUrl(title,artist){
+  const album=String(title||'').trim();
+  const performer=String(artist||'').trim();
+  if(!album||!performer)return '';
+  return 'https://open.spotify.com/search/'+encodeURIComponent(album+' '+performer)+'/albums';
+}
+
 function splitAlbumName(name=''){
   // LMS's compact XMLBrowser response formats saved albums as "<album> by <artist>".
   // Split on the final separator so album titles containing " by " remain usable.
