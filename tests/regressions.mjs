@@ -855,6 +855,50 @@ export async function runTests(sources) {
   api.set({position:0});api.draw();
 
 
+  // Phase 4: optional browser measurements must stay completely dormant
+  // until requested, then generate a portable deterministic report.
+  if(sources.performance){
+    let clock=0,frameId=0,frameCallback=null,scheduled=0,cancelled=0;
+    const observed=[],stageElement={
+      querySelectorAll:()=>Array.from({length:36},()=>({}))
+    };
+    class FakeObserver {
+      constructor(callback){this.callback=callback;observed.push(this);}
+      observe(){} disconnect(){} takeRecords(){return [];}
+    }
+    const perfWindow={};
+    const perfConsole={info(){},warn(){},table(){}};
+    const perfCode=sources.performance.replace('window.lyrionPerf=','window.lyrionPerf=');
+    const browser=new Function('window','document','console','performance',
+      'MutationObserver','PerformanceObserver','requestAnimationFrame',
+      'cancelAnimationFrame','location','URL','setTimeout',
+      perfCode+';return window.lyrionPerf;')(
+        perfWindow,{querySelector:()=>stageElement},perfConsole,
+        {now:()=>clock},
+        class{observe(){} disconnect(){} takeRecords(){return []}},
+        FakeObserver,callback=>{scheduled++;frameCallback=callback;return ++frameId},
+        ()=>{cancelled++},{href:'http://streamer:8088'},URL,()=>0
+      );
+    assert(scheduled===0,'Phase 4 measurement has zero idle animation frames');
+    assert(browser.active===false,'browser profiler is opt-in');
+    browser.start({label:'phase4-test'});
+    assert(browser.active&&scheduled===1,'profiler starts one animation chain only on request');
+    for(let i=0;i<60;i++){clock+=16.667;const tick=frameCallback;tick(clock);}
+    const report=browser.stop();
+    assert(!browser.active&&cancelled===1,'profiler cancels its animation chain on stop');
+    assert(report.sampledFrames===59&&report.dom.initialSpines===36,
+      'profiler returns sampled frames and visible DOM count');
+    assert(report.frameMs.p95>=16&&report.frameMs.p95<18,
+      'profiler calculates frame-time percentiles in milliseconds');
+    assert(report.estimatedDroppedFrames===0,'smooth frames produce no dropped-frame estimate');
+    assert(browser.lastReport===report,'profiler exposes its most recent report');
+    assert(browser.compare(report,report)['Frame p95 (ms)'].improvementPercent===0,
+      'profiler comparison works for equal baseline and candidate');
+    let invalidFps=false;
+    try{browser.start({targetFps:0})}catch(_){invalidFps=true}
+    assert(invalidFps&&!browser.active,'profiler rejects invalid refresh targets');
+  }
+
   return checks;
 }
 
@@ -866,5 +910,6 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
   sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
   sources.debianBuild=await readFile(new URL('../packaging/debian/build-deb.sh',import.meta.url),'utf8');
+  sources.performance=await readFile(new URL('../js/performance.js',import.meta.url),'utf8');
   console.log(`${await runTests(sources)} regression checks passed`);
 }
