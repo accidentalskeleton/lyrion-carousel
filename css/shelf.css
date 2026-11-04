@@ -38,9 +38,9 @@
     overflow:hidden;
     text-overflow:ellipsis;
     text-align:center;
-    font:700 var(--spine-font-size,14px)/1.2 Arial,Helvetica,sans-serif;
-    color:#fff;
-    text-shadow:0 1px 2px #000,0 0 3px #000,1px 0 1px #000,-1px 0 1px #000;
+    font:700 var(--spine-font-size,14px)/1.2 var(--spine-font-family,Arial,Helvetica,sans-serif);
+    color:var(--spine-text,#f5f2ea);
+    text-shadow:0 1px 1px rgba(0,0,0,.16);
     background:transparent;
     pointer-events:none;
 }
