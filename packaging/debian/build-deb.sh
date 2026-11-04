@@ -20,7 +20,6 @@ install -Dm0644 "$PROJECT_DIR/spotty-diagnostic.html" "$STAGE/opt/$PACKAGE/spott
 install -Dm0644 "$PROJECT_DIR/VERSION" "$STAGE/opt/$PACKAGE/VERSION"
 install -Dm0644 "$PROJECT_DIR/manifest.webmanifest" "$STAGE/opt/$PACKAGE/manifest.webmanifest"
 install -Dm0755 "$PROJECT_DIR/server.py" "$STAGE/opt/$PACKAGE/server.py"
-install -Dm0644 "$PROJECT_DIR/spine_art.py" "$STAGE/opt/$PACKAGE/spine_art.py"
 install -Dm0644 "$PROJECT_DIR/README.md" "$STAGE/usr/share/doc/$PACKAGE/README.md"
 cp -a "$PROJECT_DIR/assets" "$PROJECT_DIR/css" "$PROJECT_DIR/js" "$STAGE/opt/$PACKAGE/"
 install -Dm0644 "$SCRIPT_DIR/lyrion-carousel.service" "$STAGE/lib/systemd/system/lyrion-carousel.service"
