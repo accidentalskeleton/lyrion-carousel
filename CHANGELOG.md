@@ -2,24 +2,33 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
-## Unreleased
+## [0.11.1] - 2026-11-04
 
-- Show an exact Spotify album link within Album Information when a verified album URL or URI is available, otherwise offer a clearly labelled Spotify album-search link (local albums remain unaffected).
+### Spotify playback and synchronisation
 
-## Unreleased — Shelf-only experience
+- Show the play button in Spotify Album Information and route playback through LMS/Spotty.
+- Automatically switch Library and Spotify catalogues in separate browser sessions to follow the playing source and album.
+- Offer a verified Spotify album permalink where available, falling back to a clearly labelled Spotify album search when Spotty does not expose a valid album URL.
+- Refresh browser script versions so deployed updates replace cached JavaScript.
+
+### Release automation
+
+- Add a GitHub Actions workflow that tests and builds the Debian package on release publication, attaching the package and its SHA-256 checksum to the release.
+
+### Shelf-only experience
 
 - Standardise on the CD shelf display and remove the obsolete alternate-view selector.
 - Ignore deprecated browser display-mode preferences without requiring users to clear storage.
 - Remove unused display-mode renderer, geometry, stylesheet and overlay assets.
 - Keep the playing cover, scrolling behaviour and all album actions unchanged; update JavaScript regressions and documentation.
 
-## Unreleased — Large-library navigation and cache bounds
+### Large-library navigation and cache bounds
 
 - Pre-index first album positions for A–Z to make alphabet navigation constant-time with a loaded catalogue, while preserving a partial-catalogue fallback.
 - Bound the combined serialized catalogue order cache to 32 MiB as well as four entries, evicting least-recently-used orders and avoiding retention of oversized responses.
 - Add alphabet navigation regression coverage for 20,000 albums and Python cache eviction/oversized-response tests.
 
-## Unreleased — Phase 4 rendering performance
+### Phase 4 rendering performance
 
 - Recycle a bounded DOM pool of shelf spines as the viewport advances; reuse the static jewel-case shell and label nodes instead of recreating every visible spine.
 - Keep asynchronous spine-colour metadata bound to the correct album when a pooled node is reassigned.
