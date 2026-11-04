@@ -54,8 +54,8 @@ licenses and copyright/notice obligations.**
 | `assets/jewel-case-realistic-v1.png` | `assets/jewel-case-realistic-v1.md` records that the jewel-case PNG was created using an image-generation tool on 18 September 2026 | Verify that the generated output contains no copied third-party branding or artwork; retain provenance note |
 | `assets/jewel-case-spine-v1.svg` | Vector jewel-case illustration committed with the project; no external source or trademark found in its SVG markup | Confirm author/rights holder before applying project GPL terms |
 | `assets/lyrion-carousel-icon.svg` | Vector UI icon committed with the project; SVG markup contains simple shapes, no third-party links | Confirm author/rights holder |
-| `assets/lyrion-carousel-banner.jpg` | Binary README banner; Git history confirms addition but does **not** prove the sources/rights of its contents | **Review the actual image** for third-party album covers, photographs and logos; replace with cleared mock covers or document permissions before publication |
-| `assets/lyrion-carousel-feature-tour.mp4` | Binary feature-tour video; Git history confirms addition but does **not** establish imagery, artwork or soundtrack permissions | **Review each scene and audio** for protected music, album covers and other third-party works; re-record with cleared demo data if uncertain |
+| `assets/lyrion-carousel-banner.jpg` | **Created by Stuart Roberts**, confirmed by the project owner on 4 November 2026 | Creator attribution confirmed. Check whether the finished banner incorporates third-party album covers, logos or photography before granting redistribution rights to its contents |
+| `assets/lyrion-carousel-feature-tour.mp4` | **Created by Stuart Roberts**, confirmed by the project owner on 4 November 2026 | Creator attribution confirmed. Check whether recordings show protected album covers or include music, logos or other third-party material |
 | `assets/jewel-case-overlay.svg` | Legacy Fan-only vector overlay | Planned removal in the separate shelf-only PR; avoid distributing unused assets |
 
 The source uses local system font families rather than bundling font binaries.
@@ -71,10 +71,11 @@ release screenshots, demonstration videos or sample library datasets.
 
 ### Outstanding release decisions
 
-1. Obtain an affirmative provenance/rights check for the banner image and
-   feature-tour video. If either includes recognisable commercial album covers,
-   music or unauthorised third-party graphics, use cleared examples or obtain
-   suitable permission rather than treating GPL as a licence to redistribute.
+1. **Creator of banner and video confirmed: Stuart Roberts.** Before publishing,
+   review *underlying content* in those assets. If either includes commercial
+   album covers, music or unauthorised third-party graphics, use cleared
+   examples or obtain suitable permission. Creating the composition or
+   recording does not itself license embedded third-party works.
 2. Confirm ownership of the project-authored SVG files and generated jewel-case
    image; list any exceptions to the project's GPL grant explicitly.
 3. Check current Spotify attribution/link-back requirements against the actual
