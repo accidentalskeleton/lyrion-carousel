@@ -9,6 +9,7 @@ All notable changes to Lyrion Carousel are documented here.
 - Write spine width and font geometry only when pitch or album binding changes rather than every animation frame.
 - Cache open jewel-case width with invalidation on open/close, display change, viewport resize and element resize.
 - Extend JavaScript regressions with node-identity reuse, style-write checks, and 120 long jumps through a 20,000-album catalogue.
+- Add an opt-in browser performance profiler for sampled frame timing, approximate dropped frames, long tasks, DOM churn, network requests and optional JS heap metrics, with report comparison and no extra idle animation loop.
 
 ## [0.11.0] - 2026-11-04
 
