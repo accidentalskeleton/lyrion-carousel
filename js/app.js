@@ -255,6 +255,16 @@ function shelfWindowCount(){
     return Math.min(albums.length,DISPLAY_ALBUM_COUNT+2*buffer);
 }
 function renderAlbums(){stage.querySelectorAll('.bf-album').forEach(el=>el.remove());nodes=[];const count=shelfWindowCount(),anchor=selectedIndex();for(let offset=0;offset<count;offset++){const index=modulo(anchor+offset-Math.floor(count/2),totalAlbums),album=albums[index];if(!album)continue;const el=document.createElement('div');el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');el.role='option';el.dataset.index=String(index);el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');el.title=el.getAttribute('aria-label');el.style.setProperty('--art',album[2]);if(DISPLAY_STYLE==='fan'){const front=document.createElement('div');front.className='bf-jewel-front';const art=document.createElement('div');art.className='bf-jewel-art';const gloss=document.createElement('div');gloss.className='bf-jewel-gloss';front.append(art,gloss);el.append(front)}else{
+    // Keep both names readable, using independent lanes rather than one
+    // overlong vertical string. Honour the selected artist/album sort order.
+    const label=document.createElement('div');
+    label.className='bf-spine-label';
+    const artist=document.createElement('span'),title=document.createElement('span');
+    artist.className='bf-spine-artist'; artist.textContent=album[1]||'Unknown artist';
+    title.className='bf-spine-title'; title.textContent=album[0]||'Untitled';
+    artist.title=artist.textContent; title.title=title.textContent;
+    label.append(...(orderMode==='artistAlbum'?[artist,title]:[title,artist]));
+    el.append(label);
     if(album[16]){
         el.style.setProperty('--spine-image','url("'+album[16]+'")');
         el.dataset.spineArt='true';
@@ -317,7 +327,7 @@ function syncShelfDom(){
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
         node.el.style.setProperty('width',pitch+'px','important');
         node.el.style.setProperty('--spine-width',pitch+'px');
-        node.el.style.setProperty('--spine-font-size',Math.min(24,Math.max(10,(pitch-8)*.48))+'px');
+        node.el.style.setProperty('--spine-font-size',Math.min(14,Math.max(9,(pitch-7)*.38))+'px');
         node.el.style.setProperty('transform',`translate3d(${d*pitch-pitch/2+sideShift}px,0,0)`,'important');
         node.el.style.zIndex=String(100-Math.round(Math.abs(d)));
         node.el.style.opacity=hiddenSpine?'0':String(clamp(1-Math.max(0,Math.abs(d)-nodes.length*.36)*.12,.18,1));
