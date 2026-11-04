@@ -589,20 +589,16 @@ export async function runTests(sources) {
   }
   api.applySetting('coverSize',256);
   assert(api.state().albums.every(a=>a[8].includes('size=256')),'cover size updates artwork URLs');
-  const beforeStyle=api.state().albums[Math.round(api.state().position)][6];
-  api.applySetting('displayStyle','fan');
-  assert(api.state().albums[Math.round(api.state().position)][6]===beforeStyle,'display switch preserves position');
-  assert(stage.classList.contains('bf-fan-active')&&!stage.classList.contains('bf-shelf-active'),'fan style activates exclusively');
-  assert(stage.children.length<=27&&stage.children.every(el=>el.querySelector('.bf-jewel-front')),'fan renders bounded jewel cases');
-  assert(stage.children.every(el=>el.style.transform.includes('rotateY(')),'fan applies main carousel transforms');
-  api.set({position:api.state().position+35});api.draw();
-  assert(api.geometry().nodes.some(n=>n.index===Math.round(api.state().position)%api.state().albums.length),'fan updates visible window after scrolling');
-  api.applySetting('displayStyle','shelf');
-  assert(stage.classList.contains('bf-shelf-active')&&!stage.classList.contains('bf-fan-active'),'switch back restores shelf');
-  assert(stage.children.every(el=>!el.querySelector('.bf-jewel-front')),'switch back removes fan cover nodes');
-  const styleSelect=element('.bf-display-style');styleSelect.value='fan';styleSelect.listeners.change[0]();
-  assert(storage.get('albumBrowserDisplayStyle')==='fan','display style preference saved');
-  assert(window.__lyrionCarouselSettings.displayStyle==='shelf','display style defaults to shelf');
+  assert(stage.classList.contains('bf-shelf-active'),
+    'the shelf remains the only available display style');
+  assert(!stage.children.some(el=>el.querySelector('.bf-jewel-front')),
+    'shelf-only mode creates no fan cover nodes');
+  assert(!sources.index.includes('bf-display-style'),
+    'Settings no longer offers the experimental fan view');
+  assert(!sources.app.includes('syncFanDom')&&!sources.app.includes('fanLayout'),
+    'obsolete fan renderer is removed');
+  assert(window.__lyrionCarouselSettings.displayStyle===undefined,
+    'legacy fan preference is ignored on startup');
   api.set({playing:false,position:5});
   api.openFrontPreview(api.state().albums[5],5);
   const playbackCalls=rpcCalls.filter(c=>c[0]==='playlistcontrol').length;
@@ -862,7 +858,6 @@ export async function runTests(sources) {
   // bounded even after repeated long jumps across the library.
   api.set({playing:false});
   api.closeFrontPreview(true);
-  api.applySetting('displayStyle','shelf');
   api.replaceAlbumsForTest(largeAlbums);
   api.set({position:0});
   api.draw();
