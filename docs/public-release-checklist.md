@@ -39,7 +39,8 @@ Repository owner: `accidentalskeleton`
 - [ ] Confirm copyright ownership/contributor rights and audit third-party assets before publishing. The repository licence does not grant rights to material you do not own.
 - [x] Create a dependency and visual-asset attribution inventory in `THIRD_PARTY_NOTICES.md`.
 - [x] Confirm creator of the README banner and MP4 feature tour: **Stuart Roberts** (owner-confirmed on 4 November 2026).
-- [ ] **Manually review the underlying content in the banner and feature tour** for third-party commercial album covers, music and logos; replace or secure permissions for any uncleared material.
+- [x] Confirm the feature-tour MP4 has **no audio soundtrack** (confirmed by its creator).
+- [ ] **Manually review the underlying visual content in the banner and feature tour** for third-party commercial album covers and logos; replace or secure permissions for any uncleared material.
 - [ ] Review Spotify service attribution and album-link requirements for the Spotify/Spotty view.
 - [ ] Check third-party artwork, fonts, image templates, sample screenshots
       and video assets for publication and redistribution rights.
