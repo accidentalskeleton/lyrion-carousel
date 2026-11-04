@@ -953,7 +953,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
 
     def _serve_spine_artwork(self,artwork_id:str)->None:
         """Serve a lightweight, permanently cached high-resolution spine insert."""
-        key=hashlib.sha256(f'{self.lms_url}\\0{artwork_id}'.encode()).hexdigest()
+        key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest()
         variant=self.cache_dir/f'{key}-{SPINE_REVISION}.img'
         try:
             if not variant.is_file():
