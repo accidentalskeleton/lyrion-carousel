@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
-import time, io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sqlite3, sys, threading
+import time, io, random, argparse, colorsys, hashlib, ipaddress, json, os, re, shutil, socket, sqlite3, sys, threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
@@ -132,6 +132,76 @@ def validate_lms_url(value)->str:
     # Trigger urllib validation for malformed numeric ports.
     _=parsed.port
     return lms_url
+
+# Host and cross-site request checks reduce DNS-rebinding and CSRF exposure.
+# They are not authentication: keep the service reachable only on a trusted LAN.
+_RFC1918_NETWORKS=tuple(ipaddress.ip_network(network) for network in
+                        ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16'))
+_IPV6_LOCAL_NETWORKS=tuple(ipaddress.ip_network(network) for network in
+                           ('fc00::/7','fe80::/10'))
+
+def local_allowed_hosts(extra:str='')->frozenset[str]:
+    """Only explicitly configured names are trusted; never trust all .local names."""
+    hostname=socket.gethostname().strip().lower().rstrip('.')
+    names={'localhost','localhost.localdomain'}
+    for name in (hostname,hostname+'.local',*extra.split(',')):
+        name=name.strip().lower()
+        if (name and name==name.rstrip('.') and len(name)<=253
+                and all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?',part)
+                        for part in name.split('.'))):
+            names.add(name)
+    return frozenset(names)
+
+def is_local_request_host(value:str|None,allowed_hosts:frozenset[str]|set[str]=frozenset())->bool:
+    """Validate one exact Host authority; reject public names and non-LAN IPs."""
+    if not isinstance(value,str) or not value or value!=value.strip() or ',' in value:
+        return False
+    if any(ord(ch)<33 or ord(ch)==127 for ch in value):
+        return False
+    try:
+        parsed=urlsplit('//'+value)
+        if (not parsed.hostname or parsed.username is not None or parsed.password is not None
+                or parsed.path or parsed.query or parsed.fragment or parsed.netloc!=value):
+            return False
+        port=parsed.port  # Trigger strict port parsing.
+        if port is not None and port<1:return False
+    except ValueError:
+        return False
+    host=parsed.hostname.lower()
+    if host.endswith('.') or '%' in host:return False
+    try:
+        address=ipaddress.ip_address(host)
+    except ValueError:
+        # Reject numeric-looking IPv4 forms rather than treating them as DNS names.
+        if re.fullmatch(r'[0-9.]+',host):return False
+        if (len(host)>253 or not all(
+                re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?',label)
+                for label in host.split('.'))):
+            return False
+        return host in allowed_hosts
+    if address.is_unspecified or address.is_multicast or address.is_reserved:
+        # IPv6 ULA may be considered reserved by some Python versions; allow
+        # only the explicitly enumerated private ranges below.
+        if address.version==4:return False
+    if address.version==4:
+        return address.is_loopback or any(address in network for network in _RFC1918_NETWORKS)
+    return (address.is_loopback or any(address in network for network in _IPV6_LOCAL_NETWORKS))
+
+def same_origin_header(origin:str|None,host:str)->bool:
+    """An absent Origin is permitted only with the custom non-simple POST header."""
+    if origin is None:return True
+    if not isinstance(origin,str) or origin=='null' or origin!=origin.strip():
+        return False
+    try:
+        parsed=urlsplit(origin)
+        authority=urlsplit('//'+host)
+        return (parsed.scheme in ('http','https') and parsed.hostname is not None
+                and not parsed.username and not parsed.password and not parsed.path
+                and not parsed.query and not parsed.fragment
+                and parsed.hostname.lower()==authority.hostname.lower()
+                and parsed.port==authority.port)
+    except (ValueError,AttributeError):
+        return False
 
 def load_saved_lms_url(path:Path,fallback:str)->str:
     """Use the persisted server choice, falling back to systemd/CLI on first run."""
@@ -354,7 +424,32 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     def __init__(self,*args,directory:str,lms_url:str,cache_dir:Path,runtime_config:dict[str,object],**kwargs):
         self.lms_url=lms_url.rstrip('/'); self.cache_dir=cache_dir; self.runtime_config=runtime_config
         self.lms_settings_path=cache_dir.parent/LMS_SETTINGS_FILENAME
+        self.allowed_hosts=runtime_config.get('_allowed_hosts',local_allowed_hosts())
         super().__init__(*args,directory=directory,**kwargs)
+    def parse_request(self)->bool:
+        """Validate Host on every request and protect all POST endpoints."""
+        if not super().parse_request():return False
+        hosts=self.headers.get_all('Host',[])
+        allowed=getattr(self,'allowed_hosts',local_allowed_hosts())
+        if len(hosts)!=1 or not is_local_request_host(hosts[0],allowed):
+            self.send_error(403,'Unrecognised Host header')
+            return False
+        if self.command=='POST':
+            # The header makes cross-site HTML forms/simple requests unusable;
+            # no CORS policy permits a foreign site to set it by fetch().
+            app_headers=self.headers.get_all('X-Lyrion-Request',[])
+            if app_headers!=['1']:
+                self.send_error(403,'Missing application request header')
+                return False
+            fetch_sites=self.headers.get_all('Sec-Fetch-Site',[])
+            if len(fetch_sites)>1 or (fetch_sites and fetch_sites[0] not in ('same-origin','none')):
+                self.send_error(403,'Cross-site request denied')
+                return False
+            origins=self.headers.get_all('Origin',[])
+            if len(origins)>1 or (origins and not same_origin_header(origins[0],hosts[0])):
+                self.send_error(403,'Cross-origin request denied')
+                return False
+        return True
     def end_headers(self)->None:
         """Revalidate application assets; image endpoints supply their own cache policy."""
         if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear','/api/catalogue','/api/catalogue/status','/api/catalogue/invalidate','/api/catalogue/reconcile'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
@@ -503,7 +598,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if path=='/api/diagnostics/now-playing': self._serve_now_playing_diagnostic(); return
         if path=='/api/spotty-art': self._serve_spotty_art(); return
         if path=='/api/spotty-art-meta': self._serve_spotty_art_meta(); return
-        if path=='/api/config': self._send_payload(200,json.dumps(self.runtime_config).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
+        if path=='/api/config': self._send_payload(200,json.dumps({k:v for k,v in self.runtime_config.items() if not k.startswith('_')}).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
         if path.startswith('/api/art-meta/'):
             artwork_id=unquote(path.removeprefix('/api/art-meta/'))
             if not ARTWORK_ID.fullmatch(artwork_id): self.send_error(400,'Invalid artwork ID'); return
@@ -1216,7 +1311,7 @@ def main()->int:
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--lms',default='http://streamer:9000',help='LMS base URL'); parser.add_argument('--bind',default='127.0.0.1',help='Address to listen on'); parser.add_argument('--port',type=int,default=8088,help='HTTP port')
     parser.add_argument('--batch-size',type=positive_int,default=40,help='Albums per LMS batch'); parser.add_argument('--idle-return-seconds',type=non_negative_int,default=30,help='Idle time before returning to the playing album; 0 disables')
-    parser.add_argument('--reconnect-max-seconds',type=positive_int,default=30,help='Maximum reconnect backoff'); parser.add_argument('--random-scroll-max-seconds',type=positive_int,default=3,help='Maximum random and idle-return scroll duration'); parser.add_argument('--search-limit',type=positive_int,default=100,help='Maximum albums returned by a search'); parser.add_argument('--cache-dir',help='Persistent artwork cache directory (default: .cache/album-art)'); parser.add_argument('--cache-limit-mb',type=positive_int,default=MAX_ARTWORK_CACHE_BYTES//1_000_000,help='Default artwork cache limit in MB'); parser.add_argument('--cache-hard-limit-mb',type=positive_int,default=MAX_ARTWORK_CACHE_HARD_BYTES//1_000_000,help='Maximum artwork cache limit clients may select in MB'); parser.add_argument('--clear-cache',action='store_true',help='Clear the persistent artwork cache before starting'); args=parser.parse_args()
+    parser.add_argument('--reconnect-max-seconds',type=positive_int,default=30,help='Maximum reconnect backoff'); parser.add_argument('--random-scroll-max-seconds',type=positive_int,default=3,help='Maximum random and idle-return scroll duration'); parser.add_argument('--search-limit',type=positive_int,default=100,help='Maximum albums returned by a search'); parser.add_argument('--cache-dir',help='Persistent artwork cache directory (default: .cache/album-art)'); parser.add_argument('--cache-limit-mb',type=positive_int,default=MAX_ARTWORK_CACHE_BYTES//1_000_000,help='Default artwork cache limit in MB'); parser.add_argument('--cache-hard-limit-mb',type=positive_int,default=MAX_ARTWORK_CACHE_HARD_BYTES//1_000_000,help='Maximum artwork cache limit clients may select in MB'); parser.add_argument('--clear-cache',action='store_true',help='Clear the persistent artwork cache before starting'); parser.add_argument('--allowed-hosts',default=os.environ.get('ALLOWED_HOSTS',''),help='Additional comma-separated permitted local browser hostnames'); args=parser.parse_args()
     if args.cache_limit_mb>args.cache_hard_limit_mb: parser.error('--cache-limit-mb must not exceed --cache-hard-limit-mb')
     static_dir=Path(__file__).resolve().parent; cache_dir=Path(args.cache_dir).expanduser().resolve() if args.cache_dir else static_dir/'.cache'/'album-art'
     if args.clear_cache and cache_dir.exists():
@@ -1225,7 +1320,8 @@ def main()->int:
     saved_lms_url=load_saved_lms_url(cache_dir.parent/LMS_SETTINGS_FILENAME,args.lms.rstrip('/'))
     # Shared mutable defaults are exposed to the browser. UI durations use ms;
     # CLI durations use seconds. The handler factory reads the current LMS target.
-    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'cache_limit_bytes':args.cache_limit_mb*1_000_000,'cache_hard_limit_bytes':args.cache_hard_limit_mb*1_000_000,'lms_url':saved_lms_url}
+    allowed_hosts=local_allowed_hosts(args.allowed_hosts)
+    runtime_config={'batch_size':args.batch_size,'idle_return_ms':args.idle_return_seconds*1000,'library_check_ms':0,'reconnect_max_ms':args.reconnect_max_seconds*1000,'random_scroll_max_ms':args.random_scroll_max_seconds*1000,'search_limit':args.search_limit,'cache_limit_bytes':args.cache_limit_mb*1_000_000,'cache_hard_limit_bytes':args.cache_hard_limit_mb*1_000_000, 'lms_url':saved_lms_url,'_allowed_hosts':allowed_hosts}
     def handler(*handler_args,**handler_kwargs): return LyrionCarouselHandler(*handler_args,directory=str(static_dir),lms_url=runtime_config['lms_url'],cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
     # Long-poll connections must not block ordinary artwork and control requests.
     server=ThreadingHTTPServer((args.bind,args.port),handler)

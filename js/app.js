@@ -182,7 +182,7 @@ async function flushSpineMetaBatch(){
     let result=null;
     try{
         const response=await fetch('/api/art-meta',{
-            method:'POST',headers:{'Content-Type':'application/json'},
+            method:'POST',headers:{'Content-Type':'application/json','X-Lyrion-Request':'1'},
             body:JSON.stringify({artwork_ids:jobs.map(job=>job.id)})
         });
         if(response.ok)result=(await response.json()).metadata||null;
@@ -595,7 +595,7 @@ async function refreshCatalogue({invalidate=true}={}){
     // scan has already been reconciled by Carousel's own server and must use
     // that freshly prepared snapshot instead of scanning LMS twice.
     if(invalidate){
-        const response=await fetch('/api/catalogue/invalidate',{method:'POST'});
+        const response=await fetch('/api/catalogue/invalidate',{method:'POST',headers:{'X-Lyrion-Request':'1'}});
         if(!response.ok)throw Error('Could not invalidate the catalogue snapshot');
     }
     const connection=connectionGeneration,anchor=albums[selectedIndex()]?.[6];
@@ -658,7 +658,7 @@ async function handleLibraryEvent(){
         while(libraryRefreshPending){
             libraryRefreshPending=false;
             const connection=connectionGeneration;
-            const response=await fetch('/api/catalogue/reconcile',{method:'POST'});
+            const response=await fetch('/api/catalogue/reconcile',{method:'POST',headers:{'X-Lyrion-Request':'1'}});
             if(!response.ok)throw Error('Could not check the LMS catalogue');
             const result=await response.json();
             if(connection!==connectionGeneration)return;
