@@ -42,7 +42,7 @@ export class CometDClient {
   }
 
   handleServerStatus(data) {
-    const scanning = String(data?.rescan ?? '0') === '1';
+    const scanning = data?.rescan === true || String(data?.rescan ?? '0') === '1';
     if (this.serverWasScanning === true && !scanning) {
       this.onLibraryChanged(data);
     }

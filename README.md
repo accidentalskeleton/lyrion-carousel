@@ -8,7 +8,7 @@
 
 Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines or a fan of jewel-case covers. Both displays use CSS transforms; no WebGL renderer or remote font downloads are required.
 
-Current application version: **0.10.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
+Current application version: **0.11.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
 ## Features
 
@@ -296,11 +296,11 @@ sudo systemctl disable --now lyrion-carousel.service
 
 ## Large-library catalogue snapshots
 
-The first cold catalogue request still reads LMS in bounded 200-album pages. Subsequent sort changes reuse the same catalogue, including after restarting Carousel while the snapshot is still fresh. The snapshot lasts up to 15 minutes as a fallback when library events are unavailable; an LMS scan-complete event invalidates it immediately. Genre-exclusion album IDs are indexed only on first use and saved alongside the snapshot. Non-random prepared orders are retained in a four-entry in-memory response cache; random order is shuffled afresh each time.
+The first cold catalogue request still reads LMS in bounded 200-album pages. Subsequent sort changes reuse the same catalogue, including after restarting Carousel while the snapshot is still fresh. The snapshot lasts up to 15 minutes as a fallback when library events are unavailable. When Carousel observes an LMS scan finishing through the standard CometD server-status stream, **Carousel independently reconciles** its own snapshot against LMS. If album rows have not changed, it preserves the existing unfiltered sort cache and skips rebuilding the browser catalogue. The ripper and LMS do not invoke any Carousel-specific API or hook. Genre-exclusion album IDs are indexed only on first use and saved alongside the snapshot. Non-random prepared orders are retained in a four-entry in-memory response cache; random order is shuffled afresh each time.
 
 The snapshot is stored separately from image files under the existing Carousel cache directory. Clearing the artwork cache also removes catalogue snapshots, but **does not reset the selected LMS server**. **Colour ordering now maintains a separate incremental SQLite index** (at `/var/cache/lyrion-carousel/artwork/colour-index-v1-*.sqlite3` for the packaged service). Every batched spine-metadata response can add newly discovered colours. Switching to colour order processes only artwork whose colour is not yet indexed, then saves the additional rows in a single SQLite transaction. Entries survive service restarts and do **not** require rewriting the entire catalogue JSON snapshot on each scroll. The `/api/catalogue/status` response reports `colour_indexes` for the current LMS.
 
-**Cold-start limitation:** if the catalogue contains covers never viewed or analysed before, the *first* colour sort must still fetch and analyse those missing covers to preserve the exact colour order. It does not trigger a separate automatic full-library prefetch, and it does not change the existing artwork warmer's behaviour. A future optional idle indexer could address that first-sort delay without blocking browsing.
+**Automatic indexing of newly added albums:** after detecting an actual catalogue change, Carousel queues newly introduced artwork IDs for a single low-priority background worker. The worker yields to recent browser artwork/metadata activity and shares the existing cache-clear coordination lock; it saves successful colours in the same persistent SQLite index. When the browser switches to Spotify, the catalogue can still be reconciled without forcing the Spotify UI to reload. An offline Carousel may instead discover changes after its normal snapshot expiry. **Cold-start limitation:** if covers have never been viewed or analysed and no prior snapshot was available, a first colour sort can still take time. Failed background artwork requests are retried through normal metadata access or a later colour sort, and an in-progress background queue does not survive a Carousel process restart.
 
 ### LMS URL across service restarts
 
@@ -331,8 +331,9 @@ The `cached` field should be `true` after the catalogue has loaded. To measure t
 - `/api/lms` → LMS JSON-RPC;
 - `/api/cometd` → LMS CometD;
 - `/api/catalogue?order=artistAlbum|album|colour|random` → server-prepared ordered catalogue from a disk-backed snapshot (15-minute TTL);
-- `/api/catalogue/status` → catalogue snapshot state, age and album count (GET, never contacts LMS);
-- `/api/catalogue/invalidate` → discard the catalogue snapshot after an LMS library scan completes (POST);
+- `/api/catalogue/status` → catalogue state, album and colour counts, plus background-colour indexing progress (GET, never contacts LMS);
+- `/api/catalogue/reconcile` → Carousel-owned change check after observing an LMS scan finish (POST). Compares album data, updates snapshot only as necessary, and queues new cover colours in the background;
+- `/api/catalogue/invalidate` → explicitly discard the catalogue snapshot (POST), without modifying LMS;
 - `/api/art/<artwork-id>?size=512` → cached resized cover; omit size for original artwork;
 - `/api/art-meta/<artwork-id>` → cached spine colour, text contrast, font and colour index;
 - `/api/art-meta` → prepare metadata for up to 64 artwork IDs (POST);

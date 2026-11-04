@@ -24,9 +24,11 @@ export async function runTests(sources) {
   const {CometDClient, rpc:realRpc, resetRpcSession} = new Function('fetch', plain(sources.lms) + ';return {CometDClient,rpc,resetRpcSession};')(
     async () => ({ok:true,json:async () => ({result:{}})})
   );
-  const comet = new CometDClient(() => {}, () => {}, data => { assert(data.rescan === 0, 'scan payload forwarded'); libraryEvents++; });
+  const comet = new CometDClient(() => {}, () => {}, data => { assert(data.rescan === 0 || data.rescan === false, 'scan payload forwarded'); libraryEvents++; });
   comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:1}); comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:0});
-  assert(libraryEvents === 1, 'one refresh per completed scan');
+  assert(libraryEvents === 1, 'one observation per completed scan');
+  comet.handleServerStatus({rescan:true}); comet.handleServerStatus({rescan:false});
+  assert(libraryEvents === 2, 'boolean scan-status changes are also observed once');
   const oldRpc = realRpc('0', ['players',0,1]); resetRpcSession();
   let rejected = false; try { await oldRpc; } catch (_) { rejected = true; }
   assert(rejected, 'old server RPC rejected');
@@ -73,6 +75,7 @@ export async function runTests(sources) {
   const requestAnimationFrame=fn=>{frames.set(++nextId,fn);return nextId;},cancelAnimationFrame=id=>frames.delete(id);
   const rpcCalls=[];
   const catalogueEvents=[];
+  let catalogueReconcileChanged=true;
   let tracksFixture=null;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
   const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums')return {count:library.length,albums_loop:library.slice(cmd[1],cmd[1]+cmd[2])};return {};};
@@ -85,6 +88,10 @@ export async function runTests(sources) {
       if(url==='/api/catalogue/invalidate'){
         catalogueEvents.push({action:'invalidate',method:args[0]?.method});
         return Promise.resolve({ok:true,json:async()=>({invalidated:true})});
+      }
+      if(url==='/api/catalogue/reconcile'){
+        catalogueEvents.push({action:'reconcile',method:args[0]?.method});
+        return Promise.resolve({ok:true,json:async()=>({changed:catalogueReconcileChanged,count:library.length,new_albums:catalogueReconcileChanged?1:0})});
       }
       if(url.startsWith('/api/catalogue')){
         catalogueEvents.push({action:'read',url});
@@ -100,7 +107,7 @@ export async function runTests(sources) {
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
-      prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
+      prefetchCoverWindow,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -198,6 +205,27 @@ export async function runTests(sources) {
     refreshEvents.some(event=>event.action==='read'),
     'LMS rescan invalidates server snapshot before requesting new album ordering');
   assert(api.state().orderMode==='random'&&api.state().albums.slice(0,95).every((a,i)=>a[6]===previous[i]), 'refresh retains random order');
+  // Observing scan completion must not itself trigger a UI refresh. Carousel
+  // first asks its own server to compare library state.
+  const unchangedAlbums=api.state().albums;
+  const beforeUnchanged=catalogueEvents.length;
+  catalogueReconcileChanged=false;
+  await api.handleLibraryEvent();
+  assert(catalogueEvents.slice(beforeUnchanged).length===1&&
+    catalogueEvents[beforeUnchanged]?.action==='reconcile'&&
+    catalogueEvents[beforeUnchanged]?.method==='POST'&&
+    api.state().albums===unchangedAlbums,
+    'unchanged LMS scan observation does not refetch or rebuild the Carousel catalogue');
+  catalogueReconcileChanged=true;
+  library[0]={...library[0],album:'Recently Updated'};
+  const beforeChanged=catalogueEvents.length;
+  await api.handleLibraryEvent();
+  const observed=catalogueEvents.slice(beforeChanged);
+  assert(observed[0]?.action==='reconcile'&&
+    observed.some(e=>e.action==='read')&&
+    !observed.some(e=>e.action==='invalidate')&&
+    api.state().albums.some(album=>album?.[0]==='Recently Updated'),
+    'changed LMS scan is independently reconciled before Carousel loads its new snapshot');
   api.applySetting('random',1000);
   // Actual connectLyrion() keeps connecting=true until startup completes;
   // otherwise applyStatus() launches a competing follow animation.
@@ -680,6 +708,10 @@ export async function runTests(sources) {
       sources.server.includes('_catalogue_genre_ids')&&
       sources.server.includes('_invalidate_catalogue_data'),
       'server exposes persistent, expiring catalogue snapshots and indexed genre exclusions');
+    assert(sources.server.includes('def _reconcile_catalogue')&&
+      sources.server.includes('class CarouselColourIndexer')&&
+      sources.app.includes("'/api/catalogue/reconcile'"),
+      'Carousel owns scan reconciliation and background indexing without LMS hooks');
     assert(!sources.server.includes('from disc_artwork import')&&
       !sources.server.includes('/api/processed-disc/')&&
       !sources.server.includes('/api/local-artwork/'),

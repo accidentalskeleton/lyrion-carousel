@@ -2,6 +2,7 @@
 """Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
 import time, io, random, argparse, colorsys, hashlib, json, os, re, shutil, socket, sqlite3, sys, threading
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
 from contextlib import closing
@@ -31,6 +32,9 @@ CATALOGUE_SNAPSHOT_VERSION=1
 CATALOGUE_SNAPSHOT_TTL_SECONDS=900
 CATALOGUE_MAX_SNAPSHOT_BYTES=64_000_000
 CATALOGUE_SORT_CACHE_ENTRIES=4
+# LMS never calls Carousel. The browser observes ordinary LMS scan status and
+# asks Carousel to reconcile its own snapshot before deciding to refresh the UI.
+MAX_BACKGROUND_COLOUR_QUEUE=20_000
 # Store indexed cover colours in small SQLite transactions instead of rewriting
 # a full 10,000+ album snapshot whenever a user scrolls to new albums.
 COLOUR_INDEX_VERSION=1
@@ -196,6 +200,107 @@ class ArtworkWarmer:
 
 ARTWORK_WARMER=ArtworkWarmer()
 
+class CarouselColourIndexer:
+    """Low-priority, single-worker queue driven only by Carousel's own checks."""
+    def __init__(self):
+        self.lock=threading.RLock()
+        self.queue=deque()
+        self.queued=set()
+        self.thread=None
+        self.stop_event=threading.Event()
+        self.target=None
+        self.last_foreground=0.0
+        self.completed=0
+        self.failed=0
+        self.status='idle'
+
+    def stop(self):
+        with self.lock:
+            self.stop_event.set()
+            self.queue.clear()
+            self.queued.clear()
+            self.target=None
+            # The old worker may be completing a network request; its stop
+            # event stays set while a future queue starts with a fresh worker.
+            self.thread=None
+            self.status='stopped'
+
+    def snapshot(self):
+        with self.lock:
+            return {'status':self.status,'queued':len(self.queue),
+                    'completed':self.completed,'failed':self.failed}
+
+    def enqueue(self,handler,artwork_ids):
+        """Queue only new artwork, without holding a request or network socket."""
+        target=(str(handler.cache_dir.resolve()),handler.lms_url)
+        with self.lock:
+            if self.target!=target:
+                self.stop_event.set()
+                self.stop_event=threading.Event()
+                self.target=target
+                self.thread=None
+                self.queue.clear()
+                self.queued.clear()
+                self.completed=0
+                self.failed=0
+            for artwork_id in artwork_ids:
+                artwork_id=str(artwork_id)
+                if not ARTWORK_ID.fullmatch(artwork_id) or artwork_id in self.queued:
+                    continue
+                if len(self.queue)>=MAX_BACKGROUND_COLOUR_QUEUE:break
+                self.queued.add(artwork_id)
+                self.queue.append(artwork_id)
+            if not self.queue:return
+            self.status='running'
+            if self.thread is None or not self.thread.is_alive() or getattr(self.thread,'colour_target',None)!=target:
+                worker=object.__new__(LyrionCarouselHandler)
+                worker.cache_dir=handler.cache_dir
+                worker.lms_url=handler.lms_url
+                worker.runtime_config=getattr(handler,'runtime_config',{})
+                worker.background_warming=True
+                event=self.stop_event
+                self.thread=threading.Thread(target=self.run,args=(worker,event,target),
+                                             daemon=True,name='carousel-colour-index')
+                self.thread.colour_target=target
+                self.thread.start()
+
+    def run(self,worker,event,target):
+        """Yield to foreground browsing and the artwork warmer, one cover at a time."""
+        while not event.is_set():
+            with self.lock:
+                if self.target!=target or event is not self.stop_event:break
+                if not self.queue:
+                    self.status='complete'
+                    if self.thread is threading.current_thread():self.thread=None
+                    return
+                artwork_id=self.queue.popleft()
+                self.queued.discard(artwork_id)
+            while not event.is_set() and time.monotonic()-self.last_foreground<1.5:
+                event.wait(.25)
+            if event.is_set():break
+            try:
+                # Coordinate with cache clear and existing artwork warming.
+                with ARTWORK_WARMER.io_lock:
+                    if event.is_set():break
+                    details=worker._artwork_metadata(artwork_id)
+                    if details:
+                        worker._remember_catalogue_colours({artwork_id:details})
+                    else:
+                        raise ValueError('Artwork metadata unavailable')
+            except (OSError,ValueError,URLError,UpstreamPayloadTooLarge,CacheFull):
+                with self.lock:
+                    if self.target==target and event is self.stop_event:self.failed+=1
+            else:
+                with self.lock:
+                    if self.target==target and event is self.stop_event:self.completed+=1
+            event.wait(.4)
+        with self.lock:
+            if self.thread is threading.current_thread():self.thread=None
+            if self.target==target and event is self.stop_event:
+                self.status='cancelled' if event.is_set() else 'complete'
+
+COLOUR_INDEXER=CarouselColourIndexer()
+
 class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     server_version="LyrionCarousel/1.0"
     def __init__(self,*args,directory:str,lms_url:str,cache_dir:Path,runtime_config:dict[str,object],**kwargs):
@@ -204,14 +309,17 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         super().__init__(*args,directory=directory,**kwargs)
     def end_headers(self)->None:
         """Revalidate application assets; image endpoints supply their own cache policy."""
-        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear','/api/catalogue','/api/catalogue/status','/api/catalogue/invalidate'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
+        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear','/api/catalogue','/api/catalogue/status','/api/catalogue/invalidate','/api/catalogue/reconcile'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
             self.send_header('Cache-Control','no-cache')
         super().end_headers()
     def do_POST(self)->None:
         """Dispatch state-changing/cache APIs or forward bounded JSON to LMS."""
         path=urlsplit(self.path).path
         if path=='/api/cache/warm': self._warm_cache(); return
-        if path=='/api/art-meta': self._serve_metadata_batch(); return
+        if path=='/api/art-meta':
+            COLOUR_INDEXER.last_foreground=time.monotonic()
+            self._serve_metadata_batch(); return
+        if path=='/api/catalogue/reconcile': self._reconcile_catalogue(); return
         if path=='/api/catalogue/invalidate': self._invalidate_catalogue(); return
         if path=='/api/cache/clear': self._clear_cache(); return
         if path=='/api/config/lms': self._update_lms_url(); return
@@ -248,6 +356,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     def _clear_cache(self)->None:
         """Stop warming and wait for its current write before deleting cached files."""
         ARTWORK_WARMER.stop()
+        COLOUR_INDEXER.stop()
         with ARTWORK_WARMER.io_lock: self._clear_cache_files()
 
     def _clear_cache_files(self)->None:
@@ -277,6 +386,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             save_lms_url(getattr(self,'lms_settings_path',
                               self.cache_dir.parent/LMS_SETTINGS_FILENAME),lms_url)
             ARTWORK_WARMER.stop()
+            COLOUR_INDEXER.stop()
             # An earlier snapshot of this server can be stale after switching.
             self._invalidate_catalogue_data(lms_url=lms_url)
             self.runtime_config['lms_url']=lms_url
@@ -336,8 +446,9 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=='/api/cache/warm':
             self._send_payload(200,json.dumps({**ARTWORK_WARMER.snapshot(),'cache':self._cache_usage()}).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
-        if path.startswith('/api/art/'):
+        if path.startswith(('/api/art/','/api/art-meta/')):
             ARTWORK_WARMER.last_foreground=time.monotonic()
+            COLOUR_INDEXER.last_foreground=time.monotonic()
         if path=='/api/catalogue': self._serve_catalogue(); return
         if path=='/api/catalogue/status': self._serve_catalogue_status(); return
         if path=='/api/diagnostics/spotty': self._serve_spotty_diagnostic(); return
@@ -663,6 +774,84 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             self._send_payload(200,b'{"invalidated":true}','application/json; charset=utf-8',cache_control='no-store')
         except OSError as error:self._send_upstream_error(error)
 
+    @staticmethod
+    def _catalogue_fingerprint(albums)->str:
+        """Stable LMS album-row comparison, independent of upstream page ordering."""
+        ordered=sorted(albums,key=lambda item:(str(item.get('id','')),json.dumps(item,sort_keys=True)))
+        payload=json.dumps(ordered,sort_keys=True,ensure_ascii=False,separators=(',',':'))
+        return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+    def _previous_catalogue_for_reconcile(self):
+        """Compare with memory or the saved snapshot without forcing a new scan."""
+        snapshot=_CATALOGUE_MEMORY.get(self._catalogue_snapshot_key())
+        if snapshot is not None:return snapshot
+        path=self._catalogue_snapshot_path()
+        try:
+            if path.stat().st_size>CATALOGUE_MAX_SNAPSHOT_BYTES:return None
+            saved=json.loads(path.read_bytes())
+            if (saved.get('version')!=CATALOGUE_SNAPSHOT_VERSION or
+                    saved.get('lms_url')!=self.lms_url or
+                    not isinstance(saved.get('albums'),list) or
+                    not all(isinstance(a,dict) for a in saved['albums'])):
+                return None
+            return {'albums':saved['albums'],'genres':saved.get('genres',{}),
+                    'orders':OrderedDict(),'colours':self._load_colour_index(),
+                    'created':saved.get('created',0)}
+        except (OSError,ValueError,TypeError,UnicodeError,AttributeError):
+            return None
+
+    def _reconcile_catalogue(self)->None:
+        """Carousel-owned action: check LMS after observing a completed scan.
+
+        LMS does not know this endpoint. The browser requests it after an LMS
+        status observation; no LMS hook, ripper action, or cross-service trigger.
+        """
+        try:
+            with _CATALOGUE_LOCK:
+                previous=self._previous_catalogue_for_reconcile()
+                current=[album for page in self._catalogue_pages() for album in page]
+                changed=(previous is None or
+                         self._catalogue_fingerprint(previous['albums'])!=
+                         self._catalogue_fingerprint(current))
+                old_by_id={str(a.get('id')):a for a in previous['albums']} if previous else {}
+                new_artwork_ids=[]
+                already_indexed=self._load_colour_index()
+                for album in current:
+                    before=old_by_id.get(str(album.get('id')))
+                    artwork=album.get('artwork_track_id')
+                    if (previous is not None and artwork and
+                            (before is None or str(before.get('artwork_track_id'))!=str(artwork)) and
+                            str(artwork) not in already_indexed):
+                        new_artwork_ids.append(str(artwork))
+                # Each scan can change genre assignments without changing album
+                # rows. Drop stale genre indexes; browsers with genre filters
+                # refresh independently after observing a scan completion.
+                snapshot={
+                    'created':time.time(),'albums':current,'genres':{},
+                    'colours':already_indexed,
+                    'orders':OrderedDict()
+                } if changed or previous is None else previous
+                snapshot['created']=time.time()
+                snapshot['genres']={}
+                # If album rows are unchanged, keep prepared unfiltered orders
+                # and discard only filtered orders (genre membership can move).
+                if changed:snapshot['orders'].clear()
+                else:
+                    for order_key in tuple(snapshot['orders']):
+                        if order_key[1]:snapshot['orders'].pop(order_key,None)
+                _CATALOGUE_MEMORY[self._catalogue_snapshot_key()]=snapshot
+                try:self._save_catalogue_snapshot(snapshot)
+                except OSError:pass
+                result={'changed':changed,'count':len(current),
+                        'new_albums':sum(1 for a in current if str(a.get('id')) not in old_by_id)}
+            # Do not hold the catalogue lock while starting background work.
+            if new_artwork_ids and self.lms_url==self.runtime_config.get('lms_url',self.lms_url):
+                COLOUR_INDEXER.enqueue(self,dict.fromkeys(new_artwork_ids))
+            self._send_payload(200,json.dumps(result).encode(),
+                               'application/json; charset=utf-8',cache_control='no-store')
+        except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
+            self._send_upstream_error(error)
+
     def _serve_catalogue_status(self)->None:
         """Lightweight diagnostics without triggering any LMS requests."""
         key=self._catalogue_snapshot_key()
@@ -695,6 +884,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                         state={'cached':False,'source':'invalid'}
                 else:
                     state={'cached':False,'source':'none'}
+        state['colour_indexing']=COLOUR_INDEXER.snapshot()
         self._send_payload(200,json.dumps(state).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
     def _serve_catalogue(self)->None:
