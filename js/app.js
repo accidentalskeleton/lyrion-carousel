@@ -321,7 +321,7 @@ function renderAlbums(){
         if(node.album!==album||node.order!==orderMode||node.index!==index){
             bindAlbumNode(node,album,index);
         }
-        if(!node.el.parent)stage.append(node.el);
+        if(node.el.parentElement!==stage&&node.el.parent!==stage)stage.append(node.el);
         next.push(node);
     }
     spare.forEach(node=>node.el.remove());
