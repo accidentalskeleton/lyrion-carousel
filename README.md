@@ -152,13 +152,13 @@ The signature interaction is intentionally based on compositor-friendly `transla
 `js/performance.js` uses `PerformanceObserver` where supported to report main-thread tasks of 100 ms or longer to the developer console. It does **not** run a permanent `requestAnimationFrame` loop or add polling while the carousel is idle. To collect real browser measurements, open DevTools Console in Edge/Chromium at `http://streamer:8088`, then run:
 
 ```javascript
-lyrionPerf.start({label: 'Phase 4', targetFps: 60});
+lyrionPerf.start({label: 'Phase 4'});
 // Scroll the shelf continuously for 10–15 seconds, including a long jump.
 const phase4 = lyrionPerf.stop();
 copy(JSON.stringify(phase4, null, 2)); // Copy report from DevTools
 ```
 
-Alternatively, `const phase4 = await lyrionPerf.measure({seconds:15,label:'Phase 4'});` captures a fixed 15-second window. Start scrolling immediately after invoking it. For comparison with a baseline captured using this same profiler, run `lyrionPerf.compare(baseline, phase4)` after restoring both JSON reports in the console. Use the same browser, viewport, display count, sorting mode, interaction pattern and target FPS for fair comparisons. The profiler provides sampled mean/p95/p99 frame times, approximate frame-budget drops (not exact GPU misses), long tasks, album-node additions/removals, artwork and metadata request counts and optional Chromium heap size. Network transfer bytes and JS heap size may be unavailable or incomplete depending on browser permissions. Avoid background tabs, as browsers throttle animation there.
+Alternatively, `const phase4 = await lyrionPerf.measure({seconds:15,label:'Phase 4'});` captures a fixed 15-second window. Start scrolling immediately after invoking it. For comparison with a baseline captured using this same profiler, run `lyrionPerf.compare(baseline, phase4)` after restoring both JSON reports in the console. Use the same browser, viewport, display count, sorting mode and interaction pattern for fair comparisons. The default is automatic refresh-rate detection based on foreground rAF samples. An explicit `targetFps` is still accepted when a fixed comparison budget is necessary. The profiler reports `detectedFps`, `effectiveFps` and `frameBudgetMs`; frame-time distribution and approximate budget misses across visible sampling; a separate `activeScrolling` section based on carousel wheel/drag/touch/arrow input; and `suspensions` for rAF gaps over 250 ms or visibility transitions. The active estimate includes a 350 ms post-input window, so it is an approximation of browsing activity, not a GPU-frame measurement. Long tasks, album-node additions/removals, artwork and metadata request counts and optional Chromium heap size are also collected. Network transfer bytes and JS heap size may be unavailable or incomplete depending on browser permissions. Avoid background tabs, as browsers throttle animation there.
 
 Profiling is **opt-in**: no additional animation loop or MutationObserver runs unless `lyrionPerf.start()` or `measure()` is called. The normal long-task console warning remains enabled as before. Real device benchmarks have not yet been collected.
 
