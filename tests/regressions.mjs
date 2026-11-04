@@ -801,6 +801,10 @@ export async function runTests(sources) {
   assert(sources.app.includes('beginShelfDrag(')&&sources.app.includes('moveShelfDrag(event,false)')&&
     sources.app.includes('finishShelfDrag(false)'),
     'cover reuses the existing spine drag and snap physics');
+  assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
+    'Spotify Album Information displays the same play control as local albums');
+  assert(sources.app.includes("if(album[13]==='spotify')await loadAlbum(album);else await playAlbumNow(album);"),
+    'Album Information plays Spotify via its provider and keeps local play-now behaviour');
   assert(!sources.app.includes('showTrackList(frontPreviewAlbum)')&&
     !sources.app.includes('showTrackList(press.album)'),
     'short cover presses do not open Album Information');
