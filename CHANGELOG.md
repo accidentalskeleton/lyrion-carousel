@@ -2,6 +2,41 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## [0.11.0] - 2026-11-04
+
+### Carousel and playback
+
+- Keep the playing jewel case continuously open during scrolling and automatic return; make browsing spines an explicit selection action.
+- Remove the redundant Playing heading suffix and improve compilation track-artist and multidisc track presentation.
+- Improve album search, shelf appearance, artwork composition and browsing controls.
+
+### Large-library performance
+
+- Batch spine metadata and index album lookup while bounding client-side caches and hover work.
+- Persist catalogue snapshots, prepared sort orders and incremental SQLite colour indexes.
+- Observe LMS library scans independently and reconcile catalogue changes without gratuitous browser refreshes.
+
+### Additional refinements
+
+- Show current artwork cache usage and its limit in Settings, with total metadata usage in the detail tooltip.
+
+- Rename Artist / Album ordering and match spine label order to the selected sorting mode.
+
+- Add server-side background artwork preparation with progress, cancellation, foreground-request backoff and cache-capacity handling.
+
+- Preload nearby covers with bounded background requests to reduce delays when navigating album previews.
+
+- Move an open album preview to the neighbouring album with Left/Right keys, including repeated keys and catalogue wraparound.
+
+- Group Settings into accessible Display, Playback, Connection and About tabs.
+
+- Close the playing album preview when playback pauses or stops.
+
+- Refine shelf spines with narrow moulded plastic rails, recessed paper labels and tighter contact shadows, preserving label typography and padding.
+
+- Composite album artwork beneath a photographic-style transparent jewel-case shell on the server, caching resolution-specific PNGs.
+- Use the composition in the fan and open shelf covers, with lightweight reflections and a fan case edge.
+
 ## [0.10.0] - 2026-09-21
 
 ### Spotify / Spotty integration
@@ -30,27 +65,6 @@ All notable changes to Lyrion Carousel are documented here.
 
 - Merge the Spotify/Spotty development branch into main.
 - Bump the application version to 0.10.0.
-
-## Unreleased
-
-- Show current artwork cache usage and its limit in Settings, with total metadata usage in the detail tooltip.
-
-- Rename Artist / Album ordering and match spine label order to the selected sorting mode.
-
-- Add server-side background artwork preparation with progress, cancellation, foreground-request backoff and cache-capacity handling.
-
-- Preload nearby covers with bounded background requests to reduce delays when navigating album previews.
-
-- Move an open album preview to the neighbouring album with Left/Right keys, including repeated keys and catalogue wraparound.
-
-- Group Settings into accessible Display, Playback, Connection and About tabs.
-
-- Close the playing album preview when playback pauses or stops.
-
-- Refine shelf spines with narrow moulded plastic rails, recessed paper labels and tighter contact shadows, preserving label typography and padding.
-
-- Composite album artwork beneath a photographic-style transparent jewel-case shell on the server, caching resolution-specific PNGs.
-- Use the composition in the fan and open shelf covers, with lightweight reflections and a fan case edge.
 
 ## [0.9.0] - 2026-09-18
 
