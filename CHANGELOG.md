@@ -18,7 +18,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ### Additional refinements
 
-- Choose deterministic varied coloured spine text inks that pass a minimum 4.5:1 contrast ratio against each album's solid cover-derived background, and upgrade cached metadata without re-downloading artwork.
+- Calculate each spine's text colour dynamically from its background hue and lightness, adjusting to maintain a minimum 4.5:1 contrast ratio. Upgrade cached metadata without re-downloading artwork.
 
 - Preserve playing and non-playing open jewel cases during wheel, arrow and drag scrolling; close manual previews only via timeout or explicit replacement and prevent idle return from preempting them.
 
