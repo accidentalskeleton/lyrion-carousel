@@ -27,7 +27,8 @@ The production source supports:
 - saving a searched album using Spotty's **Add Album to Library** action;
 - proxied/cached Spotify artwork and realistic jewel-case composition;
 - source-aware now-playing matching;
-- Album Information when Spotty exposes usable track/year/genre metadata.
+- Album Information when Spotty exposes usable track/year/genre metadata;
+- an **Open album in Spotify** link inside Album Information when Spotty supplies a genuine Spotify album permalink or `spotify:album:` URI (not derived from internal Spotty item IDs).
 
 `js/providers/spotify-provider.js` presents these operations through the same provider boundary used by the local LMS library.
 
