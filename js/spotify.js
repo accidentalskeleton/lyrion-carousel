@@ -18,12 +18,8 @@ export function spotifyAlbumUrl(value){
   const raw=value.trim();
   const uri=/^spotify:album:([A-Za-z0-9]{22})$/i.exec(raw);
   if(uri)return 'https://open.spotify.com/album/'+uri[1];
-  try{
-    const url=new URL(raw);
-    if(url.protocol!=='https:'||url.hostname!=='open.spotify.com'||url.username||url.password)return '';
-    const match=/^\/(?:intl-[a-z]{2}\/)?album\/([A-Za-z0-9]{22})\/?$/i.exec(url.pathname);
-    return match?'https://open.spotify.com/album/'+match[1]:'';
-  }catch(_){return ''}
+  const match=/^https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?album\/([A-Za-z0-9]{22})\/?(?:[?#].*)?$/i.exec(raw);
+  return match?'https://open.spotify.com/album/'+match[1]:'';
 }
 
 function splitAlbumName(name=''){
