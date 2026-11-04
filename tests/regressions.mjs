@@ -37,7 +37,7 @@ export async function runTests(sources) {
     constructor(name='') {
       this.name=name;this.children=[];this.hidden=/overlay|menu|front-preview/.test(name);
       this.dataset={};this.attributes={};this.listeners={};this.value='';this.clientWidth=1000;this.clientHeight=400;
-      this.style={setProperty(k,v){this[k]=v;},getPropertyValue(k){return this[k]||'';}};
+      this.style={writes:{},setProperty(k,v){this[k]=v;this.writes[k]=(this.writes[k]||0)+1;},getPropertyValue(k){return this[k]||'';}};
       const classes=new Set();this.classList={add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x)};
     }
     get options(){return this.children;}
@@ -131,6 +131,34 @@ export async function runTests(sources) {
   assert(firstSpine?.className?.includes('bf-album'), 'spines retain the normal cover-derived colour metadata path');
   assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
   assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
+
+  // Phase 4: advancing the shelf should recycle the same physical elements
+  // rather than destroying and constructing a row of new image/text nodes.
+  const originalPosition=api.state().position;
+  const initialPool=api.geometry().nodes.map(node=>node.el);
+  const initialPoolSize=initialPool.length;
+  api.set({position:originalPosition+1});api.draw();
+  const movedPool=api.geometry().nodes;
+  assert(movedPool.length===initialPoolSize,'phase 4 keeps a bounded visible spine pool');
+  assert(movedPool.every(node=>initialPool.includes(node.el)),
+    'scrolling by one album recycles existing shelf nodes');
+  assert(new Set(movedPool.map(node=>node.el)).size===movedPool.length,
+    'each pooled shelf node is used exactly once');
+  assert(stage.children.length===movedPool.length,
+    'recycled spines are not appended twice to the shelf');
+  assert(movedPool.every(node=>Number(node.el.dataset.index)===node.index),
+    'recycled nodes keep their current album index for interactions');
+  const stableNode=movedPool[Math.floor(movedPool.length/2)];
+  const pitchWrites=stableNode.el.style.writes['--spine-width'];
+  api.draw();api.draw();
+  assert(stableNode.el.style.writes['--spine-width']===pitchWrites,
+    'unchanged spine width is not written on every animation frame');
+  api.set({position:originalPosition+20});api.draw();
+  assert(stage.children.length===api.geometry().nodes.length,
+    'long jumps preserve bounded DOM without leaking stale spines');
+  assert(api.geometry().nodes.every(node=>node.el._boundAlbum===api.state().albums[node.index]),
+    'pooled nodes are rebound to the correct album after a long jump');
+  api.set({position:originalPosition});api.draw();
 
   // Phase 1: existing backend supports at most 64 local spine metadata IDs
   // per request. A large visible window should not issue one GET per spine.
