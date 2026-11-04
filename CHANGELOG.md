@@ -18,7 +18,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ### Additional refinements
 
-- Render CD spines with a solid colour extracted from each album cover beneath a shared transparent jewel-case shell image and a single live CSS Artist — Album label; no per-album generated spine graphics.
+- Render CD spines with a solid colour extracted from each album cover beneath a shared transparent jewel-case shell image and a single live CSS Artist — Album label; restore cover-derived contrasting text colours and deterministic varied font families without per-album generated graphics.
 - Log failed colour-index artwork IDs for easier troubleshooting.
 
 - Show current artwork cache usage and its limit in Settings, with total metadata usage in the detail tooltip.
