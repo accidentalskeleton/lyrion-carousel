@@ -56,14 +56,7 @@ SPINE_FONTS=(
     'Georgia, "DejaVu Serif", serif',
     '"Palatino Linotype", "Book Antiqua", "Liberation Serif", serif',
 )
-SPINE_TEXT_STYLE_VERSION=2
-# Soft but saturated-enough ink colours, selected only when accessible against
-# the cover's solid spine colour. The hash gives consistent visual variety.
-SPINE_TEXT_INKS=(
-    '#f4e7bc','#d9efff','#e7dcff','#e2f4dc','#ffe2d3',
-    '#18253e','#51273c','#224338','#49351b','#40305c',
-    '#f5f2ea','#111417',
-)
+SPINE_TEXT_STYLE_VERSION=3
 def spine_relative_luminance(colour:str)->float:
     components=[int(colour[i:i+2],16)/255 for i in (1,3,5)]
     linear=[v/12.92 if v<=.04045 else ((v+.055)/1.055)**2.4 for v in components]
@@ -74,16 +67,41 @@ def spine_contrast_ratio(a:str,b:str)->float:
     return (bright+.05)/(dark+.05)
 
 def select_spine_text_colour(spine_colour:str,artwork_key:str)->str:
-    """Select stable varied typography with WCAG AA 4.5:1 contrast minimum."""
-    candidates=[c for c in SPINE_TEXT_INKS if spine_contrast_ratio(c,spine_colour)>=4.5]
-    if not candidates:
-        return '#ffffff' if spine_contrast_ratio('#ffffff',spine_colour)>=4.5 else '#000000'
-    # Prefer coloured ink rather than the final neutral fallbacks, with a
-    # deterministic album-specific rotation to avoid uniform white/black rows.
-    coloured=[c for c in candidates if c not in ('#f5f2ea','#111417')]
-    available=coloured or candidates
+    """Compute a cover-related coloured ink with >=4.5:1 luminance contrast.
+
+    Rotate the cover hue and adapt ink lightness to its actual background.
+    Near-grey covers get a reproducible hue instead of arbitrary black/white.
+    A tiny album-specific hue offset prevents otherwise identical rows.
+    """
+    red,green,blue=(int(spine_colour[i:i+2],16)/255 for i in (1,3,5))
+    hue,lightness,saturation=colorsys.rgb_to_hls(red,green,blue)
     digest=hashlib.sha256(artwork_key.encode()).digest()
-    return available[int.from_bytes(digest[:4],'big')%len(available)]
+    if saturation<.12:
+        hue=int.from_bytes(digest[:2],'big')/65536
+    hue=(hue+.5+(digest[2]/255-.5)*.13)%1
+    ink_saturation=.68 if saturation>.12 else .58
+
+    def colour_at(ink_lightness):
+        channels=colorsys.hls_to_rgb(hue,ink_lightness,ink_saturation)
+        return '#'+''.join(f'{round(c*255):02x}' for c in channels)
+
+    # Find the most saturated-looking readable shade near an ideal ink tone,
+    # avoiding unnecessarily pale or dark text. Search either contrast side.
+    luminance=spine_relative_luminance(spine_colour)
+    prefer_light=luminance<.179  # midpoint in luminance where 4.5:1 flips
+    candidates=[]
+    for i in range(3,98):
+        l=i/100
+        colour=colour_at(l)
+        if spine_contrast_ratio(colour,spine_colour)>=4.5:
+            ideal=.74 if prefer_light else .28
+            candidates.append((abs(l-ideal),abs(l-.5),colour))
+    if candidates:
+        return min(candidates)[2]
+    # Last resort guarantees minimum contrast even after RGB rounding.
+    white='#ffffff'
+    black='#000000'
+    return white if spine_contrast_ratio(white,spine_colour)>=spine_contrast_ratio(black,spine_colour) else black
 
 # Accept LMS identifiers, but never path separators supplied in an artwork URL.
 ARTWORK_ID=re.compile(r"^[A-Za-z0-9._:@%-]+$")
