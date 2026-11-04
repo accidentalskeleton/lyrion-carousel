@@ -802,7 +802,7 @@ export async function runTests(sources) {
     sources.app.includes('finishShelfDrag(false)'),
     'cover reuses the existing spine drag and snap physics');
   assert(sources.app.includes('async function followPlayingSource()')&&
-    sources.app.includes('void followPlayingSource();if(KEEP_PLAYING_OPEN')&&
+    sources.app.includes('armIdleReturn(0);void followPlayingSource()}')&&
     sources.app.includes('await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();'),
     'Playback source changes follow across browser sessions and on initial connection');
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
