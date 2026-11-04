@@ -18,8 +18,10 @@ Repository owner: `accidentalskeleton`
 
 ## Before changing visibility
 
-- [ ] Confirm Actions CI passes on a PR. Add its exact job status as a
-      required status check under the **Protect main** ruleset.
+- [x] Confirm Actions CI passes on a PR and on `main` for v0.11.0. Add the exact
+      **JavaScript and Python regressions** job as a required check under
+      **Protect main** (ruleset ID `23564317`; confirmed 4 November 2026).
+      The strict update-to-date setting is enabled; administrator bypass retained.
 - [ ] Set **Settings → Actions → General → Workflow permissions** to
       **Read repository contents and packages permissions**.
 - [ ] Review fork pull-request workflow approval policies and avoid exposing
@@ -29,9 +31,12 @@ Repository owner: `accidentalskeleton`
       protection and private vulnerability reporting as available on the plan.
 - [ ] Review access under **Settings → Collaborators** and remove unnecessary
       write/maintain/admin access.
-- [ ] Run a history-wide secret review (not just `main`). Revoke and
-      rotate any leaked credential. Inspect historical files, tags,
-      branches and workflow logs.
+- [x] Run Gitleaks against all fetched local branches and tags using
+      `gitleaks detect --source . --log-opts="--all" --redact`:
+      **544 commits scanned, no leaks found** on 4 November 2026.
+      This is pattern-based detection, not proof every historical file and
+      workflow log is free of private information. Review unusual historical
+      material manually; rotate credentials if uncovered later.
 - [ ] Review the deployment defaults: `BIND_ADDRESS=0.0.0.0` listens
       on all interfaces; **never port-forward 8088 to the internet**.
       Configure LAN firewall or localhost binding as appropriate.
@@ -41,13 +46,19 @@ Repository owner: `accidentalskeleton`
 - [x] Confirm creator of the README banner and MP4 feature tour: **Stuart Roberts** (owner-confirmed on 4 November 2026).
 - [x] Confirm the feature-tour MP4 has **no audio soundtrack** (confirmed by its creator).
 - [ ] **Manually review the underlying visual content in the banner and feature tour** for third-party commercial album covers and logos; replace or secure permissions for any uncleared material.
-- [ ] Review Spotify service attribution and album-link requirements for the Spotify/Spotty view.
+- [ ] Resolve [Spotify/Spotty content attribution, link-back and artwork presentation](https://github.com/accidentalskeleton/lyrion-carousel/issues/32) before public release.
+      Current `js/app.js` does not preserve a verified Spotify album permalink,
+      and Spotify covers are composited into jewel-case artwork. The precise
+      applicability of Spotify's developer terms to Spotty-mediated playback
+      must still be assessed.
 - [ ] Check third-party artwork, fonts, image templates, sample screenshots
       and video assets for publication and redistribution rights.
 - [ ] Verify local host names/URLs, documentation and tests contain no
       private information intended to remain confidential.
 - [ ] Check that the repository's public README and issue templates do
       not publish sensitive operational details.
+- [ ] **Do not interpret v0.11.0 being tagged/released as repository-publication
+      clearance.** At this stage `main` and the release are still private.
 - [ ] After completing the checks, change visibility manually in
       **Settings → General → Danger Zone → Change repository visibility**.
 
