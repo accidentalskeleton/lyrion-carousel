@@ -11,6 +11,26 @@ export function spotifyUri(item){
   return item?.favorites_url||pass.uri||fixed.uri||item?.playlist||item?.play||'';
 }
 
+// Only turn a real Spotify album URI or permalink into an external link.
+// Spotty's XMLBrowser item IDs are navigation tokens, not Spotify album IDs.
+export function spotifyAlbumUrl(value){
+  if(typeof value!=='string')return '';
+  const raw=value.trim();
+  const uri=/^spotify:album:([A-Za-z0-9]{22})$/i.exec(raw);
+  if(uri)return 'https://open.spotify.com/album/'+uri[1];
+  const match=/^https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?album\/([A-Za-z0-9]{22})\/?(?:[?#].*)?$/i.exec(raw);
+  return match?'https://open.spotify.com/album/'+match[1]:'';
+}
+
+// Fallback navigation when Spotty/LMS omits the actual album URI. This is
+// deliberately a Spotify search, never presented as a direct album permalink.
+export function spotifyAlbumSearchUrl(title,artist){
+  const album=String(title||'').trim();
+  const performer=String(artist||'').trim();
+  if(!album||!performer)return '';
+  return 'https://open.spotify.com/search/'+encodeURIComponent(album+' '+performer)+'/albums';
+}
+
 function splitAlbumName(name=''){
   // LMS's compact XMLBrowser response formats saved albums as "<album> by <artist>".
   // Split on the final separator so album titles containing " by " remain usable.
@@ -25,6 +45,7 @@ export function normalizeSpottyAlbum(item){
     source:'spotify',
     id:uri||('spotty-item:'+String(item?.id??'')),
     playableId:uri,
+    spotifyUrl:spotifyAlbumUrl(uri)||spotifyAlbumUrl(item?.external_urls?.spotify)||spotifyAlbumUrl(item?.url),
     spottyItemId:String(item?.id??''),
     title:item?.line1||named.title,
     artist:item?.line2||item?.artist||named.artist,
@@ -115,7 +136,8 @@ export async function spotifyAlbumInformation(playerId,album){
   });
   const meta=rows.find(item=>item?.genre||item?.genres||item?.year||item?.album)||{};
   const genres=[meta.genre,meta.genres].flat().filter(Boolean).join(', ');
-  return {tracks,genre:genres,year:meta.year||''};
+  const link=[meta,...rows].map(row=>spotifyAlbumUrl(spotifyUri(row))||spotifyAlbumUrl(row?.external_urls?.spotify)||spotifyAlbumUrl(row?.url)).find(Boolean)||'';
+  return {tracks,genre:genres,year:meta.year||'',spotifyUrl:link};
 }
 
 export async function saveSpotifyAlbum(playerId,album){
