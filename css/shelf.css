@@ -14,7 +14,7 @@
     --spine-rail-width:3px;
     background:
         linear-gradient(90deg,rgba(0,0,0,.28),transparent 14%,transparent 86%,rgba(0,0,0,.32)) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
-        linear-gradient(90deg,rgba(0,0,0,.40),rgba(0,0,0,.23) 50%,rgba(0,0,0,.47)) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
+        linear-gradient(90deg,rgba(0,0,0,.22),rgba(0,0,0,.03) 50%,rgba(0,0,0,.28)) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
         var(--spine-image,linear-gradient(var(--spine-color,#202628),var(--spine-color,#202628))) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
         linear-gradient(90deg,#111719 0,#738084 1px,#293235 2px,#171e20 4px, #202729 50%,#151c1e calc(100% - 4px),#576469 calc(100% - 2px),#111719 100%)!important;
     border-left:1px solid rgba(230,240,244,.18);
@@ -60,24 +60,48 @@
 }
 
 .bf-stage.bf-shelf-active .bf-album::after {
-    content:attr(data-spine-label);
+    content:none!important;
+}
+
+/* Two separately truncated, vertical lines: never drop album or artist.
+   Subtle translucent ink strips keep lettering legible over genuine artwork. */
+.bf-stage.bf-shelf-active .bf-spine-label {
     position:absolute;
-    z-index:1;
-    inset:calc(var(--spine-cap-height) + 8px) 4px;
-    display:block!important;
+    z-index:2;
+    top:calc(var(--spine-cap-height) + 6px);
+    bottom:calc(var(--spine-cap-height) + 6px);
+    left:calc(var(--spine-rail-width) + 1px);
+    right:calc(var(--spine-rail-width) + 1px);
+    display:flex;
+    flex-direction:row;
+    align-items:stretch;
+    gap:1px;
     overflow:hidden;
+    pointer-events:none;
+}
+.bf-stage.bf-shelf-active .bf-spine-artist,
+.bf-stage.bf-shelf-active .bf-spine-title {
+    min-width:0;
+    min-height:0;
+    flex:1 1 0;
     box-sizing:border-box;
-    color:var(--spine-text,#f1eee8);
-    font:700 var(--spine-font-size,16px)/calc(var(--spine-width,36px) - 8px) var(--spine-font-family,Arial,Helvetica,sans-serif);
-    letter-spacing:.01em;
-    white-space:nowrap;
+    overflow:hidden;
     text-overflow:ellipsis;
+    white-space:nowrap;
     writing-mode:vertical-rl;
     text-orientation:mixed;
-    text-shadow:none;
-    text-align:center;
-    background:transparent;
-    transform:none!important;
+    text-align:start;
+    color:#fff;
+    font:600 var(--spine-font-size,11px)/1 var(--spine-font-family,Arial,Helvetica,sans-serif);
+    letter-spacing:0;
+    padding:5px 1px;
+    background:rgba(0,0,0,.55);
+    text-shadow:0 1px 2px #000,0 0 2px #000;
+    border-radius:1px;
+}
+.bf-stage.bf-shelf-active .bf-spine-artist {
+    font-weight:750;
+    background:rgba(0,0,0,.64);
 }
 
 .bf-stage.bf-shelf-active .bf-album[data-front-preview] {
