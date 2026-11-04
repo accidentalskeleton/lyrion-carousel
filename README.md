@@ -467,3 +467,11 @@ The browser preloads the focused cover and up to four neighbours on each side, w
 Settings → About → Prepare all artwork starts a server-wide background job at the selected cover resolution. It fetches missing original artwork, calculates spine metadata and caches photographic case images for every distinct artwork ID. One album is processed at a time, with a short pause between albums and a pause after foreground cover requests. Progress, unavailable items and cancellation are shown in Settings. The job continues when the browser closes; it is not automatically resumed after restarting the server. Starting it again reuses completed cached files. Changing the cover resolution requires starting another run for that resolution.
 
 The worker stops at the existing 512 MB image-cache limit instead of evicting earlier prepared artwork. It can therefore stop before completing a large library. Foreground cache pruning still applies. Clearing the cache or changing LMS cancels the job; an in-flight request may take up to its normal timeout to finish. This prepares server files, not an offline browser library. `/api/cache/warm` exposes progress (GET) and start/cancel actions (POST). Restart the server after installing this feature.
+
+## License
+
+Original Lyrion Carousel source code is licensed under the **GNU General Public License, version 3.0 only** (`GPL-3.0-only`). See [LICENSE](LICENSE) for the complete licence text.
+
+Copyright © 2026 Stuart Roberts (for original contributions under the copyright holder's control). Under GPL v3, recipients who distribute modified covered versions must meet the licence's corresponding-source and notice obligations. GPL v3 permits commercial distribution but does not permit distribution of proprietary derivatives contrary to its terms.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for dependency licences, external integrations and the publication asset audit. **Artwork and third-party assets:** The GPL grant applies only to material for which the project has redistribution rights. Included images, artwork, audio/video demonstrations and third-party materials must be reviewed for licensing before public release; items with separate terms must be documented and may need to be replaced or excluded.
