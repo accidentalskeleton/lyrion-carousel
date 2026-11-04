@@ -18,6 +18,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ### Additional refinements
 
+- Preserve playing and non-playing open jewel cases during wheel, arrow and drag scrolling; close manual previews only via timeout or explicit replacement and prevent idle return from preempting them.
+
 - Allow direct spine-to-spine preview selection while music is playing by making the open-case wrapper click-through outside the actual jewel case.
 
 - Render CD spines with a solid colour extracted from each album cover beneath a shared transparent jewel-case shell image and a single live CSS Artist — Album label; restore cover-derived contrasting text colours and deterministic varied font families without per-album generated graphics.
