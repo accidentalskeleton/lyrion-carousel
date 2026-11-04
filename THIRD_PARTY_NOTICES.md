@@ -38,10 +38,14 @@ licenses and copyright/notice obligations.**
   installed LMS Spotty plugin. Lyrion Carousel does not include or redistribute
   Spotify music, credentials or the Spotty plugin's source code.
   The Spotify name, logo, album metadata and cover images belong to their
-  respective rights holders. Spotify's developer policy may require clear
-  service attribution and links to the relevant Spotify content if its
-  platform content is displayed:
+  respective rights holders. The current application includes an inline
+  Spotify source icon in Now Playing; that icon is a third-party trademark,
+  not an original project asset. Spotify's developer policy calls for clear
+  service attribution and links to applicable content for use of Spotify
+  cover art and metadata. **The current interface has not been verified to
+  meet those presentation requirements**, especially for album link-backs:
   https://developer.spotify.com/policy
+  https://developer.spotify.com/documentation/design
 
 ## Tracked visual/media assets — publication review
 
