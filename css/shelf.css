@@ -14,7 +14,8 @@
     --spine-rail-width:3px;
     background:
         linear-gradient(90deg,rgba(0,0,0,.28),transparent 14%,transparent 86%,rgba(0,0,0,.32)) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
-        linear-gradient(var(--spine-color,#202628),var(--spine-color,#202628)) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
+        linear-gradient(90deg,rgba(0,0,0,.40),rgba(0,0,0,.23) 50%,rgba(0,0,0,.47)) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
+        var(--spine-image,linear-gradient(var(--spine-color,#202628),var(--spine-color,#202628))) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
         linear-gradient(90deg,#111719 0,#738084 1px,#293235 2px,#171e20 4px, #202729 50%,#151c1e calc(100% - 4px),#576469 calc(100% - 2px),#111719 100%)!important;
     border-left:1px solid rgba(230,240,244,.18);
     border-right:1px solid rgba(0,0,0,.72);
