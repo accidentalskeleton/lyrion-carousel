@@ -11,6 +11,21 @@ export function spotifyUri(item){
   return item?.favorites_url||pass.uri||fixed.uri||item?.playlist||item?.play||'';
 }
 
+// Only turn a real Spotify album URI or permalink into an external link.
+// Spotty's XMLBrowser item IDs are navigation tokens, not Spotify album IDs.
+export function spotifyAlbumUrl(value){
+  if(typeof value!=='string')return '';
+  const raw=value.trim();
+  const uri=/^spotify:album:([A-Za-z0-9]{22})$/i.exec(raw);
+  if(uri)return 'https://open.spotify.com/album/'+uri[1];
+  try{
+    const url=new URL(raw);
+    if(url.protocol!=='https:'||url.hostname!=='open.spotify.com'||url.username||url.password)return '';
+    const match=/^\/(?:intl-[a-z]{2}\/)?album\/([A-Za-z0-9]{22})\/?$/i.exec(url.pathname);
+    return match?'https://open.spotify.com/album/'+match[1]:'';
+  }catch(_){return ''}
+}
+
 function splitAlbumName(name=''){
   // LMS's compact XMLBrowser response formats saved albums as "<album> by <artist>".
   // Split on the final separator so album titles containing " by " remain usable.
@@ -25,6 +40,7 @@ export function normalizeSpottyAlbum(item){
     source:'spotify',
     id:uri||('spotty-item:'+String(item?.id??'')),
     playableId:uri,
+    spotifyUrl:spotifyAlbumUrl(uri)||spotifyAlbumUrl(item?.external_urls?.spotify)||spotifyAlbumUrl(item?.url),
     spottyItemId:String(item?.id??''),
     title:item?.line1||named.title,
     artist:item?.line2||item?.artist||named.artist,
