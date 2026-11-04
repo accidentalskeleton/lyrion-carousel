@@ -32,11 +32,17 @@ class ServerTests(unittest.TestCase):
         backgrounds=['#000000','#ffffff','#808080','#eacb43','#397da3',
                      '#63424f','#efe9df','#202628','#d02a3f','#32944e']
         for background in backgrounds:
-            colours={server.select_spine_text_colour(background,f'album-{i}') for i in range(40)}
+            colours={server.select_spine_text_colour(background,f'album-{i}')
+                     for i in range(40)}
             self.assertGreater(len(colours),1,background)
             for colour in colours:
                 self.assertGreaterEqual(server.spine_contrast_ratio(colour,background),4.5)
-                self.assertRegex(colour,r'^#[0-9a-fA-F]{6}
+                self.assertRegex(colour,r'^#[0-9a-fA-F]{6}$')
+        self.assertEqual(server.select_spine_text_colour('#234567','same-id'),
+                         server.select_spine_text_colour('#234567','same-id'))
+        self.assertEqual(server.SPINE_TEXT_STYLE_VERSION,3)
+
+    def test_spine_text_style_uses_cover_metadata(self):
         css=(Path(__file__).resolve().parents[1]/'css/shelf.css').read_text()
         app=(Path(__file__).resolve().parents[1]/'js/app.js').read_text()
         self.assertIn('color:var(--spine-text,#f5f2ea)',css)
