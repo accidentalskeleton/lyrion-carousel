@@ -381,6 +381,46 @@ class ServerTests(unittest.TestCase):
         analyse.assert_called_once_with('new')
         save.assert_called_once_with({'new':metadata})
 
+    def test_serialized_order_cache_evicts_by_bytes_and_lru(self):
+        from collections import OrderedDict
+        orders=OrderedDict()
+        with patch.object(server,'CATALOGUE_SORT_CACHE_MAX_BYTES',10):
+            self.assertTrue(server.remember_catalogue_order(orders,('artistAlbum',()),b'123456'))
+            self.assertTrue(server.remember_catalogue_order(orders,('album',()),b'abcdef'))
+            self.assertNotIn(('artistAlbum',()),orders)
+            self.assertEqual(list(orders),[('album',())])
+            self.assertTrue(server.remember_catalogue_order(orders,('colour',()),b'123'))
+            self.assertEqual(sum(map(len,orders.values())),9)
+            self.assertFalse(server.remember_catalogue_order(orders,('huge',()),b'12345678901'))
+            self.assertNotIn(('huge',()),orders)
+            self.assertEqual(sum(map(len,orders.values())),9)
+            # Updating an existing key must not leave its old size counted.
+            self.assertTrue(server.remember_catalogue_order(orders,('album',()),b'12'))
+            self.assertEqual(sum(map(len,orders.values())),5)
+            self.assertEqual(list(orders),[('colour',()),('album',())])
+
+    def test_serialized_order_cache_respects_entry_limit(self):
+        from collections import OrderedDict
+        orders=OrderedDict()
+        with patch.object(server,'CATALOGUE_SORT_CACHE_MAX_BYTES',1024):
+            for index in range(server.CATALOGUE_SORT_CACHE_ENTRIES+2):
+                self.assertTrue(server.remember_catalogue_order(
+                    orders,('order',index),b'data'))
+        self.assertEqual(len(orders),server.CATALOGUE_SORT_CACHE_ENTRIES)
+        self.assertNotIn(('order',0),orders)
+        self.assertNotIn(('order',1),orders)
+
+    def test_oversized_catalogue_order_is_served_but_not_cached(self):
+        rows=[{'id':1,'artist':'Artist','album':'Long Album Title'}]
+        with patch.object(server,'CATALOGUE_SORT_CACHE_MAX_BYTES',16):
+            with patch.object(self.handler,'_catalogue_pages',return_value=iter([rows])):
+                self.handler.path='/api/catalogue?order=artistAlbum'
+                self.handler._serve_catalogue()
+            response=json.loads(self.responses[-1][1])
+            self.assertEqual(response['count'],1)
+            snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
+            self.assertFalse(snapshot['orders'])
+
     def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
         pages=[[{'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'},
                 {'id':2,'artist':'Alpha','album':'Zulu','artwork_track_id':'b'}]]

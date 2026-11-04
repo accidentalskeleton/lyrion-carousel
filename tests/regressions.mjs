@@ -103,7 +103,7 @@ export async function runTests(sources) {
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,
+    return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -834,6 +834,30 @@ export async function runTests(sources) {
   [largeAlbums[1],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[1]];
   assert(api.indexForAlbumId('large-19999')===1&&api.indexForAlbumId('large-1')===19999,
     'album index cache detects reordered positions and self-corrects');
+  // Letter jumps should not fetch or scan 20,000 entries on each click.
+  // The index tracks the first position in the *current* ordered catalogue.
+  largeAlbums[0][9]='A';
+  largeAlbums[15000][9]='M';
+  largeAlbums[19999][9]='Z';
+  api.replaceAlbumsForTest(largeAlbums);
+  assert(api.letterIndex().get('A')===0&&api.letterIndex().get('M')===15000&&
+    api.letterIndex().get('Z')===19999,'20k-album alphabet index stores first positions');
+  const batchRequestsBefore=rpcCalls.filter(command=>command[0]==='albums').length;
+  api.set({position:0});
+  await api.jumpToLetter('Z');
+  assert(api.state().target===-1,'letter navigation reaches final album by shortest circular route');
+  assert(rpcCalls.filter(command=>command[0]==='albums').length===batchRequestsBefore,
+    'indexed letter jump does not request LMS album pages');
+  [largeAlbums[0],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[0]];
+  api.replaceAlbumsForTest(largeAlbums);
+  assert(api.letterIndex().get('Z')===0&&api.letterIndex().get('A')===19999,
+    'alphabet index follows album reordering');
+  largeAlbums[0][9]='';
+  api.replaceAlbumsForTest(largeAlbums);
+  assert(!api.letterIndex().has('Z'),'alphabet index drops letters removed by a filter');
+  // Put the array back before the separate DOM-pool stress test.
+  [largeAlbums[0],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[0]];
+  api.replaceAlbumsForTest(largeAlbums);
   // The 20k-album browse simulation must keep the allocated spine set
   // bounded even after repeated long jumps across the library.
   api.set({playing:false});

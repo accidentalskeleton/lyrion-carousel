@@ -37,9 +37,22 @@ function indexForAlbumId(id){
     if(found<0)albumIndexCache.delete(key);else albumIndexCache.set(key,found);
     return found;
 }
+// Letter navigation is an O(1) lookup once the ordered catalogue is loaded.
+// The minimum index is retained because batches can arrive out of order.
+const alphabetIndex=new Map();
+function indexAlbumLetter(album,index){
+    const letter=String(album?.[9]||'').trim().charAt(0).toUpperCase();
+    if(!/^[A-Z]$/.test(letter))return;
+    const previous=alphabetIndex.get(letter);
+    if(previous===undefined||index<previous)alphabetIndex.set(letter,index);
+}
 function rebuildAlbumIndex(){
     albumIndexCache.clear();
-    albums.forEach((album,index)=>{if(album?.[6]!=null)albumIndexCache.set(String(album[6]),index)});
+    alphabetIndex.clear();
+    albums.forEach((album,index)=>{
+        if(album?.[6]!=null)albumIndexCache.set(String(album[6]),index);
+        if(album)indexAlbumLetter(album,index);
+    });
 }
 let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
 const selectedIndex=()=>modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>nearestPosition(index,position,totalAlbums);
@@ -572,7 +585,7 @@ window.addEventListener('lyrion-carousel-cache-cleared',()=>{
     clearSpineMetadata();handleLibraryEvent();
 });
 function scheduleReconnect(){if(reconnectTimer)return;const delay=reconnectDelay;setConnection('Reconnecting to Lyrion Music Server in '+Math.ceil(delay/1000)+'s…',false);reconnectTimer=setTimeout(()=>{reconnectTimer=0;connectLyrion()},delay);reconnectDelay=Math.min(reconnectDelay*2,RECONNECT_MAX_MS)}function resetReconnect(){clearTimeout(reconnectTimer);reconnectTimer=0;reconnectDelay=1000}
-function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length){albums[start+o]=a;if(a?.[6]!=null)albumIndexCache.set(String(a[6]),start+o)}});loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
+function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length){albums[start+o]=a;if(a?.[6]!=null)albumIndexCache.set(String(a[6]),start+o);indexAlbumLetter(a,start+o)}});loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
 async function fetchBatch(batchNumber,render=true){if(!liveCatalogue||!totalAlbums)return[];const normal=modulo(batchNumber,batchCount());if(loadedBatches.has(normal)){const start=normal*PAGE_SIZE;return albums.slice(start,Math.min(start+PAGE_SIZE,totalAlbums))}if(loadingBatches.has(normal))return loadingBatches.get(normal);const generation=catalogueGeneration,promise=(async()=>{const start=normal*PAGE_SIZE,result=await rpc('0',['albums',start,PAGE_SIZE,'sort:artflow','tags:ajlysg']);if(generation!==catalogueGeneration)return[];return storeBatch(normal,result,render)})().finally(()=>{if(loadingBatches.get(normal)===promise)loadingBatches.delete(normal)});loadingBatches.set(normal,promise);return promise}
 function prefetchAround(index){if(!liveCatalogue||!totalAlbums)return;const b=Math.floor(modulo(index,totalAlbums)/PAGE_SIZE);if(b===prefetchedWindowPage)return;prefetchedWindowPage=b;[-1,0,1].forEach(o=>fetchBatch(b+o).catch(()=>{if(prefetchedWindowPage===b)prefetchedWindowPage=-1}))}async function locateAlbum(id,render=true){const found=indexForAlbumId(id);if(found>=0)return found;await ensurePositionIndex();return locateIndexedAlbum(id,albums,albumPositionById,PAGE_SIZE,b=>fetchBatch(b,render))}
 async function loadInitialCatalogue(){
@@ -677,7 +690,30 @@ async function navigateToAlbum(id){searchStatus.textContent='Locating album…';
 function renderSearchResults(results){searchResults.replaceChildren();for(const album of results){const b=document.createElement('button');b.className='bf-search-result';b.type='button';const img=document.createElement('img');img.alt='';if(album[8])img.src=album[8];const c=document.createElement('span'),t=document.createElement('strong'),a=document.createElement('span');t.textContent=album[0];a.textContent=album[1];c.append(t,a);b.append(img,c);b.onclick=()=>selectSearchAlbum(album);searchResults.append(b)}}
 async function selectSearchAlbum(album){let existing=albums.find(a=>a&&String(a[6])===String(album[6]));if(!existing&&catalogueSource==='spotify'){album[15]='search-preview';albums.push(album);totalAlbums=albums.length;existing=album;catalogueGeneration++;rebuildAlbumIndex();renderAlbums();draw()}const i=albums.indexOf(existing);if(i<0)return;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const destination=nearestPositionForIndex(i);const arrived=await scrollToAlbumIndex(i);if(!arrived)return;position=target=destination;hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw()}
 async function runSearch(query){const value=query.trim(),token=++searchToken;if(value.length<2){searchResults.replaceChildren();searchStatus.textContent='Type at least two characters.';return}searchStatus.textContent=catalogueSource==='spotify'?'Searching Spotify albums…':'Searching LMS…';try{if(catalogueSource==='spotify'){const result=await spotifyProvider.search(value);if(token!==searchToken)return;const matches=result.albums;renderSearchResults(matches);searchStatus.textContent=matches.length?matches.length+' Spotify album'+(matches.length===1?'':'s'):'No matching Spotify albums.';return}const result=await lmsProvider.search(value);if(token!==searchToken)return;const matches=result.albums;renderSearchResults(matches);searchStatus.textContent=matches.length?matches.length+' matches':'No matching albums.'}catch(error){if(token!==searchToken)return;console.error('Carousel album search failed:',error);const message=String(error?.message||error||'Unknown error');searchStatus.textContent=/LMS server changed during request/.test(message)?'LMS settings changed. Please retry search.':/HTTP 50[234]|Failed to fetch|NetworkError|Load failed/i.test(message)?'Cannot reach LMS search. Check the server connection.':'Album search failed: '+message.slice(0,140);}}
-async function jumpToLetter(letter){searchStatus.textContent='Finding '+letter+'…';try{for(let b=0;b<batchCount();b++){await fetchBatch(b);const i=albums.findIndex(a=>a&&String(a[9]).toUpperCase()===letter);if(i>=0){closeSearch();centreAlbumIndex(i);return}}searchStatus.textContent='No albums under '+letter+'.'}catch(_){scheduleReconnect()}}for(const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){const b=document.createElement('button');b.className='bf-letter';b.type='button';b.textContent=letter;b.onclick=()=>jumpToLetter(letter);alphabet.append(b)}
+async function jumpToLetter(letter){
+    searchStatus.textContent='Finding '+letter+'…';
+    const generation=catalogueGeneration;
+    const go=()=>{
+        const index=alphabetIndex.get(letter);
+        if(index===undefined)return false;
+        closeSearch();centreAlbumIndex(index);return true;
+    };
+    if(go())return;
+    // The server-prepared ordering is normally complete. Retain the bounded
+    // fallback for partially loaded LMS catalogues, but never scan the array
+    // after each page: storeBatch updates alphabetIndex incrementally.
+    if(catalogueSource==='library'&&liveCatalogue&&loadedBatches.size<batchCount()){
+        try{
+            for(let b=0;b<batchCount();b++){
+                if(generation!==catalogueGeneration)return;
+                await fetchBatch(b,false);
+                if(generation!==catalogueGeneration)return;
+                if(go())return;
+            }
+        }catch(_){scheduleReconnect();return}
+    }
+    searchStatus.textContent='No albums under '+letter+'.';
+}for(const letter of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){const b=document.createElement('button');b.className='bf-letter';b.type='button';b.textContent=letter;b.onclick=()=>jumpToLetter(letter);alphabet.append(b)}
 function cancelFollowAnimation(){followRequest++;if(followAnimation){const animation=followAnimation;followAnimation=null;target=position;animation.resolve(false)}}
 function browseWithArrow(direction){
     if(!totalAlbums||orderBusy||libraryRefreshing)return;

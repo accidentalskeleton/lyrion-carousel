@@ -32,6 +32,7 @@ CATALOGUE_SNAPSHOT_VERSION=1
 CATALOGUE_SNAPSHOT_TTL_SECONDS=900
 CATALOGUE_MAX_SNAPSHOT_BYTES=64_000_000
 CATALOGUE_SORT_CACHE_ENTRIES=4
+CATALOGUE_SORT_CACHE_MAX_BYTES=32*1024*1024
 # LMS never calls Carousel. The browser observes ordinary LMS scan status and
 # asks Carousel to reconcile its own snapshot before deciding to refresh the UI.
 MAX_BACKGROUND_COLOUR_QUEUE=20_000
@@ -224,6 +225,21 @@ def save_lms_url(path:Path,lms_url:str)->None:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+def remember_catalogue_order(orders:OrderedDict,key:tuple,payload:bytes)->bool:
+    """Cache serialized orders within both entry and byte limits (oldest first).
+
+    Oversized payloads are returned to callers but not retained. The count
+    is tiny (four), so summing current payload lengths avoids mutable
+    accounting that could become stale after snapshot or colour invalidation.
+    """
+    orders.pop(key,None)
+    if len(payload)>CATALOGUE_SORT_CACHE_MAX_BYTES:return False
+    orders[key]=payload
+    while (len(orders)>CATALOGUE_SORT_CACHE_ENTRIES or
+           sum(len(value) for value in orders.values())>CATALOGUE_SORT_CACHE_MAX_BYTES):
+        orders.popitem(last=False)
+    return True
 
 class UpstreamPayloadTooLarge(Exception):
     pass
@@ -1087,9 +1103,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     payload=json.dumps({'count':len(albums),'library_count':library_count,
                                         'albums_loop':albums},ensure_ascii=False).encode('utf-8')
                     if mode!='random':
-                        snapshot['orders'][order_key]=payload
-                        while len(snapshot['orders'])>CATALOGUE_SORT_CACHE_ENTRIES:
-                            snapshot['orders'].popitem(last=False)
+                        remember_catalogue_order(snapshot['orders'],order_key,payload)
             self._send_payload(200,payload,'application/json; charset=utf-8',cache_control='no-store')
         except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
             self._send_upstream_error(error)

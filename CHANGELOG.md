@@ -2,6 +2,12 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased — Large-library navigation and cache bounds
+
+- Pre-index first album positions for A–Z to make alphabet navigation constant-time with a loaded catalogue, while preserving a partial-catalogue fallback.
+- Bound the combined serialized catalogue order cache to 32 MiB as well as four entries, evicting least-recently-used orders and avoiding retention of oversized responses.
+- Add alphabet navigation regression coverage for 20,000 albums and Python cache eviction/oversized-response tests.
+
 ## Unreleased — Phase 4 rendering performance
 
 - Recycle a bounded DOM pool of shelf spines as the viewport advances; reuse the static jewel-case shell and label nodes instead of recreating every visible spine.
