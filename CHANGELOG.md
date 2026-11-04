@@ -2,6 +2,14 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased — Phase 4 rendering performance
+
+- Recycle a bounded DOM pool of shelf spines as the viewport advances; reuse the static jewel-case shell and label nodes instead of recreating every visible spine.
+- Keep asynchronous spine-colour metadata bound to the correct album when a pooled node is reassigned.
+- Write spine width and font geometry only when pitch or album binding changes rather than every animation frame.
+- Cache open jewel-case width with invalidation on open/close, display change, viewport resize and element resize.
+- Extend JavaScript regressions with node-identity reuse, style-write checks, and 120 long jumps through a 20,000-album catalogue.
+
 ## [0.11.0] - 2026-11-04
 
 ### Carousel and playback
