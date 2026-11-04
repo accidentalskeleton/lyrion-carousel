@@ -3,105 +3,70 @@
 }
 
 .bf-stage.bf-shelf-active .bf-album {
-    --spine-cap-height:12px;
     top:8px;
     height:calc(100% - 16px)!important;
     margin-top:0;
     opacity:1!important;
     pointer-events:auto;
-    /* Clear moulded rails sit in front of a flat paper insert. Keep the
-       coloured paper out of the end caps and away from the outer edges. */
-    --spine-rail-width:3px;
-    background:
-        linear-gradient(90deg,rgba(0,0,0,.28),transparent 14%,transparent 86%,rgba(0,0,0,.32)) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
-        linear-gradient(90deg,rgba(0,0,0,.22),rgba(0,0,0,.03) 50%,rgba(0,0,0,.28)) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
-        var(--spine-image,linear-gradient(var(--spine-color,#202628),var(--spine-color,#202628))) center / calc(100% - 2 * var(--spine-rail-width)) calc(100% - 2 * var(--spine-cap-height)) no-repeat,
-        linear-gradient(90deg,#111719 0,#738084 1px,#293235 2px,#171e20 4px, #202729 50%,#151c1e calc(100% - 4px),#576469 calc(100% - 2px),#111719 100%)!important;
-    border-left:1px solid rgba(230,240,244,.18);
-    border-right:1px solid rgba(0,0,0,.72);
-    box-shadow:inset 0 1px 0 rgba(239,247,249,.18),inset 0 -1px 0 rgba(0,0,0,.55),1px 0 2px rgba(0,0,0,.42),0 8px 12px rgba(0,0,0,.22);
+    background:var(--spine-color,#202628)!important;
+    border:0;
+    box-shadow:0 8px 12px rgba(0,0,0,.20);
     filter:none!important;
     overflow:hidden;
 }
-
 @media (max-width:560px) {
     .bf-stage.bf-shelf-active .bf-album {
         top:6px;
         height:calc(100% - 12px)!important;
     }
 }
-
 .bf-stage.bf-shelf-active .bf-album .bf-jewel-front,
 .bf-stage.bf-shelf-active .bf-album .bf-jewel-edge,
 .bf-stage.bf-shelf-active .bf-album .bf-jewel-top,
 .bf-stage.bf-shelf-active .bf-album .bf-jewel-bottom {
     display:none!important;
 }
-
-/* A fine lip and shadow make the label look inset beneath the plastic.
-   Explicitly reset the legacy fan's floor-shadow pseudo-element. */
-.bf-stage.bf-shelf-active .bf-album::before {
-    content:"";
-    display:block!important;
+/* Art is reused from the normal cover endpoint; no bespoke per-album spine asset. */
+.bf-stage.bf-shelf-active .bf-spine-cover {
     position:absolute;
-    z-index:0;
-    top:var(--spine-cap-height)!important;
-    bottom:var(--spine-cap-height)!important;
-    left:var(--spine-rail-width)!important;
-    right:var(--spine-rail-width)!important;
-    width:auto!important;
-    height:auto!important;
-    border-radius:1px;
-    background:transparent!important;
-    box-shadow:inset 1px 0 1px rgba(0,0,0,.30),inset -1px 0 1px rgba(0,0,0,.24),inset 0 1px 1px rgba(0,0,0,.40),inset 0 -1px 0 rgba(255,255,255,.14),0 -1px 0 rgba(231,242,246,.16),0 1px 0 rgba(0,0,0,.55);
-    transform:none!important;
-    filter:none;
+    inset:0;
+    background-size:cover;
+    background-repeat:no-repeat;
+    background-position:center;
     pointer-events:none;
 }
-
-.bf-stage.bf-shelf-active .bf-album::after {
-    content:none!important;
-}
-
-/* Two separately truncated, vertical lines: never drop album or artist.
-   Subtle translucent ink strips keep lettering legible over genuine artwork. */
+/* Artist — Album is a single line set over the artwork. */
 .bf-stage.bf-shelf-active .bf-spine-label {
     position:absolute;
     z-index:2;
-    top:calc(var(--spine-cap-height) + 6px);
-    bottom:calc(var(--spine-cap-height) + 6px);
-    left:calc(var(--spine-rail-width) + 1px);
-    right:calc(var(--spine-rail-width) + 1px);
-    display:flex;
-    flex-direction:row;
-    align-items:stretch;
-    gap:1px;
-    overflow:hidden;
-    pointer-events:none;
-}
-.bf-stage.bf-shelf-active .bf-spine-artist,
-.bf-stage.bf-shelf-active .bf-spine-title {
-    min-width:0;
-    min-height:0;
-    flex:1 1 0;
-    box-sizing:border-box;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    white-space:nowrap;
+    inset:19px 4px;
     writing-mode:vertical-rl;
     text-orientation:mixed;
-    text-align:start;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    text-align:center;
+    font:700 var(--spine-font-size,14px)/1.2 Arial,Helvetica,sans-serif;
     color:#fff;
-    font:600 var(--spine-font-size,11px)/1 var(--spine-font-family,Arial,Helvetica,sans-serif);
-    letter-spacing:0;
-    padding:5px 1px;
-    background:rgba(0,0,0,.55);
-    text-shadow:0 1px 2px #000,0 0 2px #000;
-    border-radius:1px;
+    text-shadow:0 1px 2px #000,0 0 3px #000,1px 0 1px #000,-1px 0 1px #000;
+    background:rgba(0,0,0,.30);
+    pointer-events:none;
 }
-.bf-stage.bf-shelf-active .bf-spine-artist {
-    font-weight:750;
-    background:rgba(0,0,0,.64);
+/* Every album displays exactly the same transparent moulded plastic image. */
+.bf-stage.bf-shelf-active .bf-spine-shell {
+    position:absolute;
+    z-index:3;
+    inset:0;
+    width:100%;
+    height:100%;
+    object-fit:fill;
+    pointer-events:none;
+    user-select:none;
+}
+.bf-stage.bf-shelf-active .bf-album::before,
+.bf-stage.bf-shelf-active .bf-album::after {
+    content:none!important;
+    display:none!important;
 }
 
 .bf-stage.bf-shelf-active .bf-album[data-front-preview] {
