@@ -6,7 +6,6 @@ const player=root?.querySelector('.bf-player-select'),idle=root?.querySelector('
 const aboutConnection=root?.querySelector('.bf-about-connection'),aboutLive=root?.querySelector('.bf-about-live'),aboutPlayer=root?.querySelector('.bf-about-player'),aboutLibrary=root?.querySelector('.bf-about-library'),aboutCache=root?.querySelector('.bf-about-cache'),aboutVersion=root?.querySelector('.bf-about-version'),clearCacheButton=root?.querySelector('.bf-clear-cache'),cacheFeedback=root?.querySelector('.bf-cache-feedback');
 const cacheConfirm=root?.querySelector('.bf-cache-confirm'),cacheCancel=root?.querySelector('.bf-cache-cancel'),cacheConfirmClear=root?.querySelector('.bf-cache-confirm-clear');
 function dismissCacheConfirm(){if(cacheConfirm)cacheConfirm.hidden=true;if(clearCacheButton)clearCacheButton.hidden=false;}
-const displayStyle=root?.querySelector('.bf-display-style');
 const coverSize=root?.querySelector('.bf-cover-size');
 const cacheLimit=root?.querySelector('.bf-cache-limit');
 const genreList=root?.querySelector('.bf-genre-list'),genresStatus=root?.querySelector('.bf-genres-status'),genresAll=root?.querySelector('.bf-genres-all'),genresNone=root?.querySelector('.bf-genres-none');
@@ -36,7 +35,7 @@ settingsTabs.forEach((tab,index)=>{
         event.preventDefault();event.stopPropagation();selectSettingsTab(settingsTabs[next],true);
     });
 });
-const storage={displayStyle:'albumBrowserDisplayStyle',coverSize:'albumBrowserCoverSize',idle:'albumBrowserIdleReturnMs',menuTimeout:'albumBrowserAlbumMenuTimeoutMs',frontTimeout:'albumBrowserFrontPreviewTimeoutMs',random:'albumBrowserRandomScrollMs',displayCount:'albumBrowserDisplayCount',cacheLimit:'albumBrowserCacheLimitBytes',genres:'albumBrowserDisabledGenres',lms:'albumBrowserLmsUrl'}
+const storage={coverSize:'albumBrowserCoverSize',idle:'albumBrowserIdleReturnMs',menuTimeout:'albumBrowserAlbumMenuTimeoutMs',frontTimeout:'albumBrowserFrontPreviewTimeoutMs',random:'albumBrowserRandomScrollMs',displayCount:'albumBrowserDisplayCount',cacheLimit:'albumBrowserCacheLimitBytes',genres:'albumBrowserDisabledGenres',lms:'albumBrowserLmsUrl'}
 function get(key,fallback){try{return localStorage.getItem(key)??fallback}catch(_){return fallback}}
 function set(key,value){try{localStorage.setItem(key,value)}catch(_){}}
 function disabledGenres(){try{const values=JSON.parse(get(storage.genres,'[]'));return new Set(Array.isArray(values)?values.filter(value=>typeof value==='string'):[])}catch(_){return new Set()}}
@@ -69,7 +68,7 @@ async function loadGenres(){
 function apply(value,name){set(storage[name],value);window.dispatchEvent(new CustomEvent('lyrion-carousel-setting',{detail:{name,value}}))}
 function refreshStatus(){const label=root.querySelector('.bf-connection-label')?.textContent?.trim()||'—',cached=root.dataset.catalogueSource==='cache';aboutConnection.textContent=root.dataset.connected==='true'?'Connected':'Not connected';if(aboutLive)aboutLive.textContent=root.dataset.liveUpdates==='true'?'Connected':root.dataset.liveUpdates==='connecting'?'Connecting…':'Disconnected';aboutLibrary.textContent=cached?label+' · cached':label;aboutPlayer.textContent=player?.selectedOptions?.[0]?.textContent||'—';if(aboutCache)aboutCache.textContent=cached?'Using cached catalogue':'Album cache enabled'}
 async function loadVersion(){try{const r=await fetch('VERSION',{cache:'no-store'});if(r.ok)aboutVersion.textContent='v'+(await r.text()).trim()}catch(_){aboutVersion.textContent=''}}
-function initialise(){displayStyle.value=get(storage.displayStyle,'shelf')==='fan'?'fan':'shelf';coverSize.value=get(storage.coverSize,'512');idle.value=get(storage.idle,'30000');menuTimeout.value=get(storage.menuTimeout,'10000');frontTimeout.value=get(storage.frontTimeout,'10000');random.value=get(storage.random,'3000');displayCount.value=get(storage.displayCount,'30');cacheLimit.value=get(storage.cacheLimit,'512000000');window.__lyrionCarouselSettings={displayStyle:displayStyle.value,coverSize:Number(coverSize.value),idle:Number(idle.value),menuTimeout:Number(menuTimeout.value),frontTimeout:Number(frontTimeout.value),random:Number(random.value),displayCount:Number(displayCount.value)};loadVersion()}
+function initialise(){coverSize.value=get(storage.coverSize,'512');idle.value=get(storage.idle,'30000');menuTimeout.value=get(storage.menuTimeout,'10000');frontTimeout.value=get(storage.frontTimeout,'10000');random.value=get(storage.random,'3000');displayCount.value=get(storage.displayCount,'30');cacheLimit.value=get(storage.cacheLimit,'512000000');window.__lyrionCarouselSettings={coverSize:Number(coverSize.value),idle:Number(idle.value),menuTimeout:Number(menuTimeout.value),frontTimeout:Number(frontTimeout.value),random:Number(random.value),displayCount:Number(displayCount.value)};loadVersion()}
 function validLmsUrl(value){return /^https?:\/\/[^/?#]+(?:\/[^?#]*)?$/.test(value)}
 function applyRuntimeDefault(select,name,value){
     if(get(storage[name],null)!==null||!Number.isFinite(Number(value)))return;
@@ -123,7 +122,6 @@ warmCancel?.addEventListener('click',()=>{warmCancel.disabled=true;refreshWarmSt
 window.addEventListener('pagehide',()=>{warmRequest++;clearTimeout(warmTimer)});
 function openSettings(){if(!overlay)return;refreshStatus();overlay.hidden=false;refreshWarmStatus();closeButton?.focus()}
 function closeSettings(){if(!overlay)return;dismissCacheConfirm();warmRequest++;clearTimeout(warmTimer);overlay.hidden=true;openButton?.focus()}
-displayStyle?.addEventListener('change',()=>apply(displayStyle.value,'displayStyle'));
 coverSize?.addEventListener('change',()=>apply(coverSize.value,'coverSize'));
 cacheLimit?.addEventListener('change',async()=>{const limit=Number(cacheLimit.value);cacheLimit.disabled=true;try{const response=await fetch('/api/config/cache',{method:'POST',headers:{'Content-Type':'application/json','X-Lyrion-Request':'1'},body:JSON.stringify({cache_limit_bytes:limit})});if(!response.ok)throw Error();const result=await response.json();set(storage.cacheLimit,result.cache_limit_bytes);configureCacheLimit(result.cache_limit_bytes,result.cache_hard_limit_bytes);showWarmStatus({status:'idle',cache:result.cache})}catch(_){cacheFeedback.textContent='Could not update cache limit'}finally{cacheLimit.disabled=false}});
 genresAll?.addEventListener('change',()=>{if(!genresAll.checked)return;genreList?.querySelectorAll('input').forEach(input=>input.checked=true);if(genresNone)genresNone.checked=false;applyGenres(true)});
