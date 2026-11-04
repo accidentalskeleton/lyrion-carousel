@@ -2,6 +2,17 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased — Phase 4 rendering performance
+
+- Recycle a bounded DOM pool of shelf spines as the viewport advances; reuse the static jewel-case shell and label nodes instead of recreating every visible spine.
+- Keep asynchronous spine-colour metadata bound to the correct album when a pooled node is reassigned.
+- Write spine width and font geometry only when pitch or album binding changes rather than every animation frame.
+- Cache open jewel-case width with invalidation on open/close, display change, viewport resize and element resize.
+- Extend JavaScript regressions with node-identity reuse, style-write checks, and 120 long jumps through a 20,000-album catalogue.
+- Add an opt-in browser performance profiler for sampled frame timing, approximate dropped frames, long tasks, DOM churn, network requests and optional JS heap metrics, with report comparison and no extra idle animation loop.
+- Infer effective monitor refresh rate from foreground animation samples, show active-scrolling metrics separately from idle frames, and exclude/report long rAF suspensions instead of counting them as hundreds of missed frames.
+- Document the performance monitor API, metric interpretation, fair comparison procedure, and a real 142.9 Hz browser capture (143.79 active FPS; zero active estimated missed frames; stable DOM count).
+
 ## [0.11.0] - 2026-11-04
 
 ### Carousel and playback

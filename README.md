@@ -81,7 +81,19 @@ python3 server.py --bind 0.0.0.0
 ```
 
 `0.0.0.0` is a listening address, not a browser destination. Do not expose this server directly to the internet.
-Requests are accepted only when the browser `Host` is a loopback/private IP, an unqualified intranet name, or a `.local`, `.lan` or `.home.arpa` name. Public DNS hostnames are rejected to prevent DNS-rebinding access to the LMS proxy; use the controller's local IP or an intranet hostname when connecting.
+
+### HTTP Host and cross-site request protection
+
+Carousel validates every incoming HTTP `Host` header **before** serving static content or proxying LMS calls. Loopback IPs, RFC 1918 private IPv4 addresses, IPv6 unique-local/link-local addresses, `localhost`, the machine's hostname and its `.local` form are accepted. Arbitrary public DNS names and unconfigured `.local`, `.lan` and `.home.arpa` names are **not** accepted. Additional local names can be explicitly permitted:
+
+```bash
+python3 server.py --bind 0.0.0.0 --allowed-hosts 'controller.lan,controller.home.arpa'
+```
+
+When installed as a systemd service, specify `ALLOWED_HOSTS=controller.lan,controller.home.arpa` in `/etc/default/lyrion-carousel`. The built-in `streamer` hostname is accepted when the machine's actual hostname is `streamer`, preserving `http://streamer:8088`. The `--allowed-hosts` option names permitted browser hostnames; it is **not an authentication system**.
+
+All API POST requests require `X-Lyrion-Request: 1`. Browser requests also reject an `Origin` inconsistent with the request Host, and cross-site `Sec-Fetch-Site` values. The custom header prevents basic cross-site forms from triggering configuration and playback endpoints; ordinary CLI clients may send the header without an Origin. These checks reduce DNS-rebinding and CSRF exposure, but do not authenticate LAN clients. **Keep port 8088 and the LMS server reachable only from trusted network clients or via a VPN.**
+
 
 ## Runtime options
 
@@ -90,6 +102,7 @@ Requests are accepted only when the browser `Host` is a loopback/private IP, an 
 | `--lms` | `http://streamer:9000` | Lyrion Music Server base URL |
 | `--bind` | `127.0.0.1` | Controller listening address |
 | `--port` | `8088` | Controller HTTP port |
+| `--allowed-hosts` | appliance hostname | Extra comma-separated local browser hostnames |
 | `--cache-dir` | `.cache/album-art` | Persistent album cache location |
 | `--cache-limit-mb` | `512` | Initial soft artwork-cache limit, adjustable from the browser |
 | `--cache-hard-limit-mb` | `2000` | Server-only ceiling for browser cache-limit changes |
@@ -148,9 +161,74 @@ Before deployment to a dedicated controller, exercise this sequence against the 
 
 ## Performance
 
-The signature interaction is intentionally based on compositor-friendly `translate3d`/rotation transforms. Only the configured window of spines is constructed. Catalogue records are retained for ordering, while artwork is fetched for visible albums. Geometry helpers are pure and do not create an extra renderer or idle animation loop.
+### Rendering optimisations
 
-`js/performance.js` uses `PerformanceObserver` where supported to report main-thread tasks of 100 ms or longer to the developer console. It does **not** run a permanent `requestAnimationFrame` loop or add polling while the carousel is idle. Final acceptance should include measured frame-rate/memory testing on the intended controller/display hardware with the full library.
+The carousel uses compositor-friendly CSS transforms and renders only a bounded window of albums. Phase 4 **recycles existing spine, label and shell DOM nodes** as the visible window advances, rather than rebuilding every visible spine. Metadata callbacks check album identity before updating reused nodes; width and font geometry only change when needed, and the open jewel-case width is cached with invalidation on resize and preview transitions. It retains the playing-case pinning and manual preview timeout behaviours.
+
+### Browser performance monitor
+
+The opt-in monitor lives in `js/performance.js` and is exposed as `window.lyrionPerf`. It works in Edge/Chrome DevTools on the controller page (for example `http://streamer:8088`). Normal browsing adds **no extra continuous animation-frame loop, input listeners or DOM MutationObserver**; the monitor starts collecting only when explicitly requested. The existing console warning for main-thread tasks of at least 100 ms remains available when supported.
+
+Open DevTools (**F12 → Console**) and run:
+
+```javascript
+lyrionPerf.start({ label: 'Phase 4' });
+// Scroll the CD spines for 15–30 seconds, including longer movements.
+const phase4 = lyrionPerf.stop();
+copy(JSON.stringify(phase4, null, 2));  // Chromium/Edge DevTools copy helper
+```
+
+An alternative fixed-duration measurement is:
+
+```javascript
+const phase4 = await lyrionPerf.measure({ seconds: 15, label: 'Phase 4' });
+copy(JSON.stringify(phase4, null, 2));
+```
+
+Start browsing promptly after starting a measurement. Keep the tab in the foreground and use the same viewport, number of visible spines, sort mode and browsing pattern when comparing versions. You may pass `targetFps: 60` to `start()` or `measure()` to impose a fixed budget, but **omitting it is recommended**: the profiler detects the effective refresh rate from foreground `requestAnimationFrame` intervals, including high-refresh displays.
+
+The returned JSON includes:
+
+| Field | Meaning |
+| --- | --- |
+| `detectedFps`, `effectiveFps`, `frameBudgetMs` | Detected refresh estimate, applied rate and per-frame time budget |
+| `sampledFrames`, `estimatedFps`, `frameMs` | Foreground rAF sample count, rate and mean/P95/P99/maximum frame interval |
+| `framesOverBudget`, `estimatedDroppedFrames` | Estimated interval overruns relative to the frame budget; **not** actual presented/GPU frame losses |
+| `activeScrolling` | Separate sample count, estimated FPS, frame distribution and overruns during carousel wheel/drag/touch/arrow activity plus a 350 ms activity window |
+| `suspensions` | Number, total time and longest rAF gaps exceeding 250 ms; excluded from missed-frame and frame-time calculations |
+| `longTasks` | Count and total duration of observed main-thread tasks (browser support permitting) |
+| `dom` | Initial/final visible spine counts and additions/removals during capture |
+| `requests` | Artwork and metadata request counts and reported transferred bytes |
+| `heapMB` | Optional Chromium JavaScript heap sizes at start/end |
+
+A `null` value means the browser couldn't establish that metric. Transfer size zero may indicate caching or unavailable transfer timing, **not** proof of zero network traffic. `activeScrolling` is a heuristic for recent user input, not a measurement of exactly which frames displayed a moving shelf. Tab/OS pauses are reported separately, rather than inflating missed-frame estimates.
+
+Compare two captures produced by this version of the profiler using:
+
+```javascript
+lyrionPerf.compare(baseline, phase4);
+```
+
+The `baseline` and `phase4` variables must contain complete capture objects from equivalent sessions. Earlier reports without `activeScrolling` are not directly comparable on that metric.
+
+### Phase 4 reference measurement (4 November 2026)
+
+A real 36.36-second Edge/Chromium capture while browsing the library reported:
+
+| Metric | Result |
+| --- | ---: |
+| Detected refresh rate | 142.9 Hz |
+| Active scrolling estimated FPS | 143.79 |
+| Active scrolling P95 / P99 | 7.0 / 7.1 ms |
+| Active scrolling max interval | 7.8 ms |
+| Estimated missed frames while active | 0 |
+| Overall estimated missed frames | 5 |
+| Long tasks / suspensions | 0 / 0 |
+| Visible DOM spines (start → finish) | 34 → 34 |
+| Spine additions / removals | 12 / 12 |
+| JavaScript heap (start → finish) | 2.82 → 2.60 MB |
+
+These are **one browser/session's observations**, not guaranteed results on other hardware, library sizes or display settings. In particular, the capture shows good performance and stable DOM counts, but does not by itself quantify the improvement over an equivalent pre-Phase-4 baseline.
 
 ## Web-app / kiosk use
 

@@ -6,7 +6,7 @@ export async function rpc(targetPlayer, command) {
   const generation = session;
   const response = await fetch('/api/lms', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Lyrion-Request': '1' },
     body: JSON.stringify({ id: ++requestId, method: 'slim.request', params: [targetPlayer || '0', command] })
   });
   if (!response.ok) throw new Error('LMS returned HTTP ' + response.status);
@@ -32,7 +32,7 @@ export class CometDClient {
   async post(messages) {
     const response = await fetch('/api/cometd', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Lyrion-Request': '1' },
       body: JSON.stringify(messages)
     });
     if (!response.ok) throw new Error('CometD HTTP ' + response.status);
