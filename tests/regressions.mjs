@@ -454,6 +454,17 @@ export async function runTests(sources) {
   const otherIndex=api.state().albums.findIndex(album=>album[6]!==20);
   api.openFrontPreview(api.state().albums[otherIndex],otherIndex);
   assert(api.state().frontPreviewAlbum[6]!==20&&api.state().frontTimer!==0,'other album can preview while keep-open enabled');
+  // Playing cover -> manual album #2 -> click album #3 must replace the
+  // preview in one click. The overlay CSS must allow pointer hit-testing
+  // to reach the neighbouring spine (checked by the Python CSS test).
+  const thirdIndex=(otherIndex+1)%api.state().albums.length;
+  api.set({position:otherIndex});api.draw();time+=250;
+  const thirdSpine={dataset:{index:String(thirdIndex)}};
+  const thirdTarget={closest:selector=>selector==='.bf-album'?thirdSpine:null};
+  stage.dispatchEvent({type:'pointerdown',button:0,target:thirdTarget,pointerId:81,clientX:120,clientY:80});
+  stage.dispatchEvent({type:'pointerup',target:thirdTarget,pointerId:81,clientX:120,clientY:80,stopImmediatePropagation(){}});
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===api.state().albums[thirdIndex],
+    'clicking a third spine switches directly from the second preview');
   api.closeFrontPreview();await Promise.resolve();await Promise.resolve();
   assert(!preview.hidden&&api.state().frontPreviewAlbum[6]===20,'closing preview restores playing cover');
 
