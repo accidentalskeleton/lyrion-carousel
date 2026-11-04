@@ -3,7 +3,7 @@ import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from './ca
 import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPosition } from './browser.js?v=display-choice-1';
 import { createLmsProvider } from './providers/lms-provider.js?v=providers-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=providers-1';
-import { spotifyAlbumInformation, spotifyAlbumUrl } from './spotify.js?v=spotify-album-link-1';
+import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=spotify-album-link-2';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
@@ -759,8 +759,11 @@ async function showTrackList(album){
     closeAlbumMenu();if(!album?.[6])return;
     const request=++trackRequest,spotify=album?.[13]==='spotify';trackAlbum=album;trackPlayNow.hidden=spotify;trackPlayNow.disabled=!playerId;
     const initialSpotifyUrl=spotify?spotifyAlbumUrl(album[16]):'';
-    trackSpotifyLink.hidden=!initialSpotifyUrl;
-    if(initialSpotifyUrl)trackSpotifyLink.href=initialSpotifyUrl;else trackSpotifyLink.removeAttribute('href');
+    const spotifySearchUrl=spotify?spotifyAlbumSearchUrl(album[0],album[1]):'';
+    const initialDestination=initialSpotifyUrl||spotifySearchUrl;
+    trackSpotifyLink.hidden=!initialDestination;
+    trackSpotifyLink.textContent=initialSpotifyUrl?'Open album in Spotify ↗':'Find album on Spotify ↗';
+    if(initialDestination)trackSpotifyLink.href=initialDestination;else trackSpotifyLink.removeAttribute('href');
     trackTitle.textContent=album[0];trackDetails.textContent=album[1]+(album[10]?' · '+album[10]:'');
     trackStatus.textContent='Loading album information…';trackList.replaceChildren();trackOverlay.hidden=false;trackClose.focus();
     try{
@@ -769,8 +772,10 @@ async function showTrackList(album){
             const info=await spotifyAlbumInformation(playerId,{spottyItemId:album[14]});
             tracks=info.tracks||[];genre=info.genre||'';year=info.year||year;
             if(request===trackRequest&&!trackOverlay.hidden){
-                const resolved=initialSpotifyUrl||spotifyAlbumUrl(info.spotifyUrl);
+                const exact=initialSpotifyUrl||spotifyAlbumUrl(info.spotifyUrl);
+                const resolved=exact||spotifySearchUrl;
                 trackSpotifyLink.hidden=!resolved;
+                trackSpotifyLink.textContent=exact?'Open album in Spotify ↗':'Find album on Spotify ↗';
                 if(resolved)trackSpotifyLink.href=resolved;else trackSpotifyLink.removeAttribute('href');
             }
         }else{
