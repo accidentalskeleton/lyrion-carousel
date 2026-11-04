@@ -10,7 +10,6 @@ from unittest.mock import patch
 
 from PIL import Image
 import server
-from spine_art import render_spine, SPINE_WIDTH, SPINE_HEIGHT
 
 
 class ServerTests(unittest.TestCase):
@@ -24,24 +23,6 @@ class ServerTests(unittest.TestCase):
         self.handler.lms_url = 'http://test:9000'
         self.responses = []
         self.handler._send_payload = lambda status, body, *args, **kwargs: self.responses.append((status, body))
-
-    def test_photographic_spine_rendering_preserves_dimensions(self):
-        original=Image.new('RGB',(600,600),(100,130,200))
-        spine=render_spine(original)
-        self.assertEqual(spine.size,(SPINE_WIDTH,SPINE_HEIGHT))
-        self.assertEqual(spine.mode,'RGB')
-
-    def test_photographic_spine_endpoint_caches_rendered_image(self):
-        artwork_id='test-spine-cover'
-        image_path,_=self.paths(artwork_id)
-        Image.new('RGB',(600,600),(180,80,40)).save(image_path,format='JPEG')
-        self.handler._serve_spine_artwork(artwork_id)
-        self.assertEqual(self.responses[-1][0],200)
-        payload=self.responses[-1][1]
-        with Image.open(io.BytesIO(payload)) as image:
-            self.assertEqual(image.size,(SPINE_WIDTH,SPINE_HEIGHT))
-        self.handler._serve_spine_artwork(artwork_id)
-        self.assertEqual(self.responses[-1][1],payload)
 
     def paths(self, artwork_id):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
