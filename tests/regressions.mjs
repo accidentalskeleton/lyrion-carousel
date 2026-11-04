@@ -123,11 +123,11 @@ export async function runTests(sources) {
   await api.loadInitialCatalogue();
   const firstSpine=stage.children.find(node=>node.className?.includes('bf-album'));
   const spineLabel=firstSpine?.children.find(node=>node.className==='bf-spine-label');
-  assert(spineLabel?.children.length===2, 'shelf spines render both artist and album labels');
-  assert(spineLabel.children.some(node=>node.className==='bf-spine-artist'&&node.textContent==='Artist'),
-    'artist is independently visible on the spine');
-  assert(spineLabel.children.some(node=>node.className==='bf-spine-title'&&node.textContent.startsWith('Album')),
-    'album title is independently visible on the spine');
+  const spineShell=firstSpine?.children.find(node=>node.className==='bf-spine-shell');
+  const spineCover=firstSpine?.children.find(node=>node.className==='bf-spine-cover');
+  assert(spineLabel?.textContent?.includes('Artist — Album'), 'one continuous artist and album spine label');
+  assert(spineShell?.src==='/assets/jewel-case-spine-v1.svg', 'all spines use shared static shell image');
+  assert(spineCover?.style?.backgroundImage?.includes('/api/art/'), 'album cover image reused under shell');
   assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
   assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
 
