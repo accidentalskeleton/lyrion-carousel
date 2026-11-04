@@ -1,4 +1,4 @@
-import { savedSpotifyAlbums, searchSpotifyAlbums, saveSpotifyAlbum, playSpotifyAlbum } from '../spotify.js?v=0.11.0';
+import { savedSpotifyAlbums, searchSpotifyAlbums, saveSpotifyAlbum, playSpotifyAlbum } from '../spotify.js?v=spotify-album-link-1';
 
 export function createSpotifyProvider({mapAlbum,getPlayerId}){
   const norm=value=>String(value||'').trim().toLocaleLowerCase();
