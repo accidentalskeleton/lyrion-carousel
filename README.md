@@ -165,6 +165,12 @@ Before deployment to a dedicated controller, exercise this sequence against the 
 
 The carousel uses compositor-friendly CSS transforms and renders only a bounded window of albums. Phase 4 **recycles existing spine, label and shell DOM nodes** as the visible window advances, rather than rebuilding every visible spine. Metadata callbacks check album identity before updating reused nodes; width and font geometry only change when needed, and the open jewel-case width is cached with invalidation on resize and preview transitions. It retains the playing-case pinning and manual preview timeout behaviours.
 
+### Large-library alphabet navigation and cache budgets
+
+Letter navigation uses an in-memory map from **A–Z** to the first album index in the current ordered catalogue. The map is rebuilt on catalogue replacement, sort or filter changes, and updated as individual LMS batches arrive. A fully loaded catalogue therefore jumps to a letter without requesting additional album pages or searching every album. A partially loaded LMS catalogue can still fetch missing batches when the requested letter is not yet indexed. The index follows the catalogue's `textkey` values and retains the first occurrence of each letter.
+
+The server caches a maximum of four serialized catalogue orderings **and** a combined 32 MiB of serialized payload bytes. When an order would exceed the budget, the oldest cached orderings are evicted; an individual order larger than 32 MiB is served normally but not retained. The cache remains a small, in-memory optimisation and does not affect catalogue snapshot persistence or correctness.
+
 ### Browser performance monitor
 
 The opt-in monitor lives in `js/performance.js` and is exposed as `window.lyrionPerf`. It works in Edge/Chrome DevTools on the controller page (for example `http://streamer:8088`). Normal browsing adds **no extra continuous animation-frame loop, input listeners or DOM MutationObserver**; the monitor starts collecting only when explicitly requested. The existing console warning for main-thread tasks of at least 100 ms remains available when supported.
