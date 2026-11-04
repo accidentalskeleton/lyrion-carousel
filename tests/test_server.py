@@ -38,7 +38,7 @@ class ServerTests(unittest.TestCase):
             all_colours.update(colours)
             for colour in colours:
                 self.assertGreaterEqual(server.spine_contrast_ratio(colour,background),4.5)
-                self.assertRegex(colour,r'\\A\\x23[0-9a-fA-F]{6}\\Z')
+                self.assertRegex(colour,r'#[0-9a-fA-F]{6}')
         self.assertGreater(len(all_colours),10)
         self.assertEqual(server.select_spine_text_colour('#234567','same-id'),
                          server.select_spine_text_colour('#234567','same-id'))
