@@ -801,6 +801,15 @@ export async function runTests(sources) {
   assert(sources.app.includes('beginShelfDrag(')&&sources.app.includes('moveShelfDrag(event,false)')&&
     sources.app.includes('finishShelfDrag(false)'),
     'cover reuses the existing spine drag and snap physics');
+  assert(sources.app.includes('async function followPlayingSource()')&&
+    sources.app.includes('armIdleReturn(0);void followPlayingSource()}')&&
+    sources.app.includes('await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();'),
+    'Playback source changes follow across browser sessions and on initial connection');
+  assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
+    sources.app.includes("if(sourceFollowAttempt===key)return;"),
+    'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
+  assert(sources.index.includes('js/app.js?v=source-follow-1'),
+    'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
   assert(sources.app.includes("if(album[13]==='spotify')await loadAlbum(album);else await playAlbumNow(album);"),
