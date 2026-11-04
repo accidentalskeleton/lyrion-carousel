@@ -18,7 +18,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ### Additional refinements
 
-- Add cached, high-resolution artwork-derived spine inserts beneath separate, readable vertical artist and album labels, preserving the plastic jewel-case overlay and CSS fallback.
+- Render CD spines with the normal album artwork beneath a shared transparent jewel-case shell image and a single live CSS Artist — Album label; no per-album generated spine graphics.
 - Log failed colour-index artwork IDs for easier troubleshooting.
 
 - Show current artwork cache usage and its limit in Settings, with total metadata usage in the detail tooltip.
