@@ -46,6 +46,13 @@ class ServerTests(unittest.TestCase):
         self.assertIn('writing-mode:vertical-rl;',label)
         self.assertNotIn('inset:19px 4px;',label)
 
+    def test_open_case_wrapper_does_not_block_other_spine_clicks(self):
+        css=(Path(__file__).resolve().parents[1]/'css/shelf.css').read_text()
+        preview=css.split('.bf-front-preview {',1)[1].split('}',1)[0]
+        case=css.split('.bf-front-case {',1)[1].split('}',1)[0]
+        self.assertIn('pointer-events:none;',preview)
+        self.assertIn('pointer-events:auto;',case)
+
     def test_lms_selection_survives_restart_and_artwork_cache_clear(self):
         self.handler.runtime_config={'lms_url':'http://test:9000'}
         body=json.dumps({'lms_url':'http://streamer:9000/'}).encode()
