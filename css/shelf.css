@@ -26,16 +26,8 @@
 .bf-stage.bf-shelf-active .bf-album .bf-jewel-bottom {
     display:none!important;
 }
-/* Art is reused from the normal cover endpoint; no bespoke per-album spine asset. */
-.bf-stage.bf-shelf-active .bf-spine-cover {
-    position:absolute;
-    inset:0;
-    background-size:cover;
-    background-repeat:no-repeat;
-    background-position:center;
-    pointer-events:none;
-}
-/* Artist — Album is a single line set over the artwork. */
+/* A flat colour derived from the cover sits beneath the shared plastic shell. */
+/* Artist — Album is a single line over the cover-derived solid colour. */
 .bf-stage.bf-shelf-active .bf-spine-label {
     position:absolute;
     z-index:2;
@@ -49,7 +41,7 @@
     font:700 var(--spine-font-size,14px)/1.2 Arial,Helvetica,sans-serif;
     color:#fff;
     text-shadow:0 1px 2px #000,0 0 3px #000,1px 0 1px #000,-1px 0 1px #000;
-    background:rgba(0,0,0,.30);
+    background:transparent;
     pointer-events:none;
 }
 /* Every album displays exactly the same transparent moulded plastic image. */
