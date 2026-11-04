@@ -604,9 +604,12 @@ export async function runTests(sources) {
   // a deliberate tap on a spine is still allowed to open that album.
   api.set({playing:false,position:5});
   api.openFrontPreview(api.state().albums[5],5);
+  const wheelPreviewTimer=api.state().frontTimer;
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:180,preventDefault(){}});
   assert(!preview.hidden&&api.state().frontPreviewAlbum===api.state().albums[5],
     'wheel scrolling preserves the manually previewed album');
+  assert(api.state().frontTimer===wheelPreviewTimer&&timers.has(wheelPreviewTimer),
+    'wheel scrolling does not cancel or extend the manual preview timeout');
   const wheelPosition=api.state().position;
   const idleIndex=(Math.round(wheelPosition)+2)%api.state().albums.length;
   const idleSpine={dataset:{index:String(idleIndex)}};
