@@ -758,7 +758,7 @@ function distinctTrackArtist(track,albumArtist){
 async function showTrackList(album){
     closeAlbumMenu();if(!album?.[6])return;
     const request=++trackRequest,spotify=album?.[13]==='spotify';trackAlbum=album;trackPlayNow.hidden=spotify;trackPlayNow.disabled=!playerId;
-    const initialSpotifyUrl=spotify?spotifyAlbumUrl(album[17]):'';
+    const initialSpotifyUrl=spotify?spotifyAlbumUrl(album[16]):'';
     trackSpotifyLink.hidden=!initialSpotifyUrl;
     if(initialSpotifyUrl)trackSpotifyLink.href=initialSpotifyUrl;else trackSpotifyLink.removeAttribute('href');
     trackTitle.textContent=album[0];trackDetails.textContent=album[1]+(album[10]?' · '+album[10]:'');
