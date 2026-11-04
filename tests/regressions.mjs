@@ -45,6 +45,7 @@ export async function runTests(sources) {
     replaceChildren(...nodes){this.children=[];this.append(...nodes);}
     remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}
     setAttribute(k,v){this.attributes[k]=v;}
+    removeAttribute(k){delete this.attributes[k];}
     getAttribute(k){return this.attributes[k];}
     toggleAttribute(k,v){if(v)this.attributes[k]='';else delete this.attributes[k];}
     addEventListener(k,fn){(this.listeners[k]??=[]).push(fn);}
@@ -100,7 +101,8 @@ export async function runTests(sources) {
       return metadataFetch(url,...args);
     },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
-    createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
+    createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]}),
+    spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
     return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
@@ -476,6 +478,8 @@ export async function runTests(sources) {
     'album information lists discs and tracks in order with only distinct artists');
   assert(rpcCalls.some(cmd=>cmd[0]==='tracks'&&cmd.includes('sort:tracknum')&&cmd.includes('tags:altngidA')),
     'LMS track request asks for disc numbers, artists and track order');
+  assert(element('.bf-track-spotify-link').hidden,
+    'local LMS album information never shows Spotify links');
   api.closeTrackList();
   tracksFixture=null;
   albumForTrackList[1]=previousTrackListArtist;
@@ -714,9 +718,19 @@ export async function runTests(sources) {
       if(cmd.includes('item_id:7'))return {items_loop:[{id:'album-1',name:'Saved Album by Saved Artist',image:'/imageproxy/saved'}]};
       return {items_loop:[{id:'2',name:'Search',type:'search'},{id:'7',name:'Albums'}]};
     };
-    const spotty=new Function('rpc',plain(sources.spotify)+';return {normalizeSpottyAlbum,savedSpotifyAlbums,searchSpotifyAlbums,playSpotifyAlbum,saveSpotifyAlbum,spotifyAlbumInformation};')(spottyRpc);
+    const spotty=new Function('rpc',plain(sources.spotify)+';return {normalizeSpottyAlbum,spotifyAlbumUrl,savedSpotifyAlbums,searchSpotifyAlbums,playSpotifyAlbum,saveSpotifyAlbum,spotifyAlbumInformation};')(spottyRpc);
     const normalized=spotty.normalizeSpottyAlbum({id:'x',name:'Title by Artist',image:'/imageproxy/x'});
     assert(normalized.source==='spotify'&&normalized.title==='Title'&&normalized.artist==='Artist'&&normalized.spottyItemId==='x','Spotty album normalization');
+    const spotifyId='4aawyAB9vmqN3uQ7FjRGTy';
+    const spotifyUrl='https://open.spotify.com/album/'+spotifyId;
+    assert(spotty.spotifyAlbumUrl('spotify:album:'+spotifyId)===spotifyUrl,
+      'real Spotify album URIs produce a canonical Spotify album link');
+    assert(spotty.spotifyAlbumUrl(spotifyUrl+'?si=test')===spotifyUrl,
+      'Spotty album URLs are stripped of tracking parameters');
+    assert(!spotty.spotifyAlbumUrl('item_id:album-1')&&!spotty.spotifyAlbumUrl('https://open.spotify.com.evil.example/album/'+spotifyId)&&!spotty.spotifyAlbumUrl('spotify:track:'+spotifyId),
+      'navigation tokens, lookalike hosts and track links are never promoted to album links');
+    assert(spotty.normalizeSpottyAlbum({id:'album-1',favorites_url:'spotify:album:'+spotifyId}).spotifyUrl===spotifyUrl,
+      'saved Spotify entries retain a verified album link');
     const saved=await spotty.savedSpotifyAlbums('player');
     assert(saved.length===1&&saved[0].title==='Saved Album'&&spottyCalls.some(c=>c.includes('item_id:7')),'saved Spotify albums use discovered Albums node');
     const searched=await spotty.searchSpotifyAlbums('player','needle');
@@ -727,6 +741,20 @@ export async function runTests(sources) {
     assert(spottyCalls.some(c=>c.includes('item_id:9')),'Spotify searched album save follows Spotty action');
     const info=await spotty.spotifyAlbumInformation('player','album-1');
     assert(info.tracks.length===1&&info.genre==='Rock'&&info.year==='2020','Spotify Album Information parses tracks and metadata');
+    assert(sources.index.includes('class="bf-track-spotify-link"')&&sources.index.includes('rel="noopener noreferrer"'),
+      'Album Information contains a safe external Spotify album link');
+    const candidate=['Spotify Album','Spotify Artist','', '', '0','0deg','spotify:album-1',true,'','',2020,'',undefined,'spotify','album-1',undefined,spotifyUrl];
+    await api.showTrackList(candidate);
+    assert(!element('.bf-track-spotify-link').hidden&&element('.bf-track-spotify-link').href===spotifyUrl,
+      'verified Spotify album link is visible in Album Information');
+    api.closeTrackList();
+    assert(element('.bf-track-spotify-link').hidden&&!element('.bf-track-spotify-link').getAttribute('href'),
+      'closing Album Information clears the external destination');
+    candidate[16]='javascript:alert(1)';
+    await api.showTrackList(candidate);
+    assert(element('.bf-track-spotify-link').hidden,
+      'untrusted external destination is not linked');
+    api.closeTrackList();
   }
   if (sources.index) {
     assert(sources.index.includes('data-source="library"')&&sources.index.includes('data-source="spotify"'),'Library and Spotify source controls present');
