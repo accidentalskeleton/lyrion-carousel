@@ -877,7 +877,7 @@ export async function runTests(sources) {
         {now:()=>clock},
         class{observe(){} disconnect(){} takeRecords(){return []}},
         FakeObserver,callback=>{scheduled++;frameCallback=callback;return ++frameId},
-        ()=>{cancelled++},{href:'http://streamer:8088'},URL,()=>0
+        ()=>{cancelled++},{href:'http://streamer:8088'},class FakeURL {constructor(name){this.pathname=name.split('?')[0].replace(/^https?:\/\/[^/]+/,'')}},()=>0
       );
     assert(scheduled===0,'Phase 4 measurement has zero idle animation frames');
     assert(browser.active===false,'browser profiler is opt-in');
