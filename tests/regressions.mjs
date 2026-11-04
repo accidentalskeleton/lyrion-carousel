@@ -933,7 +933,7 @@ export async function runTests(sources) {
       fastReport.activeScrolling.estimatedFps>=140,
       'active browsing FPS excludes idle time and suspended intervals');
     assert(handlers.size===0,'second capture also removes its event listeners');
-    assert(browser.lastReport===report,'profiler exposes its most recent report');
+    assert(browser.lastReport===fastReport,'profiler exposes its most recent report');
     assert(browser.compare(report,report)['Frame p95 (ms)'].improvementPercent===0,
       'profiler comparison works for equal baseline and candidate');
     let invalidFps=false;
