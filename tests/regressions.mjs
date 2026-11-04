@@ -121,6 +121,13 @@ export async function runTests(sources) {
     if(error)throw error;if(!done)throw Error('Animation did not finish');
   }
   await api.loadInitialCatalogue();
+  const firstSpine=stage.children.find(node=>node.className?.includes('bf-album'));
+  const spineLabel=firstSpine?.children.find(node=>node.className==='bf-spine-label');
+  assert(spineLabel?.children.length===2, 'shelf spines render both artist and album labels');
+  assert(spineLabel.children.some(node=>node.className==='bf-spine-artist'&&node.textContent==='Artist'),
+    'artist is independently visible on the spine');
+  assert(spineLabel.children.some(node=>node.className==='bf-spine-title'&&node.textContent.startsWith('Album')),
+    'album title is independently visible on the spine');
   assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
   assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
 
