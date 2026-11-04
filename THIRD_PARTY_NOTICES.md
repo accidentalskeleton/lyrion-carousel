@@ -20,8 +20,8 @@ notices and licenses remain applicable.
 | --- | --- | --- | --- |
 | Python / standard library | HTTP server, networking and caching | Python Software Foundation License | https://docs.python.org/3/license.html |
 | Pillow (`python3-pil`) | Artwork processing | Historical Permission Notice and Disclaimer (HPND) | https://github.com/python-pillow/Pillow/blob/main/LICENSE |
-| NumPy (`python3-numpy`) | Declared Debian dependency | BSD-3-Clause (plus notices for bundled components in upstream builds) | https://github.com/numpy/numpy/blob/main/LICENSE.txt |
-| OpenCV (`python3-opencv`) | Declared Debian dependency | Apache-2.0 in OpenCV 4.5.0 and later; older versions used BSD-3-Clause | https://opencv.org/license/ |
+
+**Dependency cleanup:** The package previously declared `python3-opencv` and `python3-numpy`, but no tracked application code or tests import OpenCV or NumPy. Those two unused requirements have been removed from `packaging/debian/control.in` during the publication audit. If future features use them, declare them again and review their respective upstream notices (NumPy BSD-3-Clause; OpenCV 4.5+ Apache-2.0).
 
 Do not copy these dependencies' license texts into a bundled third-party
 directory unless the distribution model changes. **If future binary bundles,
