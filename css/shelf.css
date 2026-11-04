@@ -89,7 +89,8 @@
     display:flex;
     align-items:center;
     justify-content:center;
-    pointer-events:auto;
+    /* The wrapper spans the shelf; only the jewel case must intercept clicks. */
+    pointer-events:none;
     opacity:0;
     transform:scale(.88);
     transition:opacity .22s ease,transform .22s ease;
@@ -100,6 +101,7 @@
 }
 .bf-front-preview[hidden] { display:none; }
 .bf-front-case {
+    pointer-events:auto;
     touch-action:none;
     user-select:none;
     cursor:grab;
