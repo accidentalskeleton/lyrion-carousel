@@ -14,7 +14,7 @@ Current application version: **0.11.0**. The canonical version is stored in [`VE
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
 - circular CD shelf with artwork-derived spine colours, stable readable font choices, and configurable displayed-album count;
-- shelf view with server-prepared artist/album, album-only, colour or random ordering; random order is retained across library refreshes within the session;
+- shelf-only display with server-prepared artist/album, album-only, colour or random ordering; random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered; a 15-minute persistent catalogue snapshot avoids rescanning LMS for every sort or genre-filter change;
 - paged album-ID → `sort:artflow` position index for direct jumps, plus validated in-memory ID-to-index lookups during animation;
@@ -82,6 +82,19 @@ python3 server.py --bind 0.0.0.0
 
 `0.0.0.0` is a listening address, not a browser destination. Do not expose this server directly to the internet.
 
+### HTTP Host and cross-site request protection
+
+Carousel validates every incoming HTTP `Host` header **before** serving static content or proxying LMS calls. Loopback IPs, RFC 1918 private IPv4 addresses, IPv6 unique-local/link-local addresses, `localhost`, the machine's hostname and its `.local` form are accepted. Arbitrary public DNS names and unconfigured `.local`, `.lan` and `.home.arpa` names are **not** accepted. Additional local names can be explicitly permitted:
+
+```bash
+python3 server.py --bind 0.0.0.0 --allowed-hosts 'controller.lan,controller.home.arpa'
+```
+
+When installed as a systemd service, specify `ALLOWED_HOSTS=controller.lan,controller.home.arpa` in `/etc/default/lyrion-carousel`. The built-in `streamer` hostname is accepted when the machine's actual hostname is `streamer`, preserving `http://streamer:8088`. The `--allowed-hosts` option names permitted browser hostnames; it is **not an authentication system**.
+
+All API POST requests require `X-Lyrion-Request: 1`. Browser requests also reject an `Origin` inconsistent with the request Host, and cross-site `Sec-Fetch-Site` values. The custom header prevents basic cross-site forms from triggering configuration and playback endpoints; ordinary CLI clients may send the header without an Origin. These checks reduce DNS-rebinding and CSRF exposure, but do not authenticate LAN clients. **Keep port 8088 and the LMS server reachable only from trusted network clients or via a VPN.**
+
+
 ## Runtime options
 
 | Option | Default | Purpose |
@@ -89,6 +102,7 @@ python3 server.py --bind 0.0.0.0
 | `--lms` | `http://streamer:9000` | Lyrion Music Server base URL |
 | `--bind` | `127.0.0.1` | Controller listening address |
 | `--port` | `8088` | Controller HTTP port |
+| `--allowed-hosts` | appliance hostname | Extra comma-separated local browser hostnames |
 | `--cache-dir` | `.cache/album-art` | Persistent album cache location |
 | `--cache-limit-mb` | `512` | Initial soft artwork-cache limit, adjustable from the browser |
 | `--cache-hard-limit-mb` | `2000` | Server-only ceiling for browser cache-limit changes |
@@ -115,7 +129,7 @@ The detail area shows the album under the pointer; outside the shelf it shows th
 
 ## Shelf display and cover resolution
 
-**Settings → Displayed albums** controls how many CD spines appear across the shelf. Albums open as enlarged jewel-case previews; there is no separate display-mode selector.
+Carousel uses a single **Shelf** display. **Settings → Displayed albums** controls shelf density. Existing obsolete browser display-mode preferences are ignored automatically.
 
 **Settings → Album cover size** selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls image resolution, not the displayed case size. Server-generated JPEG variants preserve aspect ratio and never upscale. Originals remain available for spine-colour calculation.
 
@@ -150,6 +164,12 @@ Before deployment to a dedicated controller, exercise this sequence against the 
 ### Rendering optimisations
 
 The carousel uses compositor-friendly CSS transforms and renders only a bounded window of albums. Phase 4 **recycles existing spine, label and shell DOM nodes** as the visible window advances, rather than rebuilding every visible spine. Metadata callbacks check album identity before updating reused nodes; width and font geometry only change when needed, and the open jewel-case width is cached with invalidation on resize and preview transitions. It retains the playing-case pinning and manual preview timeout behaviours.
+
+### Large-library alphabet navigation and cache budgets
+
+Letter navigation uses an in-memory map from **A–Z** to the first album index in the current ordered catalogue. The map is rebuilt on catalogue replacement, sort or filter changes, and updated as individual LMS batches arrive. A fully loaded catalogue therefore jumps to a letter without requesting additional album pages or searching every album. A partially loaded LMS catalogue can still fetch missing batches when the requested letter is not yet indexed. The index follows the catalogue's `textkey` values and retains the first occurrence of each letter.
+
+The server caches a maximum of four serialized catalogue orderings **and** a combined 32 MiB of serialized payload bytes. When an order would exceed the budget, the oldest cached orderings are evicted; an individual order larger than 32 MiB is served normally but not retained. The cache remains a small, in-memory optimisation and does not affect catalogue snapshot persistence or correctness.
 
 ### Browser performance monitor
 

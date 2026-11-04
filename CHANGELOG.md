@@ -2,6 +2,19 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased — Shelf-only experience
+
+- Standardise on the CD shelf display and remove the obsolete alternate-view selector.
+- Ignore deprecated browser display-mode preferences without requiring users to clear storage.
+- Remove unused display-mode renderer, geometry, stylesheet and overlay assets.
+- Keep the playing cover, scrolling behaviour and all album actions unchanged; update JavaScript regressions and documentation.
+
+## Unreleased — Large-library navigation and cache bounds
+
+- Pre-index first album positions for A–Z to make alphabet navigation constant-time with a loaded catalogue, while preserving a partial-catalogue fallback.
+- Bound the combined serialized catalogue order cache to 32 MiB as well as four entries, evicting least-recently-used orders and avoiding retention of oversized responses.
+- Add alphabet navigation regression coverage for 20,000 albums and Python cache eviction/oversized-response tests.
+
 ## Unreleased — Phase 4 rendering performance
 
 - Recycle a bounded DOM pool of shelf spines as the viewport advances; reuse the static jewel-case shell and label nodes instead of recreating every visible spine.

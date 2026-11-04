@@ -86,6 +86,88 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(server.load_saved_lms_url(path,'http://other-lms:9000'),
                          'http://streamer:9000')
 
+    def test_request_host_allowlist_and_private_ip_ranges(self):
+        allowed_names=server.local_allowed_hosts('streamer,streamer.local,controller.home.arpa')
+        for host in ('localhost','localhost:8088','127.0.0.1:8088',
+                     '192.168.1.12','10.2.3.4','172.16.12.3',
+                     '[::1]:8088','[fd12::1]','[fe80::1]',
+                     'streamer','streamer.local','controller.home.arpa'):
+            with self.subTest(allowed=host):
+                self.assertTrue(server.is_local_request_host(host,allowed_names))
+        for host in (None,'','attacker.example','attacker.local',
+                     'attacker.lan','attacker.home.arpa',
+                     'localhost.attacker.example','streamer.attacker.example',
+                     '192.168.1.12.attacker.example','bad host',
+                     'user@localhost','localhost:invalid-port','localhost:0',
+                     'localhost:99999','localhost.','localhost,evil.example',
+                     '127.1','0.0.0.0','192.0.2.1','198.51.100.3',
+                     '8.8.8.8','224.0.0.1','169.254.1.1','[::]',
+                     '[ff02::1]','[2001:db8::1]','[::ffff:192.168.1.9]',
+                     'streamer@attacker.example','streamer#fragment'):
+            with self.subTest(rejected=host):
+                self.assertFalse(server.is_local_request_host(host,allowed_names))
+        self.assertTrue(server.is_local_request_host(
+            'othercontroller.lan',server.local_allowed_hosts('othercontroller.lan')))
+
+    def test_request_parser_rejects_foreign_hosts_and_csrf_before_dispatch(self):
+        from unittest.mock import Mock
+
+        def parse(headers,method='POST'):
+            handler=object.__new__(server.LyrionCarouselHandler)
+            handler.allowed_hosts=server.local_allowed_hosts('streamer,streamer.local')
+            handler.raw_requestline=f'{method} /api/lms HTTP/1.1\r\n'.encode()
+            handler.rfile=io.BytesIO(
+                ('\r\n'.join(headers)+'\r\n\r\n').encode())
+            handler.send_error=Mock()
+            handler.close_connection=True
+            accepted=handler.parse_request()
+            return accepted,handler.send_error
+
+        valid=['Host: streamer:8088','Origin: http://streamer:8088',
+               'X-Lyrion-Request: 1','Sec-Fetch-Site: same-origin',
+               'Content-Type: application/json']
+        accepted,error=parse(valid)
+        self.assertTrue(accepted)
+        error.assert_not_called()
+        self.assertTrue(parse(['Host: 192.168.1.12:8088',
+                               'X-Lyrion-Request: 1'])[0],
+                        'Non-browser local clients may omit Origin')
+        self.assertTrue(parse(['Host: streamer:8088'],method='GET')[0])
+        blocked=[
+            ['Host: attacker.example',*valid[1:]],
+            ['Host: attacker.local',*valid[1:]],
+            ['Host: streamer:8088','Host: attacker.example',*valid[1:]],
+            ['Host: streamer:8088','Origin: http://evil.example',
+             'X-Lyrion-Request: 1'],
+            ['Host: streamer:8088','Origin: null',
+             'X-Lyrion-Request: 1'],
+            ['Host: streamer:8088','Origin: http://streamer:8088',
+             'Origin: http://evil.example','X-Lyrion-Request: 1'],
+            ['Host: streamer:8088','Sec-Fetch-Site: cross-site',
+             'X-Lyrion-Request: 1'],
+            ['Host: streamer:8088','Sec-Fetch-Site: same-site',
+             'X-Lyrion-Request: 1'],
+            ['Host: streamer:8088','Origin: http://streamer:8088'],
+            [],
+        ]
+        for headers in blocked:
+            with self.subTest(headers=headers):
+                accepted,error=parse(headers)
+                self.assertFalse(accepted)
+                error.assert_called_once()
+                self.assertEqual(error.call_args.args[0],403)
+        accepted,error=parse(['Host: evil.example'],method='GET')
+        self.assertFalse(accepted)
+        error.assert_called_once()
+
+    def test_browser_post_calls_include_non_simple_security_header(self):
+        root=Path(__file__).resolve().parents[1]
+        for path in ('js/app.js','js/settings.js','js/lms.js'):
+            source=(root/path).read_text()
+            with self.subTest(path=path):
+                self.assertEqual(source.count("method:'POST'")+source.count("method: 'POST'"),
+                                 source.count('X-Lyrion-Request'))
+
     def test_lms_defaults_use_local_streamer_everywhere(self):
         root=Path(__file__).resolve().parents[1]
         service=(root/'packaging/debian/lyrion-carousel.service').read_text()
@@ -298,6 +380,46 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(indexer.snapshot()['status'],'complete')
         analyse.assert_called_once_with('new')
         save.assert_called_once_with({'new':metadata})
+
+    def test_serialized_order_cache_evicts_by_bytes_and_lru(self):
+        from collections import OrderedDict
+        orders=OrderedDict()
+        with patch.object(server,'CATALOGUE_SORT_CACHE_MAX_BYTES',10):
+            self.assertTrue(server.remember_catalogue_order(orders,('artistAlbum',()),b'123456'))
+            self.assertTrue(server.remember_catalogue_order(orders,('album',()),b'abcdef'))
+            self.assertNotIn(('artistAlbum',()),orders)
+            self.assertEqual(list(orders),[('album',())])
+            self.assertTrue(server.remember_catalogue_order(orders,('colour',()),b'123'))
+            self.assertEqual(sum(map(len,orders.values())),9)
+            self.assertFalse(server.remember_catalogue_order(orders,('huge',()),b'12345678901'))
+            self.assertNotIn(('huge',()),orders)
+            self.assertEqual(sum(map(len,orders.values())),9)
+            # Updating an existing key must not leave its old size counted.
+            self.assertTrue(server.remember_catalogue_order(orders,('album',()),b'12'))
+            self.assertEqual(sum(map(len,orders.values())),5)
+            self.assertEqual(list(orders),[('colour',()),('album',())])
+
+    def test_serialized_order_cache_respects_entry_limit(self):
+        from collections import OrderedDict
+        orders=OrderedDict()
+        with patch.object(server,'CATALOGUE_SORT_CACHE_MAX_BYTES',1024):
+            for index in range(server.CATALOGUE_SORT_CACHE_ENTRIES+2):
+                self.assertTrue(server.remember_catalogue_order(
+                    orders,('order',index),b'data'))
+        self.assertEqual(len(orders),server.CATALOGUE_SORT_CACHE_ENTRIES)
+        self.assertNotIn(('order',0),orders)
+        self.assertNotIn(('order',1),orders)
+
+    def test_oversized_catalogue_order_is_served_but_not_cached(self):
+        rows=[{'id':1,'artist':'Artist','album':'Long Album Title'}]
+        with patch.object(server,'CATALOGUE_SORT_CACHE_MAX_BYTES',16):
+            with patch.object(self.handler,'_catalogue_pages',return_value=iter([rows])):
+                self.handler.path='/api/catalogue?order=artistAlbum'
+                self.handler._serve_catalogue()
+            response=json.loads(self.responses[-1][1])
+            self.assertEqual(response['count'],1)
+            snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
+            self.assertFalse(snapshot['orders'])
 
     def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
         pages=[[{'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'},

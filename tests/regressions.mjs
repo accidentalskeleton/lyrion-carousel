@@ -4,7 +4,7 @@ export async function runTests(sources) {
   let checks = 0;
   const assert = (value, message) => { if (!value) throw Error(message); checks++; };
   const plain = source => source.replace(/^import .*;\n/gm, '').replace(/\bexport /g, '');
-  const geometry = new Function(plain(sources.browser) + ';return {clamp,modulo,circularDelta,nearestPositionForIndex,fanLayout};')();
+  const geometry = new Function(plain(sources.browser) + ';return {clamp,modulo,circularDelta,nearestPositionForIndex};')();
   assert(geometry.circularDelta(0, 99, 100) === 1, 'circular wrap');
   assert(geometry.nearestPositionForIndex(99, 0, 100) === -1, 'shortest route');
   const catalogue = new Function(plain(sources.catalogue) + ';return {buildAlbumPositionIndex,locateAlbum};')();
@@ -98,12 +98,12 @@ export async function runTests(sources) {
         return Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})});
       }
       return metadataFetch(url,...args);
-    },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},fanLayout:geometry.fanLayout,clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
+    },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,
+    return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -589,20 +589,16 @@ export async function runTests(sources) {
   }
   api.applySetting('coverSize',256);
   assert(api.state().albums.every(a=>a[8].includes('size=256')),'cover size updates artwork URLs');
-  const beforeStyle=api.state().albums[Math.round(api.state().position)][6];
-  api.applySetting('displayStyle','fan');
-  assert(api.state().albums[Math.round(api.state().position)][6]===beforeStyle,'display switch preserves position');
-  assert(stage.classList.contains('bf-fan-active')&&!stage.classList.contains('bf-shelf-active'),'fan style activates exclusively');
-  assert(stage.children.length<=27&&stage.children.every(el=>el.querySelector('.bf-jewel-front')),'fan renders bounded jewel cases');
-  assert(stage.children.every(el=>el.style.transform.includes('rotateY(')),'fan applies main carousel transforms');
-  api.set({position:api.state().position+35});api.draw();
-  assert(api.geometry().nodes.some(n=>n.index===Math.round(api.state().position)%api.state().albums.length),'fan updates visible window after scrolling');
-  api.applySetting('displayStyle','shelf');
-  assert(stage.classList.contains('bf-shelf-active')&&!stage.classList.contains('bf-fan-active'),'switch back restores shelf');
-  assert(stage.children.every(el=>!el.querySelector('.bf-jewel-front')),'switch back removes fan cover nodes');
-  const styleSelect=element('.bf-display-style');styleSelect.value='fan';styleSelect.listeners.change[0]();
-  assert(storage.get('albumBrowserDisplayStyle')==='fan','display style preference saved');
-  assert(window.__lyrionCarouselSettings.displayStyle==='shelf','display style defaults to shelf');
+  assert(stage.classList.contains('bf-shelf-active'),
+    'the shelf remains the only available display style');
+  assert(!stage.children.some(el=>el.querySelector('.bf-jewel-front')),
+    'shelf-only mode creates no fan cover nodes');
+  assert(!sources.index.includes('bf-display-style'),
+    'Settings no longer offers the experimental fan view');
+  assert(!sources.app.includes('syncFanDom')&&!sources.app.includes('fanLayout'),
+    'obsolete fan renderer is removed');
+  assert(window.__lyrionCarouselSettings.displayStyle===undefined,
+    'legacy fan preference is ignored on startup');
   api.set({playing:false,position:5});
   api.openFrontPreview(api.state().albums[5],5);
   const playbackCalls=rpcCalls.filter(c=>c[0]==='playlistcontrol').length;
@@ -834,11 +830,34 @@ export async function runTests(sources) {
   [largeAlbums[1],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[1]];
   assert(api.indexForAlbumId('large-19999')===1&&api.indexForAlbumId('large-1')===19999,
     'album index cache detects reordered positions and self-corrects');
+  // Letter jumps should not fetch or scan 20,000 entries on each click.
+  // The index tracks the first position in the *current* ordered catalogue.
+  largeAlbums[0][9]='A';
+  largeAlbums[15000][9]='M';
+  largeAlbums[19999][9]='Z';
+  api.replaceAlbumsForTest(largeAlbums);
+  assert(api.letterIndex().get('A')===0&&api.letterIndex().get('M')===15000&&
+    api.letterIndex().get('Z')===19999,'20k-album alphabet index stores first positions');
+  const batchRequestsBefore=rpcCalls.filter(command=>command[0]==='albums').length;
+  api.set({position:0});
+  await api.jumpToLetter('Z');
+  assert(api.state().target===-1,'letter navigation reaches final album by shortest circular route');
+  assert(rpcCalls.filter(command=>command[0]==='albums').length===batchRequestsBefore,
+    'indexed letter jump does not request LMS album pages');
+  [largeAlbums[0],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[0]];
+  api.replaceAlbumsForTest(largeAlbums);
+  assert(api.letterIndex().get('Z')===0&&api.letterIndex().get('A')===19999,
+    'alphabet index follows album reordering');
+  largeAlbums[0][9]='';
+  api.replaceAlbumsForTest(largeAlbums);
+  assert(!api.letterIndex().has('Z'),'alphabet index drops letters removed by a filter');
+  // Put the array back before the separate DOM-pool stress test.
+  [largeAlbums[0],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[0]];
+  api.replaceAlbumsForTest(largeAlbums);
   // The 20k-album browse simulation must keep the allocated spine set
   // bounded even after repeated long jumps across the library.
   api.set({playing:false});
   api.closeFrontPreview(true);
-  api.applySetting('displayStyle','shelf');
   api.replaceAlbumsForTest(largeAlbums);
   api.set({position:0});
   api.draw();
