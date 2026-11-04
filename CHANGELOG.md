@@ -2,6 +2,10 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased
+
+- Show a safe external Spotify album link within Album Information when Spotty provides a verified Spotify album URL or URI; hide it for local albums and unresolvable Spotty items.
+
 ## Unreleased — Shelf-only experience
 
 - Standardise on the CD shelf display and remove the obsolete alternate-view selector.
