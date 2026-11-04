@@ -12,7 +12,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlsplit, parse_qs
 from urllib.request import Request, urlopen
 from PIL import Image, ImageStat, ImageOps
-from spine_art import render_spine, SPINE_REVISION
 
 # Architecture: HTTP threads serve static files and a small set of LMS proxy APIs.
 # Image processing and catalogue ordering happen here, leaving the browser to
@@ -448,7 +447,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         path=urlsplit(self.path).path
         if path=='/api/cache/warm':
             self._send_payload(200,json.dumps({**ARTWORK_WARMER.snapshot(),'cache':self._cache_usage()}).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
-        if path.startswith(('/api/art/','/api/art-meta/','/api/spine/')):
+        if path.startswith(('/api/art/','/api/art-meta/')):
             ARTWORK_WARMER.last_foreground=time.monotonic()
             COLOUR_INDEXER.last_foreground=time.monotonic()
         if path=='/api/catalogue': self._serve_catalogue(); return
@@ -458,10 +457,6 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if path=='/api/spotty-art': self._serve_spotty_art(); return
         if path=='/api/spotty-art-meta': self._serve_spotty_art_meta(); return
         if path=='/api/config': self._send_payload(200,json.dumps(self.runtime_config).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
-        if path.startswith('/api/spine/'):
-            artwork_id=unquote(path.removeprefix('/api/spine/'))
-            if not ARTWORK_ID.fullmatch(artwork_id): self.send_error(400,'Invalid artwork ID'); return
-            self._serve_spine_artwork(artwork_id); return
         if path.startswith('/api/art-meta/'):
             artwork_id=unquote(path.removeprefix('/api/art-meta/'))
             if not ARTWORK_ID.fullmatch(artwork_id): self.send_error(400,'Invalid artwork ID'); return
@@ -949,24 +944,6 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                             snapshot['orders'].popitem(last=False)
             self._send_payload(200,payload,'application/json; charset=utf-8',cache_control='no-store')
         except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
-            self._send_upstream_error(error)
-
-    def _serve_spine_artwork(self,artwork_id:str)->None:
-        """Serve a lightweight, permanently cached high-resolution spine insert."""
-        key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest()
-        variant=self.cache_dir/f'{key}-{SPINE_REVISION}.img'
-        try:
-            if not variant.is_file():
-                self._ensure_artwork(artwork_id)
-                with Image.open(self.cache_dir/f'{key}.img') as original:
-                    spine=render_spine(original)
-                    output=io.BytesIO()
-                    spine.save(output,format='JPEG',quality=88,optimize=True)
-                self._store_artwork(variant,variant.with_suffix('.type'),output.getvalue(),'image/jpeg')
-                self._prune_artwork_cache(force=False)
-            self._send_payload(200,variant.read_bytes(),'image/jpeg',
-                               cache_control='public, max-age=86400')
-        except (OSError,ValueError,URLError,UpstreamPayloadTooLarge) as error:
             self._send_upstream_error(error)
 
     def _serve_sized_artwork(self,artwork_id:str,size:int,case:bool=False)->None:
