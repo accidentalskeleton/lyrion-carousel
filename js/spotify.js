@@ -131,7 +131,8 @@ export async function spotifyAlbumInformation(playerId,album){
   });
   const meta=rows.find(item=>item?.genre||item?.genres||item?.year||item?.album)||{};
   const genres=[meta.genre,meta.genres].flat().filter(Boolean).join(', ');
-  return {tracks,genre:genres,year:meta.year||''};
+  const link=[meta,...rows].map(row=>spotifyAlbumUrl(spotifyUri(row))||spotifyAlbumUrl(row?.external_urls?.spotify)||spotifyAlbumUrl(row?.url)).find(Boolean)||'';
+  return {tracks,genre:genres,year:meta.year||'',spotifyUrl:link};
 }
 
 export async function saveSpotifyAlbum(playerId,album){
