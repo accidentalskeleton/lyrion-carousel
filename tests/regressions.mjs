@@ -102,7 +102,8 @@ export async function runTests(sources) {
     },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]}),
-    spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')()};
+    spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
+    spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
     return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
@@ -718,7 +719,7 @@ export async function runTests(sources) {
       if(cmd.includes('item_id:7'))return {items_loop:[{id:'album-1',name:'Saved Album by Saved Artist',image:'/imageproxy/saved'}]};
       return {items_loop:[{id:'2',name:'Search',type:'search'},{id:'7',name:'Albums'}]};
     };
-    const spotty=new Function('rpc',plain(sources.spotify)+';return {normalizeSpottyAlbum,spotifyAlbumUrl,savedSpotifyAlbums,searchSpotifyAlbums,playSpotifyAlbum,saveSpotifyAlbum,spotifyAlbumInformation};')(spottyRpc);
+    const spotty=new Function('rpc',plain(sources.spotify)+';return {normalizeSpottyAlbum,spotifyAlbumUrl,spotifyAlbumSearchUrl,savedSpotifyAlbums,searchSpotifyAlbums,playSpotifyAlbum,saveSpotifyAlbum,spotifyAlbumInformation};')(spottyRpc);
     const normalized=spotty.normalizeSpottyAlbum({id:'x',name:'Title by Artist',image:'/imageproxy/x'});
     assert(normalized.source==='spotify'&&normalized.title==='Title'&&normalized.artist==='Artist'&&normalized.spottyItemId==='x','Spotty album normalization');
     const spotifyId='4aawyAB9vmqN3uQ7FjRGTy';
@@ -731,6 +732,8 @@ export async function runTests(sources) {
       'navigation tokens, lookalike hosts and track links are never promoted to album links');
     assert(spotty.normalizeSpottyAlbum({id:'album-1',favorites_url:'spotify:album:'+spotifyId}).spotifyUrl===spotifyUrl,
       'saved Spotify entries retain a verified album link');
+    assert(spotty.spotifyAlbumSearchUrl('The 2nd Law','Muse')==='https://open.spotify.com/search/The%202nd%20Law%20Muse/albums',
+      'Spotify album search fallback uses album and artist instead of guessing a direct album ID');
     const saved=await spotty.savedSpotifyAlbums('player');
     assert(saved.length===1&&saved[0].title==='Saved Album'&&spottyCalls.some(c=>c.includes('item_id:7')),'saved Spotify albums use discovered Albums node');
     const searched=await spotty.searchSpotifyAlbums('player','needle');
@@ -745,15 +748,15 @@ export async function runTests(sources) {
       'Album Information contains a safe external Spotify album link');
     const candidate=['Spotify Album','Spotify Artist','', '', '0','0deg','spotify:album-1',true,'','',2020,'',undefined,'spotify','album-1',undefined,spotifyUrl];
     await api.showTrackList(candidate);
-    assert(!element('.bf-track-spotify-link').hidden&&element('.bf-track-spotify-link').href===spotifyUrl,
+    assert(!element('.bf-track-spotify-link').hidden&&element('.bf-track-spotify-link').href===spotifyUrl&&element('.bf-track-spotify-link').textContent.startsWith('Open album'),
       'verified Spotify album link is visible in Album Information');
     api.closeTrackList();
     assert(element('.bf-track-spotify-link').hidden&&!element('.bf-track-spotify-link').getAttribute('href'),
       'closing Album Information clears the external destination');
     candidate[16]='javascript:alert(1)';
     await api.showTrackList(candidate);
-    assert(element('.bf-track-spotify-link').hidden,
-      'untrusted external destination is not linked');
+    assert(!element('.bf-track-spotify-link').hidden&&element('.bf-track-spotify-link').href.startsWith('https://open.spotify.com/search/')&&element('.bf-track-spotify-link').textContent.startsWith('Find album'),
+      'untrusted direct URL is rejected and replaced with explicitly labelled Spotify search');
     api.closeTrackList();
   }
   if (sources.index) {
