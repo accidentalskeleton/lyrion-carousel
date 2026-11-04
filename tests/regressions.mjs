@@ -4,7 +4,7 @@ export async function runTests(sources) {
   let checks = 0;
   const assert = (value, message) => { if (!value) throw Error(message); checks++; };
   const plain = source => source.replace(/^import .*;\n/gm, '').replace(/\bexport /g, '');
-  const geometry = new Function(plain(sources.browser) + ';return {clamp,modulo,circularDelta,nearestPositionForIndex,fanLayout};')();
+  const geometry = new Function(plain(sources.browser) + ';return {clamp,modulo,circularDelta,nearestPositionForIndex};')();
   assert(geometry.circularDelta(0, 99, 100) === 1, 'circular wrap');
   assert(geometry.nearestPositionForIndex(99, 0, 100) === -1, 'shortest route');
   const catalogue = new Function(plain(sources.catalogue) + ';return {buildAlbumPositionIndex,locateAlbum};')();
@@ -98,7 +98,7 @@ export async function runTests(sources) {
         return Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})});
       }
       return metadataFetch(url,...args);
-    },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},fanLayout:geometry.fanLayout,clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
+    },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]})};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
