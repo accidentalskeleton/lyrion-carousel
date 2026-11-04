@@ -225,7 +225,9 @@
     background:transparent;
     color:#aaaead;
     font:inherit;
-    font-size:12px;
+    font-size:14px;
+    font-weight:600;
+    line-height:1.25;
     cursor:pointer;
 }
 .bf-settings-tab:hover { background:rgba(255,255,255,.05); color:#eeece6; }
