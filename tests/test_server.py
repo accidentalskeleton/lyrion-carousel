@@ -37,6 +37,15 @@ class ServerTests(unittest.TestCase):
         self.assertIn("element.style.setProperty('--spine-font-family',meta.spine_font)",app)
         self.assertNotIn('color:#fff;',css.split('.bf-spine-label {',1)[1].split('}',1)[0])
 
+    def test_spine_text_is_centered_independently_of_font(self):
+        css=(Path(__file__).resolve().parents[1]/'css/shelf.css').read_text()
+        label=css.split('.bf-spine-label {',1)[1].split('}',1)[0]
+        self.assertIn('left:50%;',label)
+        self.assertIn('transform:translateX(-50%)!important;',label)
+        self.assertIn('width:max-content;',label)
+        self.assertIn('writing-mode:vertical-rl;',label)
+        self.assertNotIn('inset:19px 4px;',label)
+
     def test_lms_selection_survives_restart_and_artwork_cache_clear(self):
         self.handler.runtime_config={'lms_url':'http://test:9000'}
         body=json.dumps({'lms_url':'http://streamer:9000/'}).encode()
