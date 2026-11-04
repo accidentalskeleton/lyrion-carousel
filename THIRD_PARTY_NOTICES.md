@@ -55,8 +55,8 @@ licenses and copyright/notice obligations.**
 | `assets/jewel-case-spine-v1.svg` | Vector jewel-case illustration committed with the project; no external source or trademark found in its SVG markup | Confirm author/rights holder before applying project GPL terms |
 | `assets/lyrion-carousel-icon.svg` | Vector UI icon committed with the project; SVG markup contains simple shapes, no third-party links | Confirm author/rights holder |
 | `assets/lyrion-carousel-banner.jpg` | **Created by Stuart Roberts**, confirmed by the project owner on 4 November 2026 | Creator attribution confirmed. Check whether the finished banner incorporates third-party album covers, logos or photography before granting redistribution rights to its contents |
-| `assets/lyrion-carousel-feature-tour.mp4` | **Created by Stuart Roberts**, confirmed by the project owner on 4 November 2026 | Creator attribution confirmed. Check whether recordings show protected album covers or include music, logos or other third-party material |
-| `assets/jewel-case-overlay.svg` | Legacy Fan-only vector overlay | Planned removal in the separate shelf-only PR; avoid distributing unused assets |
+| `assets/lyrion-carousel-feature-tour.mp4` | **Created by Stuart Roberts**, confirmed by the project owner on 4 November 2026 | Creator attribution confirmed; **the creator confirms the video is silent** and contains no soundtrack. Review any displayed commercial album covers, logos or other third-party visual material |
+| `assets/jewel-case-overlay.svg` | Deprecated vector overlay used by an early prototype | Removed from the forthcoming shelf-only release in PR #28; old Git commits may still contain the asset |
 
 The source uses local system font families rather than bundling font binaries.
 The README support badge is served by Shields.io at view time; its remote
@@ -74,8 +74,9 @@ release screenshots, demonstration videos or sample library datasets.
 1. **Creator of banner and video confirmed: Stuart Roberts.** Before publishing,
    review *underlying content* in those assets. If either includes commercial
    album covers, music or unauthorised third-party graphics, use cleared
-   examples or obtain suitable permission. Creating the composition or
-   recording does not itself license embedded third-party works.
+   examples or obtain suitable permission. The feature-tour recording has
+   **no audio soundtrack** (confirmed by its creator). Creating the composition
+   or recording does not itself license embedded third-party visuals.
 2. Confirm ownership of the project-authored SVG files and generated jewel-case
    image; list any exceptions to the project's GPL grant explicitly.
 3. Check current Spotify attribution/link-back requirements against the actual
