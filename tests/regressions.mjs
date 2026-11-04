@@ -834,7 +834,25 @@ export async function runTests(sources) {
   [largeAlbums[1],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[1]];
   assert(api.indexForAlbumId('large-19999')===1&&api.indexForAlbumId('large-1')===19999,
     'album index cache detects reordered positions and self-corrects');
+  // The 20k-album browse simulation must keep the allocated spine set
+  // bounded even after repeated long jumps across the library.
+  api.set({playing:false});
+  api.closeFrontPreview(true);
+  api.applySetting('displayStyle','shelf');
+  api.replaceAlbumsForTest(largeAlbums);
+  api.set({position:0});
+  api.draw();
+  const hugePool=new Set(stage.children);
+  for(let i=1;i<=120;i++){
+    api.set({position:(i*151)%largeAlbums.length});
+    api.draw();
+    assert(stage.children.length===hugePool.size,
+      '20k-album browse keeps constant visible DOM size at jump '+i);
+    assert(stage.children.every(el=>hugePool.has(el)),
+      '20k-album browse reuses existing elements at jump '+i);
+  }
   api.replaceAlbumsForTest(savedAlbums);
+  api.set({position:0});api.draw();
 
 
   return checks;
