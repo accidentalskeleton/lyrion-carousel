@@ -859,9 +859,17 @@ export async function runTests(sources) {
   // until requested, then generate a portable deterministic report.
   if(sources.performance){
     let clock=0,frameId=0,frameCallback=null,scheduled=0,cancelled=0;
-    const observed=[],stageElement={
+    const observed=[],handlers=new Map();
+    const eventTarget=prefix=>({
+      addEventListener(name,fn){handlers.set(prefix+':'+name,fn)},
+      removeEventListener(name,fn){if(handlers.get(prefix+':'+name)===fn)handlers.delete(prefix+':'+name)}
+    });
+    const stageElement=Object.assign(eventTarget('stage'),{
       querySelectorAll:()=>Array.from({length:36},()=>({}))
-    };
+    });
+    const perfDocument=Object.assign(eventTarget('document'),{
+      visibilityState:'visible',querySelector:()=>stageElement
+    });
     class FakeObserver {
       constructor(callback){this.callback=callback;observed.push(this);}
       observe(){} disconnect(){} takeRecords(){return [];}
@@ -873,7 +881,7 @@ export async function runTests(sources) {
       'MutationObserver','PerformanceObserver','requestAnimationFrame',
       'cancelAnimationFrame','location','URL','setTimeout',
       perfCode+';return window.lyrionPerf;')(
-        perfWindow,{querySelector:()=>stageElement},perfConsole,
+        perfWindow,perfDocument,perfConsole,
         {now:()=>clock},
         class{observe(){} disconnect(){} takeRecords(){return []}},
         FakeObserver,callback=>{scheduled++;frameCallback=callback;return ++frameId},
@@ -891,6 +899,40 @@ export async function runTests(sources) {
     assert(report.frameMs.p95>=16&&report.frameMs.p95<18,
       'profiler calculates frame-time percentiles in milliseconds');
     assert(report.estimatedDroppedFrames===0,'smooth frames produce no dropped-frame estimate');
+    assert(report.detectedFps>=59&&report.detectedFps<=61,
+      'profiler detects 60Hz from observed rAF samples');
+    assert(report.activeScrolling.sampledFrames===0,
+      'idle frames do not count as active scrolling frames');
+    assert(report.suspensions.count===0,'normal rAF intervals are not suspensions');
+    assert(handlers.size===0,'profiler cleans up every temporary input listener');
+
+    // A 144Hz sample with a multi-second browser suspension should report
+    // normal active FPS without inventing hundreds of dropped frames.
+    browser.start({label:'144Hz-test'});
+    for(let i=0;i<40;i++){
+      clock+=1000/144;const tick=frameCallback;tick(clock);
+    }
+    handlers.get('stage:wheel')();
+    for(let i=0;i<90;i++){
+      clock+=1000/144;const tick=frameCallback;tick(clock);
+    }
+    clock+=4534.8;frameCallback(clock);
+    for(let i=0;i<35;i++){
+      clock+=1000/144;const tick=frameCallback;tick(clock);
+    }
+    const fastReport=browser.stop();
+    assert(fastReport.detectedFps>=143&&fastReport.detectedFps<=145,
+      'profiler detects a high-refresh display rather than assuming 60Hz');
+    assert(fastReport.effectiveFps===fastReport.detectedFps,
+      'automatic refresh detection selects the frame budget');
+    assert(fastReport.suspensions.count===1&&fastReport.suspensions.longestMs>4500,
+      'multi-second rAF gaps are reported separately as suspensions');
+    assert(fastReport.estimatedDroppedFrames===0&&fastReport.frameMs.max<8,
+      'suspensions do not inflate the missed-frame estimate or frame-time maximum');
+    assert(fastReport.activeScrolling.sampledFrames>0&&
+      fastReport.activeScrolling.estimatedFps>=140,
+      'active browsing FPS excludes idle time and suspended intervals');
+    assert(handlers.size===0,'second capture also removes its event listeners');
     assert(browser.lastReport===report,'profiler exposes its most recent report');
     assert(browser.compare(report,report)['Frame p95 (ms)'].improvementPercent===0,
       'profiler comparison works for equal baseline and candidate');
