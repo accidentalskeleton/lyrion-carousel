@@ -55,7 +55,7 @@ All notable changes to Lyrion Carousel are documented here.
 - Refine shelf spines with narrow moulded plastic rails, recessed paper labels and tighter contact shadows, preserving label typography and padding.
 
 - Composite album artwork beneath a photographic-style transparent jewel-case shell on the server, caching resolution-specific PNGs.
-- Use the composition in the fan and open shelf covers, with lightweight reflections and a fan case edge.
+- Use the composition in enlarged shelf cover previews with lightweight reflections.
 
 ## [0.10.0] - 2026-09-21
 
@@ -91,7 +91,7 @@ All notable changes to Lyrion Carousel are documented here.
 ### Displays and playback
 
 - Add a circular CSS spine shelf with artwork-derived colours, varied readable fonts, ellipsis and padded labels inset from the case end caps.
-- Add a saved Shelf/Fan display setting, retaining the fan layout with bounded rendering; Shelf is the default.
+- Add the bounded CD shelf layout and saved browsing settings.
 - Open the playing album on startup and idle return; use a random browsing position without playback when nothing is playing.
 - Keep the playing cover open by default, move it with scrolling, and follow album changes. Add click-to-close and long-press album actions.
 - Centre and open the playing album immediately after changing sort order.
