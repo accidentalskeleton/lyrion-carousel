@@ -6,7 +6,7 @@
 
 # Lyrion Carousel
 
-Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines or a fan of jewel-case covers. Both displays use CSS transforms; no WebGL renderer or remote font downloads are required.
+Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines, with enlarged jewel-case artwork when you select an album. It uses CSS transforms; no WebGL renderer or remote font downloads are required.
 
 Current application version: **0.11.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
@@ -14,7 +14,7 @@ Current application version: **0.11.0**. The canonical version is stored in [`VE
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
 - circular CD shelf with artwork-derived spine colours, stable readable font choices, and configurable displayed-album count;
-- saved Shelf/Fan display style and server-prepared artist/album, album-only, colour or random ordering; random order is retained across library refreshes within the session;
+- shelf view with server-prepared artist/album, album-only, colour or random ordering; random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered; a 15-minute persistent catalogue snapshot avoids rescanning LMS for every sort or genre-filter change;
 - paged album-ID → `sort:artflow` position index for direct jumps, plus validated in-memory ID-to-index lookups during animation;
@@ -113,9 +113,9 @@ A short click on an ordinary preview or the surrounding shelf closes it. Hold a 
 
 The detail area shows the album under the pointer; outside the shelf it shows the playing album, or clears when nothing is playing. Track details and progress appear only for the playing album. The heading stays at the same vertical position in both states.
 
-## Display style and cover resolution
+## Shelf display and cover resolution
 
-**Settings → Display style** switches immediately between Shelf (default) and Fan. The choice is saved per browser; both share ordering, playback and cover controls. Displayed albums controls shelf density; the fan keeps a bounded window of nearby cases.
+**Settings → Displayed albums** controls how many CD spines appear across the shelf. Albums open as enlarged jewel-case previews; there is no separate display-mode selector.
 
 **Settings → Album cover size** selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls image resolution, not the displayed case size. Server-generated JPEG variants preserve aspect ratio and never upscale. Originals remain available for spine-colour calculation.
 
@@ -438,7 +438,7 @@ Spotify support requires the Spotty plugin to be installed and authenticated in 
 
 ## Realistic jewel-case rendering
 
-Resized cover requests use `case=realistic-v1`. The server composites artwork beneath `assets/jewel-case-realistic-v1.png` and caches a PNG at the selected resolution. Both local and Spotify fan/open-shelf covers use this presentation. Original artwork still supplies spine colours. The browser adds restrained reflections without a Three.js/WebGL rendering loop.
+Resized cover requests use `case=realistic-v1`. The server composites artwork beneath `assets/jewel-case-realistic-v1.png` and caches a PNG at the selected resolution. Both local and Spotify open-shelf covers use this presentation. Original artwork still supplies spine colours. The browser adds restrained reflections without a Three.js/WebGL rendering loop.
 
 The browser preloads the focused cover and up to four neighbours on each side, with two low-priority image requests at a time. Queued work follows the latest browsing position, and at most 24 loaded images are retained by the preloader.
 
