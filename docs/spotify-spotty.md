@@ -20,7 +20,7 @@ Carousel does not store Spotify credentials and does not use Spotify Web Playbac
 
 The production source supports:
 
-- saved Spotify albums in the Shelf and Fan displays;
+- saved Spotify albums in the CD shelf display;
 - full Spotify album search through Spotty;
 - temporary insertion/centering of a search result in the Spotify carousel;
 - playback through the selected LMS player;
