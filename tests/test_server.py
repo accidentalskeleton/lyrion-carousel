@@ -28,6 +28,15 @@ class ServerTests(unittest.TestCase):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
         return self.handler.cache_dir / f'{key}.img', self.handler.cache_dir / f'{key}.meta'
 
+    def test_spine_text_style_uses_cover_metadata(self):
+        css=(Path(__file__).resolve().parents[1]/'css/shelf.css').read_text()
+        app=(Path(__file__).resolve().parents[1]/'js/app.js').read_text()
+        self.assertIn('color:var(--spine-text,#f5f2ea)',css)
+        self.assertIn('var(--spine-font-family,Arial,Helvetica,sans-serif)',css)
+        self.assertIn("element.style.setProperty('--spine-text',meta.text_color)",app)
+        self.assertIn("element.style.setProperty('--spine-font-family',meta.spine_font)",app)
+        self.assertNotIn('color:#fff;',css.split('.bf-spine-label {',1)[1].split('}',1)[0])
+
     def test_lms_selection_survives_restart_and_artwork_cache_clear(self):
         self.handler.runtime_config={'lms_url':'http://test:9000'}
         body=json.dumps({'lms_url':'http://streamer:9000/'}).encode()
