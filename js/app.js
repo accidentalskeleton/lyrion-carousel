@@ -129,7 +129,7 @@ async function followPlayingSource(){
 }
 
 const orderLabels={artistAlbum:'Artist / Album',album:'Album',random:'Random',colour:'Colour',recent:'Recently Added'};
-function updateOrderToggle(){const label=orderLabels[orderMode];orderToggle.dataset.mode=orderMode;orderToggle.title='Album order: '+label;orderToggle.setAttribute('aria-label','Album order: '+label+'. Open order options');orderToggle.setAttribute('aria-expanded',String(!orderMenu.hidden));orderToggle.setAttribute('aria-pressed',String(orderMode==='random'));orderMenu.querySelectorAll('[data-order]').forEach(button=>button.setAttribute('aria-checked',String(button.dataset.order===orderMode)))}
+function updateOrderToggle(){const label=orderLabels[orderMode];orderToggle.dataset.mode=orderMode;orderToggle.title='Album order: '+label;orderToggle.setAttribute('aria-label','Album order: '+label+'. Open order options');orderToggle.setAttribute('aria-expanded',String(!orderMenu.hidden));orderToggle.setAttribute('aria-pressed',String(orderMode==='random'));orderMenu.querySelectorAll('[data-order]').forEach(button=>{button.setAttribute('aria-checked',String(button.dataset.order===orderMode));button.disabled=catalogueSource==='spotify'&&button.dataset.order==='recent'})}
 function closeOrderMenu(){orderMenu.hidden=true;updateOrderToggle()}
 function openOrderMenu(){closeAlbumMenu();const rect=orderToggle.getBoundingClientRect();orderMenu.hidden=false;orderMenu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-190))+'px';orderMenu.style.bottom=Math.max(12,window.innerHeight-rect.top+8)+'px';updateOrderToggle();orderMenu.querySelector(`[data-order="${orderMode}"]`)?.focus()}
 async function setDisplayOrder(mode){
