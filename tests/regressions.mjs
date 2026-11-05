@@ -114,10 +114,10 @@ export async function runTests(sources) {
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
-      finiteShelfBounds,
+      finiteShelfBounds,snapShelfPosition,
       prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
-      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex}),
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
   async function settle(promise) {
@@ -700,7 +700,19 @@ export async function runTests(sources) {
   const caseWidth=api.frontCaseWidth();
   const shelfWidth=stage.clientWidth;
   api.set({playing:false,position:firstStop});
+  api.closeFrontPreview();api.draw();
+  const closedSpines=new Map(api.geometry().nodes.map(node=>[node.index,node.el.style.transform]));
   api.openFrontPreview(api.state().albums[0],0);
+  api.draw();
+  let stableSpines=0;
+  for(const node of api.geometry().nodes){
+    if(!closedSpines.has(node.index))continue;
+    stableSpines++;
+    assert(node.el.style.transform===closedSpines.get(node.index),
+      'opening an edge cover never displaces existing CD shelf spines');
+  }
+  assert(stableSpines>=15,'spine invariance is checked against actual occupied shelf');
+
   assert(api.state().target===firstStop&&!preview.hidden,
     'opening the newest album does not extend the finite scroll limit');
   api.draw();
@@ -709,6 +721,30 @@ export async function runTests(sources) {
   api.browseWithArrow(-1);
   assert(api.state().target===firstStop,
     'open case cannot scroll past the first finite endpoint');
+  const beforeWheel=api.state().position;
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:1200,preventDefault(){}});
+  assert(api.state().position>beforeWheel&&api.state().target===api.state().position,
+    'wheel genuinely scrolls a bounded shelf while a cover is open');
+  const afterWheel=api.state().position;
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-1200,preventDefault(){}});
+  assert(api.state().position<afterWheel&&api.state().position===firstStop,
+    'wheel can reverse back to the left bounded endpoint');
+  const snapTimer=api.state().wheelTimer;
+  assert(timers.has(snapTimer),'wheel release schedules endpoint snapping');
+  timers.get(snapTimer)();api.draw();
+  assert(api.state().target===firstStop&&api.state().position===firstStop,
+    'wheel snap does not shift a half-album endpoint inward');
+  api.browseWithArrow(1);
+  assert(api.state().target===firstStop+1,
+    'arrow from half-album endpoint advances exactly one album');
+  api.set({position:firstStop});
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:231,clientX:400,clientY:90});
+  preview.dispatchEvent({type:'pointermove',target:coverTarget,pointerId:231,clientX:180,clientY:90});
+  preview.dispatchEvent({type:'pointerup',target:coverTarget,pointerId:231});
+  assert(api.state().target>firstStop,
+    'dragging an open edge case scrolls within the finite shelf');
+  api.set({position:firstStop});
+
   // A playing cover is pinned to its album, not to the viewport or a
   // perpetual recentering request. Browser navigation must remain usable.
   api.set({playing:true,playingAlbumId:api.state().albums[0][6]});
@@ -738,6 +774,15 @@ export async function runTests(sources) {
   api.browseWithArrow(1);
   assert(api.state().target===lastStop,
     'open case cannot scroll past the last finite endpoint');
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-1200,preventDefault(){}});
+  assert(api.state().position<lastStop,
+    'mouse wheel scrolls inward from the right endpoint with cover open');
+  api.set({position:lastStop});
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:1200,preventDefault(){}});
+  const lastSnapTimer=api.state().wheelTimer;
+  timers.get(lastSnapTimer)();api.draw();
+  assert(api.state().target===lastStop,
+    'wheel snapping preserves the exact right endpoint');
   api.closeFrontPreview();
   assert(api.state().target===lastStop,
     'closing oldest cover preserves the finite endpoint');
