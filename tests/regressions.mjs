@@ -570,8 +570,17 @@ export async function runTests(sources) {
     'long press suppresses synthetic short-press playback');
   // The mouse may still be positioned over a different spine when the
   // user finishes clicking a discovery menu item.
-  api.set({hover:4});api.updateMeta(true);
-  await settle(api.discoverAlbum('forgotten'));
+  api.set({hover:4,position:0});api.updateMeta(true);
+  const firstDiscovery=api.discoverAlbum('forgotten');
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  assert(api.state().discoveryBusy&&api.state().followAnimation,
+    'first discovery starts a shelf animation before opening its cover');
+  // Moving the mouse onto the shelf after clicking the menu must not cancel
+  // the first discovery animation before its selected jewel case opens.
+  document.dispatchEvent({type:'pointermove',target:stage,clientX:45,clientY:50});
+  assert(api.state().followAnimation,
+    'mouse movement during discovery does not cancel its animation');
+  await settle(firstDiscovery);
   assert(api.state().hoveredAlbumIndex===-1&&api.state().discoveryHoverSuspended,
     'rediscovery discards stale mouse hover and suspends passive hit testing');
   const hoverSpine=stage.children.find(node=>node.dataset?.index!==undefined);
