@@ -699,6 +699,49 @@ body {
 .bf-random.is-busy svg {
     animation:bf-shamrock-spin .8s linear infinite
 }
+.bf-discovery-menu {
+    position:fixed;
+    z-index:220;
+    width:min(280px,calc(100vw - 24px));
+    padding:9px;
+    border:1px solid rgba(255,255,255,.17);
+    border-radius:10px;
+    background:rgba(17,20,23,.98);
+    box-shadow:0 18px 44px rgba(0,0,0,.55);
+    backdrop-filter:blur(12px);
+}
+.bf-discovery-menu[hidden] { display:none; }
+.bf-discovery-menu > strong {
+    display:block;
+    padding:7px 9px 10px;
+    color:#9fd0a2;
+    font-size:12px;
+    font-weight:600;
+}
+.bf-discovery-menu button {
+    display:block;
+    width:100%;
+    min-height:54px;
+    border:0;
+    border-radius:7px;
+    padding:8px 9px;
+    background:transparent;
+    color:#f1eee8;
+    font:inherit;
+    font-size:12px;
+    text-align:left;
+    cursor:pointer;
+}
+.bf-discovery-menu button span {
+    display:block;
+    margin-top:4px;
+    color:var(--bf-muted);
+    font-size:10px;
+}
+.bf-discovery-menu button:hover,.bf-discovery-menu button:focus-visible {
+    background:rgba(143,186,145,.13);
+    outline:1px solid rgba(143,186,145,.5);
+}
 .bf-order-toggle {
     position:absolute;
     z-index:95;
