@@ -380,20 +380,30 @@ function syncShelfDom(){
     const open=!frontPreview.hidden&&frontPreviewIndex>=0;
     const frontDelta=open?shelfDelta(frontPreviewIndex,position):0;
     const frontWidth=frontCaseWidth();
-    // When a finite shelf reaches its edge the playing album may remain
-    // off-centre. Keep its *whole* jewel case onscreen without scrolling
-    // outside the library, and give adjacent spines room for the case.
+    // For a finite shelf, the case can remain off-centre at either end.
+    // Gently keep it on screen only at the endpoint; when browsing away,
+    // let it travel with its album instead of pinning it to the viewport.
     const naturalCoverX=frontDelta*pitch;
-    const viewportWidth=stage.clientWidth;
-    const coverLimit=Math.max(0,(viewportWidth-frontWidth)/2);
-    const coverX=open&&boundedShelf()?clamp(naturalCoverX,-coverLimit,coverLimit):naturalCoverX;
+    let coverX=naturalCoverX;
+    if(open&&boundedShelf()){
+        const [first,last]=finiteShelfBounds();
+        const coverLimit=Math.max(0,(stage.clientWidth-frontWidth)/2);
+        const scrollFade=Math.max(1,frontWidth/Math.max(1,pitch));
+        const nearFirst=clamp(1-(position-first)/scrollFade,0,1);
+        const nearLast=clamp(1-(last-position)/scrollFade,0,1);
+        const edgeWeight=Math.max(nearFirst,nearLast);
+        coverX+=edgeWeight*(clamp(naturalCoverX,-coverLimit,coverLimit)-naturalCoverX);
+    }
     if(frontCase)frontCase.style.transform=`translate3d(${coverX}px,0,0)`;
-    const gapShift=open?Math.max(0,(frontWidth-pitch)/2):0;
-    const coverAdjustment=coverX-naturalCoverX;
+    const coverLeft=coverX-frontWidth/2,coverRight=coverX+frontWidth/2;
+    const normalGap=open?Math.max(0,(frontWidth-pitch)/2):0;
+    const rightSpineLeft=(frontDelta+.5)*pitch;
+    const leftSpineRight=(frontDelta-.5)*pitch;
+    const shiftRight=open?(boundedShelf()?Math.max(0,coverRight-rightSpineLeft):normalGap):0;
+    const shiftLeft=open?(boundedShelf()?Math.max(0,leftSpineRight-coverLeft):normalGap):0;
     nodes.forEach(node=>{
         const d=shelfDelta(node.index,position);
-        const sideShift=d<frontDelta?-(gapShift+Math.max(0,-coverAdjustment)):
-            d>frontDelta?gapShift+Math.max(0,coverAdjustment):0;
+        const sideShift=d<frontDelta?-shiftLeft:d>frontDelta?shiftRight:0;
         const hiddenSpine=open&&node.index===frontPreviewIndex;
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
         if(node.cachedPitch!==pitch){
@@ -442,7 +452,7 @@ async function ensurePlayingCover(){
     }catch(_){/* A later playback update can retry when the catalogue is available. */}
 }
 function closeFrontPreview(suppressReopen=false){if(isPlayingCoverPinned()&&!suppressReopen)return;invalidateFrontCaseWidth();cancelFrontPress();clearTimeout(frontTimer);frontTimer=0;frontPreviewIndex=-1;frontPreviewAlbum=null;frontPreview.hidden=true;frontPreview.dataset.visible='false';frontPreview.setAttribute('aria-hidden','true');if(boundedShelf()){target=shelfPosition(target);schedule()}syncShelfDom();if(!playing)updateMeta(true);if(!suppressReopen&&KEEP_PLAYING_OPEN&&playing&&playingCarouselIndex()>=0)ensurePlayingCover()}
-function openFrontPreview(album,index){if(!album)return;invalidateFrontCaseWidth();clearTimeout(frontTimer);frontPreviewIndex=index;frontPreviewAlbum=album;prefetchCoverWindow(index);frontArt.style.background=album[2];frontPreview.hidden=false;frontPreview.dataset.visible='true';frontPreview.setAttribute('aria-hidden','false');frontPreview.dataset.pinned=String(isPlayingCoverPinned());if(boundedShelf()&&!dragging){target=shelfPosition(nearestPositionForIndex(index));schedule()}syncShelfDom();resumeFrontTimeout();if(!playing)updateMeta(true)}
+function openFrontPreview(album,index){if(!album)return;invalidateFrontCaseWidth();clearTimeout(frontTimer);frontPreviewIndex=index;frontPreviewAlbum=album;prefetchCoverWindow(index);frontArt.style.background=album[2];frontPreview.hidden=false;frontPreview.dataset.visible='true';frontPreview.setAttribute('aria-hidden','false');frontPreview.dataset.pinned=String(isPlayingCoverPinned());syncShelfDom();resumeFrontTimeout();if(!playing)updateMeta(true)}
 frontPlay.onclick=async event=>{event.stopPropagation();const album=frontPreviewAlbum;if(!album)return;try{await loadAlbum(album);closeFrontPreview()}catch(_){setConnection('Could not play album',false);scheduleReconnect()}};
 // Dismiss from the exposed shelf without opening or playing the spine underneath.
 root.addEventListener('pointerdown',event=>{
