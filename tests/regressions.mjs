@@ -579,6 +579,16 @@ export async function runTests(sources) {
   await settle(api.discoverAlbum('surprise'));
   assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===controlsBeforeDiscovery,
     'all rediscovery modes select an album without starting playback');
+  const idleCover=api.state().frontPreviewAlbum;
+  assert(element('.bf-meta').children.length===1,
+    'idle rediscovery displays album and artist details without a playing track');
+  assert(element('.bf-meta').children[0].children[0].textContent===idleCover[0]&&
+    element('.bf-meta').children[0].children[1].textContent.includes(idleCover[1]),
+    'idle rediscovery detail heading identifies the opened album');
+  api.closeFrontPreview();
+  assert(element('.bf-meta').children.length===0,
+    'closing an idle album preview clears its detail heading');
+
 
   const tabs=['display','playback','connection','genres','cache','about'].map(name=>{
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
