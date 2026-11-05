@@ -818,6 +818,8 @@ body {
     cursor:pointer
 }
 .bf-order-menu button:hover,.bf-order-menu button:focus-visible { background:rgba(255,255,255,.1); outline:none; }
+.bf-order-menu button:disabled { opacity:.35; cursor:default; }
+.bf-order-menu button:disabled:hover { background:transparent; }
 .bf-order-menu button[aria-checked="true"] { background:rgba(255,255,255,.08); }
 .bf-order-menu svg { width:19px; height:19px; flex:0 0 auto; }
 .bf-order-menu button[data-order="artistAlbum"] svg { color:#8fb8c8; }
