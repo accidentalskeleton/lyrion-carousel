@@ -704,7 +704,7 @@ function scrollToAlbumIndex(index){
     });
 }
 function armIdleReturn(delayOverride=null){clearTimeout(idleTimer);if(IDLE_RETURN_MS<=0)return;const elapsed=Date.now()-lastActivityAt,delay=delayOverride===null?Math.max(0,IDLE_RETURN_MS-elapsed):delayOverride;idleTimer=setTimeout(()=>returnToPlayingAlbum(),delay)}
-function noteUserActivity(){cancelFollowAnimation();lastActivityAt=Date.now();idleReturnAlbumId=null;armIdleReturn()}
+function noteUserActivity(){if(!discoveryBusy)cancelFollowAnimation();lastActivityAt=Date.now();idleReturnAlbumId=null;armIdleReturn()}
 async function returnToPlayingAlbum(immediate=false){
     clearTimeout(idleTimer);idleTimer=0;
     if(!immediate&&Date.now()-lastActivityAt<IDLE_RETURN_MS){armIdleReturn();return}
