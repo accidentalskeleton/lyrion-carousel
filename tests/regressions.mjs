@@ -661,6 +661,7 @@ export async function runTests(sources) {
   await api.setDisplayOrder('recent');
   assert(api.state().orderMode==='recent'&&storage.get('albumBrowserOrderMode')==='recent',
     'Recently Added order is active and persisted');
+  api.closeFrontPreview();
   const recentLast=api.state().albums.length-1;
   const [firstStop,lastStop]=api.finiteShelfBounds();
   const visible=Math.min(api.state().DISPLAY_ALBUM_COUNT||30,api.state().albums.length);
