@@ -56,7 +56,18 @@ function rebuildAlbumIndex(){
 }
 let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,discoveryBusy=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
 const boundedShelf=()=>orderMode==='recent'&&catalogueSource==='library';
-const shelfPosition=value=>boundedShelf()?clamp(value,0,Math.max(0,totalAlbums-1)):value;
+// The finite shelf stops when the OUTER spines reach the viewport edges.
+// Clamping the centre to album 0 / N-1 would leave half the display empty.
+const finiteShelfBounds=()=>{
+    const visible=Math.max(1,Math.min(DISPLAY_ALBUM_COUNT,totalAlbums));
+    const inset=(visible-1)/2;
+    return [inset,Math.max(inset,totalAlbums-1-inset)];
+};
+const shelfPosition=value=>{
+    if(!boundedShelf())return value;
+    const [first,last]=finiteShelfBounds();
+    return clamp(value,first,last);
+};
 const shelfDelta=(index,centre)=>boundedShelf()?index-centre:circularDelta(index,centre,totalAlbums);
 const selectedIndex=()=>boundedShelf()?Math.round(shelfPosition(position)):modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>boundedShelf()?clamp(index,0,Math.max(0,totalAlbums-1)):nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||discoveryBusy||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
