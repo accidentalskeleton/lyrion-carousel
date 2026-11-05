@@ -2,6 +2,11 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## Unreleased
+
+- Add **Recently Added** as a local LMS album-order option using the server's native date-added ranking (`sort:new`), with current genre exclusions and cached prepared catalogue ordering.
+- Make the Recently Added shelf finite: wheel, touch/mouse drag, keyboard arrows and programmatic navigation stop at the first and last album; other ordering modes retain circular wraparound.
+
 ## [0.11.2] - 2026-11-05
 
 ### Album rediscovery
