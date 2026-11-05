@@ -694,28 +694,37 @@ export async function runTests(sources) {
     'last CD remains rendered at the right shelf edge');
   assert(api.geometry().nodes.every(node=>node.index>=0&&node.index<=recentLast),
     'bounded mode does not wrap spines at last album');
-  // An OPEN case temporarily extends finite travel so even edge albums
-  // can reach the centre without exposing wrapped spines.
+  // A bounded shelf never extends its scroll range for an open case.
+  // The case is left off-centre, but fully visible inside the viewport.
+  const coverX=()=>Number(frontCase.style.transform.split('translate3d(')[1]?.split('px')[0]);
+  const caseWidth=api.frontCaseWidth();
+  const shelfWidth=stage.clientWidth;
   api.set({playing:false,position:firstStop});
   api.openFrontPreview(api.state().albums[0],0);
-  assert(api.state().target===0&&!preview.hidden,
-    'opening the newest edge album moves the cover to the centre');
-  api.set({position:0});api.draw();
-  assert(frontCase.style.transform.startsWith('translate3d(0px,'),
-    'newest open cover is positioned at the viewport centre');
+  assert(api.state().target===firstStop&&!preview.hidden,
+    'opening the newest album does not extend the finite scroll limit');
+  api.draw();
+  assert(coverX()<0&&coverX()>=-(shelfWidth-caseWidth)/2-.01,
+    'newest jewel case remains off-centre but fully visible');
   api.browseWithArrow(-1);
-  assert(api.state().target===0,'open cover does not wrap past the first album');
+  assert(api.state().target===firstStop,
+    'open case cannot scroll past the first finite endpoint');
   api.closeFrontPreview();
-  assert(api.state().target===firstStop,'closing newest cover restores edge-to-edge shelf');
+  assert(api.state().target===firstStop,
+    'closing newest cover preserves the same finite endpoint');
   api.set({position:lastStop});
   api.openFrontPreview(api.state().albums[recentLast],recentLast);
-  assert(api.state().target===recentLast&&!preview.hidden,
-    'opening oldest edge album permits it to reach the centre');
-  api.set({position:recentLast});api.draw();
-  assert(frontCase.style.transform.startsWith('translate3d(0px,'),
-    'oldest open cover is positioned at the viewport centre');
+  assert(api.state().target===lastStop&&!preview.hidden,
+    'opening the oldest album does not extend the finite scroll limit');
+  api.draw();
+  assert(coverX()>0&&coverX()<=(shelfWidth-caseWidth)/2+.01,
+    'oldest jewel case remains off-centre but fully visible');
+  api.browseWithArrow(1);
+  assert(api.state().target===lastStop,
+    'open case cannot scroll past the last finite endpoint');
   api.closeFrontPreview();
-  assert(api.state().target===lastStop,'closing oldest cover restores finite shelf edge');
+  assert(api.state().target===lastStop,
+    'closing oldest cover preserves the finite endpoint');
   await api.setDisplayOrder('artistAlbum');
   api.set({position:recentLast});api.browseWithArrow(1);
   assert(api.state().target===recentLast+1,'circular shelf still wraps in other modes');
