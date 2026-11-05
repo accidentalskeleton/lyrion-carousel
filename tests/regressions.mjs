@@ -700,7 +700,7 @@ export async function runTests(sources) {
   assert(api.state().target===0&&!preview.hidden,
     'opening the newest edge album moves the cover to the centre');
   api.set({position:0});api.draw();
-  assert(Math.abs(parseFloat(frontCase.style.transform.match(/translate3d\\(([-\\d.]+)px/)?.[1]||'NaN'))<.01,
+  assert(frontCase.style.transform.startsWith('translate3d(0px,'),
     'newest open cover is positioned at the viewport centre');
   api.browseWithArrow(-1);
   assert(api.state().target===0,'open cover does not wrap past the first album');
@@ -711,7 +711,7 @@ export async function runTests(sources) {
   assert(api.state().target===recentLast&&!preview.hidden,
     'opening oldest edge album permits it to reach the centre');
   api.set({position:recentLast});api.draw();
-  assert(Math.abs(parseFloat(frontCase.style.transform.match(/translate3d\\(([-\\d.]+)px/)?.[1]||'NaN'))<.01,
+  assert(frontCase.style.transform.startsWith('translate3d(0px,'),
     'oldest open cover is positioned at the viewport centre');
   api.closeFrontPreview();
   assert(api.state().target===lastStop,'closing oldest cover restores finite shelf edge');
