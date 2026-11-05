@@ -76,7 +76,7 @@ async function loadSpotifyCatalogue(){
     const result=await spotifyProvider.load();
     albums=result.albums;totalAlbums=result.total;libraryAlbumCount=result.libraryCount;catalogueGeneration++;liveCatalogue=result.live;rebuildAlbumIndex();
     loadedBatches=new Set();loadingBatches=new Map();albumPositionById=new Map();positionIndexPromise=null;prefetchedWindowPage=-1;
-    orderMode=desiredOrderMode='artistAlbum';
+    orderMode=desiredOrderMode='artistAlbum';updateOrderToggle();
     position=target=0;hoveredAlbumIndex=-1;lastSelected=-1;closeFrontPreview();renderAlbums();draw();setConnection(albumCountLabel()+' · Spotify',true);
 }
 
