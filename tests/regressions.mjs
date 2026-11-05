@@ -114,6 +114,7 @@ export async function runTests(sources) {
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
+      finiteShelfBounds,
       prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex}),
@@ -661,26 +662,35 @@ export async function runTests(sources) {
   assert(api.state().orderMode==='recent'&&storage.get('albumBrowserOrderMode')==='recent',
     'Recently Added order is active and persisted');
   const recentLast=api.state().albums.length-1;
-  api.set({position:0});api.browseWithArrow(-1);
-  assert(api.state().target===0,'Recently Added cannot arrow past newest album');
-  api.set({position:recentLast});api.browseWithArrow(1);
-  assert(api.state().target===recentLast,'Recently Added cannot arrow past oldest album');
-  api.set({position:0});api.browseWithArrow(1);
-  assert(api.state().target===1,'Recently Added can browse forward inside the range');
-  api.set({position:0});
+  const [firstStop,lastStop]=api.finiteShelfBounds();
+  const visible=Math.min(api.state().DISPLAY_ALBUM_COUNT||30,api.state().albums.length);
+  assert(firstStop===(visible-1)/2&&lastStop===recentLast-firstStop,
+    'finite shelf stops at viewport edges, not at centred first/last albums');
+  api.set({position:0});api.draw();api.browseWithArrow(-1);
+  assert(api.state().target===firstStop,'Recently Added cannot arrow past newest shelf edge');
+  api.set({position:recentLast});api.draw();api.browseWithArrow(1);
+  assert(api.state().target===lastStop,'Recently Added cannot arrow past oldest shelf edge');
+  api.set({position:firstStop});api.browseWithArrow(1);
+  assert(api.state().target>firstStop,'Recently Added can browse forward inside the range');
+  api.set({position:firstStop});
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-900000,preventDefault(){}});
-  assert(api.state().position===0&&api.state().target===0,'wheel stops at beginning');
-  api.set({position:recentLast});
+  assert(api.state().position===firstStop&&api.state().target===firstStop,'wheel stops at beginning');
+  api.set({position:lastStop});
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:900000,preventDefault(){}});
-  assert(api.state().position===recentLast&&api.state().target===recentLast,'wheel stops at end');
-  api.set({position:0});
+  assert(api.state().position===lastStop&&api.state().target===lastStop,'wheel stops at end');
+  api.set({position:firstStop});
   stage.dispatchEvent({type:'pointerdown',button:0,pointerId:122,clientX:100,clientY:30,target:{closest:()=>null}});
   stage.dispatchEvent({type:'pointermove',pointerId:122,clientX:6000,clientY:30});
   stage.dispatchEvent({type:'pointerup',pointerId:122});
-  assert(api.state().position===0&&api.state().target===0,'drag clamps at beginning');
+  assert(api.state().position===firstStop&&api.state().target===firstStop,'drag clamps at beginning');
+  api.set({position:firstStop});api.draw();
+  assert(api.geometry().nodes.some(node=>node.index===0),
+    'first CD remains rendered at the left shelf edge');
   assert(api.geometry().nodes.every(node=>node.index>=0&&node.index<=recentLast),
     'bounded mode renders no spines from the opposite end');
-  api.set({position:recentLast});api.draw();
+  api.set({position:lastStop});api.draw();
+  assert(api.geometry().nodes.some(node=>node.index===recentLast),
+    'last CD remains rendered at the right shelf edge');
   assert(api.geometry().nodes.every(node=>node.index>=0&&node.index<=recentLast),
     'bounded mode does not wrap spines at last album');
   await api.setDisplayOrder('artistAlbum');
