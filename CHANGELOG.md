@@ -4,6 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Keep the finite Recently Added shelf filled edge-to-edge when cases are closed, but temporarily extend its travel when a jewel case opens so albums near either end can move to the centre and remain fully visible; closing restores the finite limits.
 - Add **Recently Added** as a local LMS album-order option using the server's native date-added ranking (`sort:new`), with current genre exclusions and cached prepared catalogue ordering.
 - Make the Recently Added shelf finite: mouse wheel, touch/mouse drag, keyboard arrows and programmatic navigation stop when the first and last CD spines reach the outer viewport edges, keeping the shelf filled without half-screen gaps. Other ordering modes retain circular wraparound.
 
