@@ -178,7 +178,7 @@ const warmCovers=new Map(),warmingCovers=new Map();
 let coverQueue=[],coverWindowKey='';
 function prefetchCoverWindow(index){
     if(!totalAlbums)return;
-    const urls=[0,1,-1,2,-2,3,-3,4,-4].map(offset=>albums[modulo(index+offset,totalAlbums)]?.[8]).filter(Boolean);
+    const urls=[0,1,-1,2,-2,3,-3,4,-4].map(offset=>{const i=index+offset;return albums[boundedShelf()?i:modulo(i,totalAlbums)]?.[8]}).filter(Boolean);
     const key=urls.join('|');if(key===coverWindowKey)return;
     coverWindowKey=key;
     for(const url of urls){if(warmCovers.has(url)){const image=warmCovers.get(url);warmCovers.delete(url);warmCovers.set(url,image)}}
