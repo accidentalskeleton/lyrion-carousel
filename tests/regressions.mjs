@@ -541,7 +541,7 @@ export async function runTests(sources) {
   api.openFrontPreview(api.state().albums[browsingIndex],browsingIndex);
   api.applyStatus({mode:'pause',playlist_loop:[{album_id:20}]});
   assert(!preview.hidden,'pausing preserves a different album preview');
-  api.set({playing:false});api.updateMeta(true);assert(element('.bf-meta').children.length===0,'stopped details clear');
+  api.set({playing:false});api.updateMeta(true);assert(element('.bf-meta').children.length===1,'stopped playback retains the open album heading without track details');
   await settle(api.selectStartupAlbum({mode:'stop',playlist_loop:[]}));
   assert(preview.hidden&&!rpcCalls.some(c=>c[0]==='playlistcontrol'),'stopped startup never opens or plays');
   assert(frames.size===0,'no idle animation frames remain');
