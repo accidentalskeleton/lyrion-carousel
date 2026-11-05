@@ -724,7 +724,7 @@ export async function runTests(sources) {
     .filter(Number.isFinite);
   assert(leftmostSpine.length>0&&Math.min(...leftmostSpine)<stage.clientWidth/2,
     'scrolling away from an edge does not leave all neighbouring spines offscreen');
-  api.set({playing:false,playingAlbumId:null});
+  api.set({playing:false,playingAlbumId:null,position:firstStop});
   api.closeFrontPreview();
   assert(api.state().target===firstStop,
     'closing newest cover preserves the same finite endpoint');
