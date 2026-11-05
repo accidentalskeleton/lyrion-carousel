@@ -709,6 +709,22 @@ export async function runTests(sources) {
   api.browseWithArrow(-1);
   assert(api.state().target===firstStop,
     'open case cannot scroll past the first finite endpoint');
+  // A playing cover is pinned to its album, not to the viewport or a
+  // perpetual recentering request. Browser navigation must remain usable.
+  api.set({playing:true,playingAlbumId:api.state().albums[0][6]});
+  api.browseWithArrow(1);
+  const browsingTarget=api.state().target;
+  assert(browsingTarget>firstStop,'arrow can browse away from an open edge cover');
+  await api.ensurePlayingCover();
+  assert(api.state().target===browsingTarget,
+    'reopening an already playing case never resets active shelf scrolling');
+  api.set({position:firstStop+4});api.draw();
+  const leftmostSpine=api.geometry().nodes.filter(n=>n.index>0)
+    .map(n=>Number(n.el.style.transform.split('translate3d(')[1]?.split('px')[0]))
+    .filter(Number.isFinite);
+  assert(leftmostSpine.length>0&&Math.min(...leftmostSpine)<stage.clientWidth/2,
+    'scrolling away from an edge does not leave all neighbouring spines offscreen');
+  api.set({playing:false,playingAlbumId:null});
   api.closeFrontPreview();
   assert(api.state().target===firstStop,
     'closing newest cover preserves the same finite endpoint');
