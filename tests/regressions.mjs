@@ -114,9 +114,9 @@ export async function runTests(sources) {
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
-      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer}),
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
   async function settle(promise) {
@@ -568,7 +568,21 @@ export async function runTests(sources) {
   shamrock.onclick();
   assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===controlsBeforeDiscovery,
     'long press suppresses synthetic short-press playback');
+  // The mouse may still be positioned over a different spine when the
+  // user finishes clicking a discovery menu item.
+  api.set({hover:4});api.updateMeta(true);
   await settle(api.discoverAlbum('forgotten'));
+  assert(api.state().hoveredAlbumIndex===-1&&api.state().discoveryHoverSuspended,
+    'rediscovery discards stale mouse hover and suspends passive hit testing');
+  const hoverSpine=stage.children.find(node=>node.dataset?.index!==undefined);
+  document.elementFromPoint=()=>({closest:selector=>selector==='.bf-album'?hoverSpine:null});
+  api.updateHoveredAlbumFromPoint(true);
+  assert(api.state().hoveredAlbumIndex===-1,
+    'stationary mouse does not reselect a different album after discovery');
+  document.dispatchEvent({type:'pointermove',target:stage,clientX:33,clientY:44});
+  assert(!api.state().discoveryHoverSuspended,
+    'a real shelf pointer movement restores normal hover behaviour');
+  document.elementFromPoint=()=>null;
   assert(api.state().frontPreviewAlbum!==null&&!api.state().discoveryBusy,
     'long forgotten opens an album cover and unlocks discovery');
   assert(rpcCalls.some(c=>c.includes('sort:recentlyplayed')),
