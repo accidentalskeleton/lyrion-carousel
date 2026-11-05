@@ -654,6 +654,39 @@ export async function runTests(sources) {
     assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden,'sort '+mode+' opens playing album');
     api.set({position:3});
   }
+  // Recently Added is the one finite shelf: no wrapping by arrows, wheel,
+  // drag or geometry; all other ordering modes remain circular.
+  api.set({playing:false,position:0});
+  await api.setDisplayOrder('recent');
+  assert(api.state().orderMode==='recent'&&storage.get('albumBrowserOrderMode')==='recent',
+    'Recently Added order is active and persisted');
+  const recentLast=api.state().albums.length-1;
+  api.set({position:0});api.browseWithArrow(-1);
+  assert(api.state().target===0,'Recently Added cannot arrow past newest album');
+  api.set({position:recentLast});api.browseWithArrow(1);
+  assert(api.state().target===recentLast,'Recently Added cannot arrow past oldest album');
+  api.set({position:0});api.browseWithArrow(1);
+  assert(api.state().target===1,'Recently Added can browse forward inside the range');
+  api.set({position:0});
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-900000,preventDefault(){}});
+  assert(api.state().position===0&&api.state().target===0,'wheel stops at beginning');
+  api.set({position:recentLast});
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:900000,preventDefault(){}});
+  assert(api.state().position===recentLast&&api.state().target===recentLast,'wheel stops at end');
+  api.set({position:0});
+  stage.dispatchEvent({type:'pointerdown',button:0,pointerId:122,clientX:100,clientY:30,target:stage});
+  stage.dispatchEvent({type:'pointermove',pointerId:122,clientX:6000,clientY:30});
+  stage.dispatchEvent({type:'pointerup',pointerId:122});
+  assert(api.state().position===0&&api.state().target===0,'drag clamps at beginning');
+  assert(api.geometry().nodes.every(node=>node.index>=0&&node.index<=recentLast),
+    'bounded mode renders no spines from the opposite end');
+  api.set({position:recentLast});api.draw();
+  assert(api.geometry().nodes.every(node=>node.index>=0&&node.index<=recentLast),
+    'bounded mode does not wrap spines at last album');
+  await api.setDisplayOrder('artistAlbum');
+  api.set({position:recentLast});api.browseWithArrow(1);
+  assert(api.state().target===recentLast+1,'circular shelf still wraps in other modes');
+
   api.applySetting('coverSize',256);
   assert(api.state().albums.every(a=>a[8].includes('size=256')),'cover size updates artwork URLs');
   assert(stage.classList.contains('bf-shelf-active'),
@@ -901,7 +934,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=cloverleaf-discovery-1'),
+  assert(sources.index.includes('js/app.js?v=recently-added-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
