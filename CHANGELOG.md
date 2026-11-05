@@ -4,7 +4,18 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## [0.11.2] - 2026-11-05
 
-- Hold the cloverleaf button to discover overlooked local albums using LMS 9.1 recently-played and play-count rankings, opening an album without starting playback; retain short-press random play.
+### Album rediscovery
+
+- Hold the cloverleaf for approximately 600 ms to open a compact discovery menu with **Long Forgotten**, **Rarely Played** and **Rediscover Something**. A short press still plays a random album.
+- Choose overlooked local-library albums using LMS 9.1's recently-played and play-count rankings, respecting the current shelf and genre exclusions. Discovery scrolls to the selected CD and opens its jewel case **without starting playback**.
+- Support touchscreen holds, mouse context menus and keyboard access to discovery; keep Spotify browsing unchanged.
+
+### Browsing and reliability
+
+- Display **Album — Artist** details for a selected/open jewel case even when playback is stopped, without incorrectly showing track progress.
+- Stop stale mouse-hover selection from overriding rediscovered album details; restore hover only after a deliberate pointer movement over the shelf.
+- Prevent mouse movement during the discovery scroll from cancelling the animation and leaving the first selected CD unopened.
+- Add JavaScript regression coverage for long-press playback suppression, discovery rankings, idle album details, stationary hover and first-selection animation behaviour.
 
 ## [0.11.1] - 2026-11-04
 
