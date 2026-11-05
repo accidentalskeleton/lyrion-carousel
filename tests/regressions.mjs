@@ -726,8 +726,11 @@ export async function runTests(sources) {
   assert(api.state().position>beforeWheel&&api.state().target===api.state().position,
     'wheel genuinely scrolls a bounded shelf while a cover is open');
   const afterWheel=api.state().position;
-  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-1200,preventDefault(){}});
-  assert(api.state().position<afterWheel&&api.state().position===firstStop,
+  preview.dispatchEvent({type:'wheel',deltaX:0,deltaY:700,preventDefault(){}});
+  assert(api.state().position>afterWheel&&!preview.hidden,
+    'wheel events on an open jewel case also scroll the bounded shelf');
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-2000,preventDefault(){}});
+  assert(api.state().position===firstStop,
     'wheel can reverse back to the left bounded endpoint');
   const snapTimer=api.state().wheelTimer;
   assert(timers.has(snapTimer),'wheel release schedules endpoint snapping');
