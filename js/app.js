@@ -69,6 +69,15 @@ const shelfPosition=value=>{
     const [first,last]=finiteShelfBounds();
     return clamp(value,first,last);
 };
+// Snap at the actual half-album shelf endpoints, not the next integer.
+// Rounding 14.5 to 15 made the first CD drift away from the left edge.
+const snapShelfPosition=value=>{
+    if(!boundedShelf())return Math.round(value);
+    const [first,last]=finiteShelfBounds();
+    if(value<=first+.5)return first;
+    if(value>=last-.5)return last;
+    return shelfPosition(Math.round(value));
+};
 const shelfDelta=(index,centre)=>boundedShelf()?index-centre:circularDelta(index,centre,totalAlbums);
 const selectedIndex=()=>boundedShelf()?Math.round(shelfPosition(position)):modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>boundedShelf()?clamp(index,0,Math.max(0,totalAlbums-1)):nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||discoveryBusy||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
@@ -724,7 +733,7 @@ function browseWithArrow(direction){
     if(!totalAlbums||orderBusy||libraryRefreshing)return;
     followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;
     // Arrow scrolling never closes or replaces an open jewel case.
-    target=shelfPosition(Math.round(target)+direction);
+    target=shelfPosition(boundedShelf()?target+direction:Math.round(target)+direction);
     schedule();
 }
 function stopFollowing(){followingNowPlaying=false;cancelFollowAnimation();closeFrontPreview()}
@@ -1005,7 +1014,7 @@ async function playRandomAlbum(){
         await fetchBatch(Math.floor(index/PAGE_SIZE));
         if(connection!==connectionGeneration||expectedPlayer!==playerId)return;
         const album=albums[index];if(!album)throw Error('Album unavailable');
-        const destination=nearestPositionForIndex(index),distance=Math.abs(destination-position);
+        const destination=shelfPosition(nearestPositionForIndex(index)),distance=Math.abs(destination-position);
         randomAnimationFrom=position;randomAnimationTo=destination;
         randomAnimationDuration=Math.min(RANDOM_SCROLL_MAX_MS,Math.max(450,250+distance*45));
         randomAnimationStart=performance.now();target=destination;lastSelected=-1;schedule();
@@ -1073,10 +1082,10 @@ function updateMeta(force=false){
     }
     meta.replaceChildren(...content);updateProgressDisplay();
 }
-function draw(){if(raf){cancelAnimationFrame(raf);raf=0}target=shelfPosition(target);position=shelfPosition(position);if(!dragging){const error=target-position;if(followAnimation){const animation=followAnimation,p=clamp((performance.now()-animation.start)/animation.duration,0,1);position=animation.from+(animation.to-animation.from)*(1-Math.pow(1-p,3));if(p>=1){position=target=animation.to;followAnimation=null;animation.resolve(true)}}else if(randomAnimating&&randomAnimationDuration>0){const p=clamp((performance.now()-randomAnimationStart)/randomAnimationDuration,0,1),e=1-Math.pow(1-p,3);position=randomAnimationFrom+(randomAnimationTo-randomAnimationFrom)*e;if(p>=1)position=target}else{position+=error*.135;if(Math.abs(error)<.0004)position=target}}updateShelfWindow();updateMeta();prefetchAround(selectedIndex());prefetchCoverWindow(boundedShelf()?selectedIndex():modulo(Math.round(target),totalAlbums));syncShelfDom();if(followAnimation||dragging||Math.abs(target-position)>.0004)raf=requestAnimationFrame(draw);else raf=0}function schedule(){if(!raf)raf=requestAnimationFrame(draw)}
+function draw(){if(raf){cancelAnimationFrame(raf);raf=0}target=shelfPosition(target);position=shelfPosition(position);if(!dragging){const error=target-position;if(followAnimation){const animation=followAnimation,p=clamp((performance.now()-animation.start)/animation.duration,0,1);position=animation.from+(animation.to-animation.from)*(1-Math.pow(1-p,3));if(p>=1){position=target=animation.to;followAnimation=null;animation.resolve(true)}}else if(randomAnimating&&randomAnimationDuration>0){const p=clamp((performance.now()-randomAnimationStart)/randomAnimationDuration,0,1),e=1-Math.pow(1-p,3);position=shelfPosition(randomAnimationFrom+(randomAnimationTo-randomAnimationFrom)*e);if(p>=1)position=target}else{position+=error*.135;if(Math.abs(error)<.0004)position=target}}updateShelfWindow();updateMeta();prefetchAround(selectedIndex());prefetchCoverWindow(boundedShelf()?selectedIndex():modulo(Math.round(target),totalAlbums));syncShelfDom();if(followAnimation||dragging||Math.abs(target-position)>.0004)raf=requestAnimationFrame(draw);else raf=0}function schedule(){if(!raf)raf=requestAnimationFrame(draw)}
 let lastShelfScrollAt=-Infinity;
 function shelfIsScrolling(){return dragging&&moved||!!followAnimation||randomAnimating||Math.abs(target-position)>.04||performance.now()-lastShelfScrollAt<160}
-function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();lastShelfScrollAt=performance.now();followingNowPlaying=false;cancelFollowAnimation();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=shelfPosition(position+delta*.0028);draw();clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{target=shelfPosition(Math.round(position));schedule()},110)}
+function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();lastShelfScrollAt=performance.now();followingNowPlaying=false;cancelFollowAnimation();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=shelfPosition(position+delta*.0028);draw();clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{target=snapShelfPosition(position);schedule()},110)}
 // Shared pointer physics for shelf spines and the enlarged closed cover.
 function beginShelfDrag(event,pressedIndex=null,captureTarget=stage){
     if(randomAnimating)return false;
@@ -1104,8 +1113,8 @@ function moveShelfDrag(event,closePreviewOnMove=true){
 function finishShelfDrag(cancelled=false){
     if(!dragging)return;
     dragging=false;stage.classList.remove('is-dragging');
-    if(cancelled)target=shelfPosition(Math.round(position));
-    else if(moved)target=shelfPosition(Math.round(position-pointerVelocity*1.35));
+    if(cancelled)target=snapShelfPosition(position);
+    else if(moved)target=snapShelfPosition(position-pointerVelocity*1.35);
     pressedAlbumIndex=null;schedule();
 }
 stage.addEventListener('pointerdown',event=>{
