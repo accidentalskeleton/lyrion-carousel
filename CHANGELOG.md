@@ -2,6 +2,10 @@
 
 All notable changes to Lyrion Carousel are documented here.
 
+## [0.11.2] - 2026-11-05
+
+- Hold the cloverleaf button to discover overlooked local albums using LMS 9.1 recently-played and play-count rankings, opening an album without starting playback; retain short-press random play.
+
 ## [0.11.1] - 2026-11-04
 
 ### Spotify playback and synchronisation

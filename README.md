@@ -8,7 +8,7 @@
 
 Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines, with enlarged jewel-case artwork when you select an album. It uses CSS transforms; no WebGL renderer or remote font downloads are required.
 
-Current application version: **0.11.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
+Current application version: **0.11.2**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
 ## Features
 
@@ -22,7 +22,7 @@ Current application version: **0.11.0**. The canonical version is stored in [`VE
 - browser-side caching of read-only LMS discovery and album RPCs; prepared ordering requires LMS connectivity;
 - event-driven library refresh after LMS scans complete, invalidating the server catalogue snapshot before reloading;
 - album/artist search and A–Z navigation;
-- shamrock random-album selection with configurable animation duration;
+- shamrock short press to play a random album, or hold for 600 ms to choose Long Forgotten, Rarely Played or Rediscover Something; discovery opens an album cover without changing playback or the current shelf ordering (LMS 9.1+, local library only);
 - click/tap a spine to preview its realistic closed cover; drag/swipe the cover left or right to scroll spines without opening the next cover; the playing album stays enlarged throughout scrolling and automatic idle return, while clicking a spine can temporarily preview another album; long-press the cover for the album menu (including Album Information), or use its separate play button to start playback;
 - long-press a cover to clear the playlist and play it, play it now, play it after the current album, add it to the queue, or open Album Information;
 - LMS CometD long-polling for live playback and server/library state;
@@ -116,6 +116,16 @@ All API POST requests require `X-Lyrion-Request: 1`. Browser requests also rejec
 Settings are grouped into Display, Playback, Connection, Genres, Cache, About and Coffee tabs. Changes apply immediately and are saved in this browser. They include LMS URL, player, idle return, menu/preview timeouts, maximum scroll duration, displayed albums, display style, cover resolution and keeping the playing cover open. The Cache tab can adjust the soft artwork-cache limit up to the server-configured hard limit. The obsolete carousel-density control has been removed; use Displayed albums to set spine width and spacing.
 
 The server URL is shared runtime state on the proxy. Set `LMS_URL` in `/etc/default/lyrion-carousel` for a persistent machine-wide default. Saved browser choices override server defaults; the saved LMS URL is applied before initial discovery.
+
+## Cloverleaf album discovery
+
+A short press of the cloverleaf continues to select and play a random album. Hold it for approximately 600 ms (or right-click / press Shift+F10 while focused) to open the discovery menu:
+
+- **Long Forgotten:** choose an album from the least recently played end of LMS's `recentlyplayed` album ranking.
+- **Rarely Played:** choose from the lowest-play-count end of LMS's `playcount` album ranking.
+- **Rediscover Something:** choose from either of those two overlooked-album pools.
+
+Rediscovery scrolls to the selected album and opens its jewel case **without starting playback**. The currently playing album can remain open during scrolling; its existing preview and idle-return rules still apply. Eligibility respects the current album shelf (including excluded genres). LMS 9.1 or later is required for the new sort modes. LMS listening history is not a guaranteed record of all historical listens. Spotify browsing does not currently support rediscovery.
 
 ## Startup and browsing behaviour
 
