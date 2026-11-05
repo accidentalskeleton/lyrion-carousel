@@ -674,7 +674,7 @@ export async function runTests(sources) {
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:900000,preventDefault(){}});
   assert(api.state().position===recentLast&&api.state().target===recentLast,'wheel stops at end');
   api.set({position:0});
-  stage.dispatchEvent({type:'pointerdown',button:0,pointerId:122,clientX:100,clientY:30,target:stage});
+  stage.dispatchEvent({type:'pointerdown',button:0,pointerId:122,clientX:100,clientY:30,target:{closest:()=>null}});
   stage.dispatchEvent({type:'pointermove',pointerId:122,clientX:6000,clientY:30});
   stage.dispatchEvent({type:'pointerup',pointerId:122});
   assert(api.state().position===0&&api.state().target===0,'drag clamps at beginning');
