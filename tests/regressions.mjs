@@ -79,7 +79,11 @@ export async function runTests(sources) {
   let catalogueReconcileChanged=true;
   let tracksFixture=null;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
-  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums')return {count:library.length,albums_loop:library.slice(cmd[1],cmd[1]+cmd[2])};return {};};
+  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums'){
+    const sort=cmd.find(arg=>typeof arg==='string'&&arg.startsWith('sort:'));
+    const ordered=sort==='sort:recentlyplayed'?library.slice().reverse():library;
+    return {count:ordered.length,albums_loop:ordered.slice(cmd[1],cmd[1]+cmd[2])};
+  }return {};};
   window.dispatchEvent=()=>{};
   const imageRequests=[];
   class PreloadImage{set src(url){this.url=url;imageRequests.push(this)}}
@@ -110,9 +114,9 @@ export async function runTests(sources) {
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
-      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating}),
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
   async function settle(promise) {
@@ -550,6 +554,31 @@ export async function runTests(sources) {
   const cancelledRandom=api.playRandomAlbum();await Promise.resolve();api.set({playerId:'player-two'});
   await settle(cancelledRandom);
   assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===1&&!api.state().randomAnimating,'player change cancels random playback');
+
+  // Cloverleaf long-press opens album discovery without invoking playback.
+  api.set({playing:false,playingAlbumId:null});
+  const shamrock=element('.bf-random'),discovery=element('.bf-discovery-menu');
+  const controlsBeforeDiscovery=rpcCalls.filter(c=>c[0]==='playlistcontrol').length;
+  shamrock.dispatchEvent({type:'pointerdown',button:0,pointerId:12,clientX:100,clientY:100});
+  const hold=api.state().discoveryHoldTimer;
+  assert(hold>0&&timers.has(hold),'cloverleaf press arms a hold timer');
+  timers.get(hold)();
+  assert(!discovery.hidden,'cloverleaf long press opens discovery menu');
+  shamrock.dispatchEvent({type:'pointerup',pointerId:12});
+  shamrock.onclick();
+  assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===controlsBeforeDiscovery,
+    'long press suppresses synthetic short-press playback');
+  await settle(api.discoverAlbum('forgotten'));
+  assert(api.state().frontPreviewAlbum!==null&&!api.state().discoveryBusy,
+    'long forgotten opens an album cover and unlocks discovery');
+  assert(rpcCalls.some(c=>c.includes('sort:recentlyplayed')),
+    'long forgotten queries LMS album playback ranking');
+  await settle(api.discoverAlbum('rarely'));
+  assert(rpcCalls.some(c=>c.includes('sort:playcount')),
+    'rarely played queries LMS album playcount ranking');
+  await settle(api.discoverAlbum('surprise'));
+  assert(rpcCalls.filter(c=>c[0]==='playlistcontrol').length===controlsBeforeDiscovery,
+    'all rediscovery modes select an album without starting playback');
 
   const tabs=['display','playback','connection','genres','cache','about'].map(name=>{
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
