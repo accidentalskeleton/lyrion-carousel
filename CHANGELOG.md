@@ -4,7 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
-- Keep the Recently Added shelf bounded while cases are open. Show edge albums off-centre without clipping, calculate spine clearance from the visible case rather than applying cumulative shifts, and preserve wheel/drag/arrow browsing while a playing cover remains pinned (including LMS status refreshes).
+- Rework Recently Added shelf geometry: keep spine positions fixed when opening an album (the jewel case overlays nearby CDs instead of shifting entire groups), retain the edge-to-edge finite limits and show edge cases off-centre without permanent clipping. Fix half-album endpoint snapping, one-album keyboard steps and random-animation bounds; retain wheel, drag and playback-status navigation with a pinned cover.
 - Add **Recently Added** as a local LMS album-order option using the server's native date-added ranking (`sort:new`), with current genre exclusions and cached prepared catalogue ordering.
 - Make the Recently Added shelf finite: mouse wheel, touch/mouse drag, keyboard arrows and programmatic navigation stop when the first and last CD spines reach the outer viewport edges, keeping the shelf filled without half-screen gaps. Other ordering modes retain circular wraparound.
 
