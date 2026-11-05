@@ -441,6 +441,28 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.responses[0][1],self.responses[2][1])
         self.assertTrue(self.handler._catalogue_snapshot_path().exists())
 
+    def test_recently_added_uses_lms_date_added_ranking_and_genre_exclusions(self):
+        base=[{'id':1,'artist':'A','album':'Older'},
+              {'id':2,'artist':'B','album':'Newest'},
+              {'id':3,'artist':'C','album':'Middle'}]
+        calls=[]
+        def pages(genre_id=None,sort='artflow'):
+            calls.append((genre_id,sort))
+            if sort=='new':
+                return iter([[{'id':2},{'id':3},{'id':1}]])
+            return iter([base])
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            with patch.object(self.handler,'_catalogue_genre_ids',return_value={'3'}):
+                self.handler.path='/api/catalogue?order=recent&exclude_genre_id=7'
+                self.handler._serve_catalogue()
+                self.handler._serve_catalogue()
+        response=json.loads(self.responses[0][1])
+        self.assertEqual([row['id'] for row in response['albums_loop']],[2,1])
+        self.assertEqual(response['library_count'],3)
+        self.assertEqual(self.responses[0][1],self.responses[1][1])
+        self.assertEqual(calls,[(None,'artflow'),(None,'new')],
+                         'cached recently-added order must not repeatedly query LMS')
+
     def test_snapshot_survives_memory_reset_and_recovers_when_invalidated(self):
         pages=[[{'id':1,'artist':'Z','album':'First'}]]
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)) as upstream:

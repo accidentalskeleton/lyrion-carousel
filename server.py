@@ -777,11 +777,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             payload={'available':False,'stage':'request','lms':self.lms_url,'error':str(error)}
             self._send_payload(200,json.dumps(payload,indent=2).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
-    def _catalogue_pages(self,genre_id:int|None=None):
+    def _catalogue_pages(self,genre_id:int|None=None,sort:str='artflow'):
         """Yield bounded LMS album pages; callers decide how to process the full library."""
         start=0
         while True:
-            command=['albums',start,200,'sort:artflow','tags:ajlys']
+            command=['albums',start,200,f'sort:{sort}','tags:ajlys']
             if genre_id is not None: command.append(f'genre_id:{genre_id}')
             body=json.dumps({'id':1,'method':'slim.request','params':['0',command]}).encode()
             with urlopen(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'}),timeout=10) as response:
@@ -1058,7 +1058,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         mode=query.get('order',['artistAlbum'])[0]
         excluded_genre_ids={int(genre_id) for genre_id in query.get('exclude_genre_id',[])
                             if genre_id.isdecimal() and int(genre_id)>0}
-        if mode not in ('artistAlbum','album','colour','random'):
+        if mode not in ('artistAlbum','album','colour','random','recent'):
             self.send_error(400,'Invalid album order');return
         try:
             with _CATALOGUE_LOCK:
@@ -1073,6 +1073,14 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     albums=[album for album in snapshot['albums']
                             if str(album.get('id')) not in excluded_ids]
                     library_count=len(snapshot['albums'])
+                    if mode=='recent':
+                        # Use LMS's native first-added ranking, NOT modification
+                        # dates or unreliable album-ID order. The base snapshot
+                        # retains album metadata and genre exclusion indexes.
+                        ranked_ids=[str(item['id']) for page in self._catalogue_pages(sort='new')
+                                    for item in page if item.get('id') is not None]
+                        rank={album_id:i for i,album_id in enumerate(ranked_ids)}
+                        albums.sort(key=lambda item:(rank.get(str(item.get('id')),len(rank)),str(item.get('id',''))))
                     if mode=='colour':
                         ids=list(dict.fromkeys(str(a['artwork_track_id']) for a in albums
                                                if a.get('artwork_track_id')))
@@ -1099,7 +1107,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                             return ((album.get('spine_metadata') or {}).get('colour_index',float('inf')),*tie)
                         return tie if mode=='artistAlbum' else (title,artist,tie[2])
                     if mode=='random':random.shuffle(albums)
-                    else:albums.sort(key=key)
+                    elif mode!='recent':albums.sort(key=key)
                     payload=json.dumps({'count':len(albums),'library_count':library_count,
                                         'albums_loop':albums},ensure_ascii=False).encode('utf-8')
                     if mode!='random':
