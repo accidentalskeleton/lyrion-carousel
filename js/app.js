@@ -499,11 +499,14 @@ frontCaseElement.addEventListener('keydown',event=>{
     event.preventDefault();
     openAlbumMenu(frontPreviewAlbum,{clientX:window.innerWidth/2,clientY:window.innerHeight/2});
 });
-let lastHoverProbeAt=-Infinity;
+let lastHoverProbeAt=-Infinity,discoveryHoverSuspended=false;
 function updateHoveredAlbumFromPoint(force=false){
+    // A stationary mouse must not override a discovery-selected jewel case.
+    // Resume hover only after a NEW, deliberate shelf pointer movement.
     // Hit testing can force layout. During animation, sample hover at ~30 Hz
     // rather than on every frame; pointer movement always updates immediately.
     const now=performance.now();
+    if(discoveryHoverSuspended)return;
     if(!force&&now-lastHoverProbeAt<32)return;
     lastHoverProbeAt=now;
     if(lastPointerClientX<0&&hoveredAlbumIndex===-1)return;
@@ -737,8 +740,14 @@ const albumMenu=root.querySelector('.bf-album-menu'),albumMenuTitle=root.querySe
 root.addEventListener('contextmenu',event=>event.preventDefault());
 root.addEventListener('pointerdown',event=>{if(event.button!==0)event.stopPropagation()},true);
 document.addEventListener('pointermove',event=>{
-    if((event.clientX!==lastPointerClientX||event.clientY!==lastPointerClientY)&&(stage.contains(event.target)||frontPreview.contains(event.target)))noteUserActivity();
-    lastPointerClientX=event.clientX;lastPointerClientY=event.clientY;updateHoveredAlbumFromPoint(true);
+    const changed=event.clientX!==lastPointerClientX||event.clientY!==lastPointerClientY;
+    const overShelf=stage.contains(event.target)||frontPreview.contains(event.target);
+    if(changed&&overShelf)noteUserActivity();
+    // Ignore mouse hover during discovery animation, and until the pointer
+    // genuinely moves over the shelf again after the selected cover opens.
+    if(discoveryHoverSuspended&&changed&&overShelf&&!discoveryBusy)discoveryHoverSuspended=false;
+    lastPointerClientX=event.clientX;lastPointerClientY=event.clientY;
+    updateHoveredAlbumFromPoint(true);
 },{passive:true});
 document.addEventListener('pointerout',event=>{
     if(!event.relatedTarget){lastPointerClientX=lastPointerClientY=-1;updateHoveredAlbumFromPoint(true)}
@@ -934,6 +943,8 @@ async function discoverAlbum(mode){
         if(index===null){setConnection('No eligible albums found in the available listening history',true);return}
         if(generation!==catalogueGeneration||connection!==connectionGeneration||expectedPlayer!==playerId)return;
         followingNowPlaying=false;cancelFollowAnimation();
+        discoveryHoverSuspended=true;hoveredAlbumIndex=-1;lastSelected=-1;
+        updateMeta(true);
         const arrived=await scrollToAlbumIndex(index);
         if(arrived&&generation===catalogueGeneration&&connection===connectionGeneration&&expectedPlayer===playerId){
             // Selection only: never send a playback or playlist command.
