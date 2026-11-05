@@ -786,6 +786,28 @@ export async function runTests(sources) {
   api.closeFrontPreview();
   assert(api.state().target===lastStop,
     'closing oldest cover preserves the finite endpoint');
+  // Opening a jewel case at any bounded position must NEVER move spines.
+  // Previously the whole left/right shelf was shifted, leaving wide gaps.
+  const seenPositions=[firstStop,firstStop+4,(firstStop+lastStop)/2,lastStop-4,lastStop];
+  for(const place of seenPositions){
+    api.set({playing:false,playingAlbumId:null,position:place});
+    api.closeFrontPreview();api.draw();
+    const closed=new Map(api.geometry().nodes.map(node=>[node.index,node.el.style.transform]));
+    for(const coverIndex of [0,7,Math.floor(recentLast/2),recentLast-7,recentLast]){
+      api.openFrontPreview(api.state().albums[coverIndex],coverIndex);api.draw();
+      const openNodes=api.geometry().nodes;
+      let compared=0;
+      for(const node of openNodes){
+        if(!closed.has(node.index))continue;
+        compared++;
+        assert(node.el.style.transform===closed.get(node.index),
+          'finite shelf spine positions stay fixed when a cover opens (position '+place+', cover '+coverIndex+')');
+      }
+      assert(compared>=Math.min(10,visible),
+        'finite shelf retains the same adjacent CDs across the open-cover transition');
+      api.closeFrontPreview();api.draw();
+    }
+  }
   await api.setDisplayOrder('artistAlbum');
   api.set({position:recentLast});api.browseWithArrow(1);
   assert(api.state().target===recentLast+1,'circular shelf still wraps in other modes');
