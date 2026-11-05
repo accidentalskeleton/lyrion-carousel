@@ -395,15 +395,14 @@ function syncShelfDom(){
         coverX+=edgeWeight*(clamp(naturalCoverX,-coverLimit,coverLimit)-naturalCoverX);
     }
     if(frontCase)frontCase.style.transform=`translate3d(${coverX}px,0,0)`;
-    const coverLeft=coverX-frontWidth/2,coverRight=coverX+frontWidth/2;
-    const normalGap=open?Math.max(0,(frontWidth-pitch)/2):0;
-    const rightSpineLeft=(frontDelta+.5)*pitch;
-    const leftSpineRight=(frontDelta-.5)*pitch;
-    const shiftRight=open?(boundedShelf()?Math.max(0,coverRight-rightSpineLeft):normalGap):0;
-    const shiftLeft=open?(boundedShelf()?Math.max(0,leftSpineRight-coverLeft):normalGap):0;
+    // Finite shelves have a fixed physical layout: opening a cover must not
+    // shift the entire left/right group of CDs and create blank regions.
+    // The separate front-preview layer overlays the nearby spines instead.
+    // Circular shelves retain the established jewel-case clearance behaviour.
+    const gapShift=open&&!boundedShelf()?Math.max(0,(frontWidth-pitch)/2):0;
     nodes.forEach(node=>{
         const d=shelfDelta(node.index,position);
-        const sideShift=d<frontDelta?-shiftLeft:d>frontDelta?shiftRight:0;
+        const sideShift=d<frontDelta?-gapShift:d>frontDelta?gapShift:0;
         const hiddenSpine=open&&node.index===frontPreviewIndex;
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
         if(node.cachedPitch!==pitch){
