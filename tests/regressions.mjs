@@ -693,6 +693,28 @@ export async function runTests(sources) {
     'last CD remains rendered at the right shelf edge');
   assert(api.geometry().nodes.every(node=>node.index>=0&&node.index<=recentLast),
     'bounded mode does not wrap spines at last album');
+  // An OPEN case temporarily extends finite travel so even edge albums
+  // can reach the centre without exposing wrapped spines.
+  api.set({playing:false,position:firstStop});
+  api.openFrontPreview(api.state().albums[0],0);
+  assert(api.state().target===0&&!preview.hidden,
+    'opening the newest edge album moves the cover to the centre');
+  api.set({position:0});api.draw();
+  assert(Math.abs(parseFloat(frontCase.style.transform.match(/translate3d\\(([-\\d.]+)px/)?.[1]||'NaN'))<.01,
+    'newest open cover is positioned at the viewport centre');
+  api.browseWithArrow(-1);
+  assert(api.state().target===0,'open cover does not wrap past the first album');
+  api.closeFrontPreview();
+  assert(api.state().target===firstStop,'closing newest cover restores edge-to-edge shelf');
+  api.set({position:lastStop});
+  api.openFrontPreview(api.state().albums[recentLast],recentLast);
+  assert(api.state().target===recentLast&&!preview.hidden,
+    'opening oldest edge album permits it to reach the centre');
+  api.set({position:recentLast});api.draw();
+  assert(Math.abs(parseFloat(frontCase.style.transform.match(/translate3d\\(([-\\d.]+)px/)?.[1]||'NaN'))<.01,
+    'oldest open cover is positioned at the viewport centre');
+  api.closeFrontPreview();
+  assert(api.state().target===lastStop,'closing oldest cover restores finite shelf edge');
   await api.setDisplayOrder('artistAlbum');
   api.set({position:recentLast});api.browseWithArrow(1);
   assert(api.state().target===recentLast+1,'circular shelf still wraps in other modes');
