@@ -147,6 +147,7 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
+    padding-bottom: 4px;
 }
 .bf-project-link {
     display: inline-flex;
