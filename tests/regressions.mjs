@@ -339,7 +339,7 @@ export async function runTests(sources) {
   api.state().albums[firstPlayingIndex]=firstPlayingCover;
 
 
-  // Short clicks are inert; dragging the enlarged cover scrolls the same
+  // Short clicks close; dragging the enlarged cover scrolls the same
   // shelf with the same distance, momentum and snap as dragging the spines.
   // Album Information is only reached through the long-press album menu.
   const trackOverlay=element('.bf-track-overlay');
@@ -361,6 +361,18 @@ export async function runTests(sources) {
   preview.dispatchEvent({type:'pointerup',pointerId:31});
   assert(trackOverlay.hidden&&api.state().position===originalCoverPosition,
     'short cover tap neither opens Album Information nor moves the shelf');
+  assert(!preview.hidden&&preview.dataset.opening!=='true',
+    'short cover tap leaves the pinned playing cover open');
+  await api.ensurePlayingCover();
+  assert(!preview.hidden,'playback status keeps the playing cover open');
+  api.set({playing:false});
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:31,clientX:300,clientY:90});
+  preview.dispatchEvent({type:'pointerup',pointerId:31});
+  assert(preview.dataset.opening==='true','short tap still closes a non-playing preview');
+  await settle(api.closeFrontPreview(true,true));
+  assert(preview.hidden,'non-playing preview finishes closing');
+  api.set({playing:true});
+  api.openFrontPreview(originalCover,originalCoverIndex);
   frontCase.dispatchEvent({type:'click',target:{closest:()=>null}});
   assert(trackOverlay.hidden,'synthetic click after tap remains inert');
 
@@ -1272,7 +1284,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=catalogue-height-cap-1')&&sources.index.includes('css/shelf.css?v=catalogue-height-cap-1'),
+  assert(sources.index.includes('js/app.js?v=keep-playing-open-1')&&sources.index.includes('css/shelf.css?v=catalogue-height-cap-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

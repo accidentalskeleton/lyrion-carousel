@@ -672,11 +672,15 @@ root.addEventListener('pointerdown',event=>{
     event.preventDefault();event.stopPropagation();
     cancelLongPress();followingNowPlaying=false;closeFrontPreview(false,true);
 },true);
-// The enlarged cover is another drag surface for the same shelf, not an
-// action button. Hold it for the existing album menu (and Album Information).
+// Tap to close, drag to browse, or hold for the album menu.
 const frontCaseElement=frontPreview.querySelector('.bf-front-case');
 let frontPress=null,frontPressTimer=0;
 function cancelFrontPress(){clearTimeout(frontPressTimer);frontPressTimer=0;frontPress=null}
+function dismissFrontPreview(){
+    if(isPlayingCoverPinned())return;
+    pinnedRequest++;followingNowPlaying=false;cancelFollowAnimation();
+    void closeFrontPreview(false,true);
+}
 function resumeFrontTimeout(){clearTimeout(frontTimer);frontTimer=!frontPreview.hidden&&!(playing&&String(frontPreviewAlbum?.[6])===String(playingAlbumId))&&FRONT_TIMEOUT_MS>0?setTimeout(async()=>{frontTimer=0;if(isPlayingCoverPinned())return;const wasNonPlayingPreview=playing&&playingCarouselIndex()>=0;const closed=await closeFrontPreview(true,true);if(closed&&wasNonPlayingPreview)returnToPlayingAlbum(true)},FRONT_TIMEOUT_MS):0}
 frontPreview.addEventListener('pointerdown',event=>{
     if(randomAnimating||frontPress||event.button!==0||!event.target.closest('.bf-front-case')||event.target.closest('button')||!frontPreviewAlbum)return;
@@ -715,7 +719,9 @@ frontPreview.addEventListener('pointerup',event=>{
         // Swiping the enlarged cover only moves the shelf. Both playing and
         // manually selected cases remain open until their normal transition.
     }
-    // A short click intentionally performs no action.
+    else if(!press.cancelled&&!press.long&&frontPreviewAlbum===press.album){
+        dismissFrontPreview();return;
+    }
     resumeFrontTimeout();
 });
 function cancelFrontGesture(event){
@@ -728,13 +734,17 @@ function cancelFrontGesture(event){
 frontPreview.addEventListener('pointercancel',cancelFrontGesture);
 frontPreview.addEventListener('lostpointercapture',cancelFrontGesture);
 // The album menu is the keyboard/context-menu equivalent of long-press.
-// Enter/Space are deliberately inert on the cover itself.
+// Enter/Space dismiss the focused cover; its Play button keeps its own action.
 frontCaseElement.addEventListener('contextmenu',event=>{
     if(frontPreview.hidden||!frontPreviewAlbum||event.target.closest('button'))return;
     event.preventDefault();
     openAlbumMenu(frontPreviewAlbum,{clientX:event.clientX,clientY:event.clientY});
 });
 frontCaseElement.addEventListener('keydown',event=>{
+    if((event.key==='Enter'||event.key===' ')&&!event.target?.closest('button')){
+        if(frontPreview.hidden)return;
+        event.preventDefault();dismissFrontPreview();return;
+    }
     if(event.key!=='ContextMenu'&&!(event.key==='F10'&&event.shiftKey))return;
     if(frontPreview.hidden||!frontPreviewAlbum)return;
     event.preventDefault();
