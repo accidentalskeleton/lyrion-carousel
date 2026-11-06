@@ -49,6 +49,8 @@
     background:transparent;
     pointer-events:none;
 }
+#book-fan-browser[data-catalogue-codes="false"] .bf-spine-catalogue { display:none; }
+#book-fan-browser[data-catalogue-codes="false"] .bf-spine-label { bottom:19px; }
 .bf-stage.bf-shelf-active .bf-album:not([data-has-catalogue]) .bf-spine-label { bottom:19px; }
 .bf-stage.bf-shelf-active .bf-spine-catalogue {
     position:absolute;
