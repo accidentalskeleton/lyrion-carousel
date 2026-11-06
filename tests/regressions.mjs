@@ -619,9 +619,106 @@ export async function runTests(sources) {
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
   });
   window.fetch=async()=>{};
-  const settingsFetch=async url=>url==='/api/config'?{ok:true,json:async()=>({lms_url:'http://test:9000',idle_return_ms:45000,random_scroll_max_ms:2000})}:{ok:true,text:async()=> '0.10.0'};
-  new Function('document','window','localStorage','fetch','setTimeout','Event','CustomEvent','rpc',plain(sources.settings))(document,window,localStorage,settingsFetch,setTimeout,class{},class{constructor(type,options){this.type=type;this.detail=options.detail;}},async()=>({genres_loop:[]}));
+  const releaseCalls=[],releaseDelays=new Map();let releaseTime=1800000000000;
+  let releaseInstalled='0.10.0';
+  let releaseReply=async()=>({ok:true,json:async()=>({tag_name:'v0.11.0',draft:false,prerelease:false})});
+  const settingsFetch=async(url,options)=>{
+    if(url.startsWith('https://api.github.com/')){releaseCalls.push({url,options});return releaseReply(options);}
+    return url==='/api/config'?{ok:true,json:async()=>({lms_url:'http://test:9000',idle_return_ms:45000,random_scroll_max_ms:2000})}:{ok:true,text:async()=>releaseInstalled};
+  };
+  const settingsTimeout=(callback,delay)=>{const id=setTimeout(callback);releaseDelays.set(id,delay);return id;};
+  const settingsClear=id=>{clearTimeout(id);releaseDelays.delete(id);};
+  const settingsApi=new Function('document','window','localStorage','fetch','setTimeout','clearTimeout','Date','Event','CustomEvent','rpc',plain(sources.settings)+`;return {
+    releaseVersion,releaseIsNewer,checkForReleases,configureReleaseChecks,loadVersion,
+    state:()=>({timer:releaseTimer,pending:!!releaseController,installed:installedReleaseVersion})
+  };`)(document,window,localStorage,settingsFetch,settingsTimeout,settingsClear,class extends Date{static now(){return releaseTime}},class{},class{constructor(type,options){this.type=type;this.detail=options.detail;}},async()=>({genres_loop:[]}));
   await window.__lyrionLmsConfigReady;
+  for(let turn=0;turn<5;turn++)await Promise.resolve();
+  const autoRelease=element('.bf-release-auto'),checkRelease=element('.bf-release-check'),releaseLabel=element('.bf-release-status'),releaseLink=element('.bf-release-link');
+  const releaseNotice=element('.bf-update-notice');
+  assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
+  assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
+  assert(autoRelease.checked&&releaseDelays.get(settingsApi.state().timer)===0,'automatic release checks default on and schedule the first check');
+  assert(settingsApi.releaseIsNewer('v0.11.0','0.10.0'),'new minor release is detected');
+  assert(settingsApi.releaseIsNewer('v0.11.10','0.11.9'),'release versions are compared numerically, not lexically');
+  assert(settingsApi.releaseIsNewer('v1.0.0','0.99.99'),'new major release is detected');
+  assert(!settingsApi.releaseIsNewer('v0.11.3','0.11.3')&&!settingsApi.releaseIsNewer('v0.11.2','0.11.3'),'equal or older releases are not updates');
+  assert(!settingsApi.releaseVersion('v0.12.0-beta.1')&&!settingsApi.releaseVersion('javascript:alert(1)'),'prerelease and invalid version tags are rejected');
+  const automaticCallback=timers.get(settingsApi.state().timer);
+  await automaticCallback();
+  assert(releaseCalls.length===1&&releaseCalls[0].url.endsWith('/accidentalskeleton/lyrion-carousel/releases/latest'),'automatic check uses only this project stable-release endpoint');
+  assert(releaseCalls[0].options.credentials==='omit'&&releaseCalls[0].options.referrerPolicy==='no-referrer','release requests omit credentials and referrer data');
+  assert(releaseLabel.textContent.includes('v0.11.0')&&!releaseLink.hidden,'new stable release is shown without installing it');
+  assert(releaseLink.href==='https://github.com/accidentalskeleton/lyrion-carousel/releases/tag/v0.11.0','release link is constructed from a validated tag, not upstream HTML');
+  assert(!releaseNotice.hidden&&releaseNotice.textContent==='v0.11.0 available'&&releaseNotice.href===releaseLink.href,
+    'automatic checks show a discreet main-screen notice linking to the same validated release');
+  const day=86400000;
+  assert(releaseDelays.get(settingsApi.state().timer)===day,'successful automatic checks schedule the next daily check');
+  settingsApi.configureReleaseChecks();
+  assert(releaseCalls.length===1&&releaseDelays.get(settingsApi.state().timer)===day,'reloading settings reuses the saved check time instead of checking again');
+  assert(!releaseNotice.hidden,'cached release results restore the main-screen notice without another request');
+  releaseInstalled='0.11.0';await settingsApi.loadVersion();settingsApi.configureReleaseChecks();
+  assert(releaseNotice.hidden,'installing the announced version removes the cached update notice');
+  releaseInstalled='0.10.0';await settingsApi.loadVersion();settingsApi.configureReleaseChecks();
+  releaseTime+=day;
+  await timers.get(settingsApi.state().timer)();
+  assert(releaseCalls.length===2,'periodic timer checks again after 24 hours');
+  localStorage.setItem('albumBrowserReleaseAttempt',String(releaseTime));
+  await settingsApi.checkForReleases();
+  assert(releaseCalls.length===2,'another tab check within the daily interval is not duplicated');
+  autoRelease.checked=false;autoRelease.listeners.change[0]();
+  assert(storage.get('albumBrowserReleaseChecks')==='false'&&!settingsApi.state().timer,'automatic checking can be disabled persistently');
+  assert(!releaseNotice.hidden,'disabling background checking preserves an already confirmed update notice');
+  await settingsApi.checkForReleases();
+  assert(releaseCalls.length===2,'disabled automatic checking never requests GitHub');
+  releaseReply=async()=>({ok:true,json:async()=>({tag_name:'v0.10.0'})});
+  await checkRelease.listeners.click[0]();
+  assert(releaseCalls.length===3&&releaseLabel.textContent.includes('up to date')&&releaseLink.hidden&&!settingsApi.state().timer,'manual checks still work when automatic checking is off');
+  assert(releaseNotice.hidden,'an up-to-date manual result clears the main-screen notice');
+  settingsApi.configureReleaseChecks();
+  assert(!autoRelease.checked&&!settingsApi.state().timer,'off preference survives Settings reinitialisation');
+  const beforeNoticeSync=releaseCalls.length;
+  localStorage.setItem('albumBrowserReleaseResult',JSON.stringify({tag:'v0.12.0',checkedAt:releaseTime}));
+  Element.prototype.dispatchEvent.call(window,{type:'storage',key:'albumBrowserReleaseResult'});
+  assert(!releaseNotice.hidden&&releaseNotice.textContent==='v0.12.0 available'&&releaseCalls.length===beforeNoticeSync,
+    'another tab can update the main-screen notice without triggering an additional check');
+  for(const payload of [{tag_name:'v0.12.0',prerelease:true},{tag_name:'v0.12.0',draft:true},{tag_name:'javascript:alert(1)'}]){
+    releaseReply=async()=>({ok:true,json:async()=>payload});
+    await settingsApi.checkForReleases(true);
+    assert(releaseLabel.textContent.includes('Could not check')&&releaseLink.hidden,'invalid or non-stable release never becomes an update link');
+  }
+  releaseReply=async()=>({ok:false,status:403});
+  await settingsApi.checkForReleases(true);
+  assert(releaseLabel.textContent.includes('Could not check')&&!checkRelease.disabled,'rate limits fail quietly and leave manual checking usable');
+  assert(!releaseNotice.hidden&&releaseNotice.textContent==='v0.12.0 available','a failed check preserves the last confirmed update notice');
+  autoRelease.checked=true;autoRelease.listeners.change[0]();
+  releaseReply=async()=>{throw Error('offline')};
+  await settingsApi.checkForReleases(true);
+  assert(releaseDelays.get(settingsApi.state().timer)===day,'network failures back off for a day instead of hammering GitHub');
+  let abortSignal,finishReply;
+  releaseReply=options=>{abortSignal=options.signal;return new Promise(resolve=>{finishReply=resolve});};
+  const pendingRelease=settingsApi.checkForReleases(true),beforeDuplicate=releaseCalls.length;
+  await settingsApi.checkForReleases(true);
+  assert(releaseCalls.length===beforeDuplicate&&checkRelease.disabled,'concurrent release checks share one in-flight request');
+  Element.prototype.dispatchEvent.call(window,{type:'pageshow'});
+  assert(settingsApi.state().pending&&!abortSignal.aborted,'initial pageshow never aborts a pending release check');
+  autoRelease.checked=false;autoRelease.listeners.change[0]();
+  assert(abortSignal.aborted&&!settingsApi.state().timer&&!checkRelease.disabled,'turning off checks aborts the pending request and clears its timer');
+  const disabledReleaseLabel=releaseLabel.textContent;
+  finishReply({ok:true,json:async()=>({tag_name:'v9.0.0'})});await pendingRelease;
+  assert(releaseLabel.textContent===disabledReleaseLabel&&releaseNotice.textContent==='v0.12.0 available',
+    'a late cancelled release response never overwrites the last confirmed update');
+  releaseReply=options=>new Promise((_,reject)=>{options.signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true});});
+  const timedRelease=settingsApi.checkForReleases(true);
+  const timeoutEntry=[...releaseDelays].find(([id,delay])=>delay===10000&&timers.has(id));
+  timers.get(timeoutEntry[0])();await timedRelease;
+  assert(releaseLabel.textContent.includes('Could not check')&&!settingsApi.state().pending&&!checkRelease.disabled,'stalled release requests time out and unlock the button');
+  autoRelease.checked=true;autoRelease.listeners.change[0]();
+  Element.prototype.dispatchEvent.call(window,{type:'pagehide'});
+  assert(!settingsApi.state().timer,'leaving the page removes the release scheduler');
+  Element.prototype.dispatchEvent.call(window,{type:'pageshow'});
+  assert(!!settingsApi.state().timer,'restoring a suspended page resumes daily checks');
+  autoRelease.checked=false;autoRelease.listeners.change[0]();
   tabs[2].listeners.click[0]();
   assert(tabs[2].getAttribute('aria-selected')==='true'&&tabs[2].tabIndex===0,'settings tab selected accessibly');
   assert(!element('#settings-panel-connection').hidden&&element('#settings-panel-display').hidden,'settings shows only selected panel');
@@ -632,6 +729,12 @@ export async function runTests(sources) {
   assert(!element('#settings-panel-cache').hidden,'arrow key selects cache settings tab');
   tabs[4].listeners.keydown[0](key('ArrowRight'));
   assert(!element('#settings-panel-about').hidden,'arrow key selects about settings tab');
+  assert(sources.index.includes('class="bf-project-link" href="https://github.com/accidentalskeleton/lyrion-carousel" target="_blank" rel="noopener noreferrer"'),
+    'About links to the GitHub project in a protected new tab');
+  assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
+    'the project link announces its new-tab behavior');
+  assert(sources.index.includes('css/settings.css?v=release-notice-2'),
+    'project-link styles invalidate the settings stylesheet cache');
   tabs[5].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
   assert(api.state().KEEP_PLAYING_OPEN===true,

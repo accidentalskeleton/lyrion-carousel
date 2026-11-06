@@ -35,9 +35,92 @@ settingsTabs.forEach((tab,index)=>{
         event.preventDefault();event.stopPropagation();selectSettingsTab(settingsTabs[next],true);
     });
 });
-const storage={coverSize:'albumBrowserCoverSize',idle:'albumBrowserIdleReturnMs',menuTimeout:'albumBrowserAlbumMenuTimeoutMs',frontTimeout:'albumBrowserFrontPreviewTimeoutMs',random:'albumBrowserRandomScrollMs',displayCount:'albumBrowserDisplayCount',cacheLimit:'albumBrowserCacheLimitBytes',genres:'albumBrowserDisabledGenres',lms:'albumBrowserLmsUrl'}
+const storage={coverSize:'albumBrowserCoverSize',idle:'albumBrowserIdleReturnMs',menuTimeout:'albumBrowserAlbumMenuTimeoutMs',frontTimeout:'albumBrowserFrontPreviewTimeoutMs',random:'albumBrowserRandomScrollMs',displayCount:'albumBrowserDisplayCount',cacheLimit:'albumBrowserCacheLimitBytes',genres:'albumBrowserDisabledGenres',lms:'albumBrowserLmsUrl',releaseAuto:'albumBrowserReleaseChecks',releaseAttempt:'albumBrowserReleaseAttempt',releaseResult:'albumBrowserReleaseResult'}
 function get(key,fallback){try{return localStorage.getItem(key)??fallback}catch(_){return fallback}}
 function set(key,value){try{localStorage.setItem(key,value)}catch(_){}}
+const releaseAutomatic=root?.querySelector('.bf-release-auto'),releaseCheck=root?.querySelector('.bf-release-check'),releaseStatus=root?.querySelector('.bf-release-status'),releaseLink=root?.querySelector('.bf-release-link');
+const releaseNotice=root?.querySelector('.bf-update-notice');
+const RELEASE_INTERVAL_MS=24*60*60*1000,RELEASE_API='https://api.github.com/repos/accidentalskeleton/lyrion-carousel/releases/latest';
+let installedReleaseVersion='',releaseTimer=0,releaseRequest=0,releaseController=null,releaseStopped=false,releaseLastAttempt=0;
+function releaseVersion(value){
+    const match=/^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(value||'').trim());
+    const parts=match?.slice(1).map(Number);
+    return parts?.every(Number.isSafeInteger)?parts:null;
+}
+function releaseIsNewer(candidate,current){
+    const latest=releaseVersion(candidate),installed=releaseVersion(current);
+    if(!latest||!installed)return false;
+    for(let index=0;index<3;index++)if(latest[index]!==installed[index])return latest[index]>installed[index];
+    return false;
+}
+function showRelease(tag){
+    const newer=releaseIsNewer(tag,installedReleaseVersion);
+    releaseStatus.textContent=newer?'New version '+tag+' available.':'You are up to date (v'+installedReleaseVersion+').';
+    releaseLink.hidden=!newer;
+    if(newer){releaseLink.href='https://github.com/accidentalskeleton/lyrion-carousel/releases/tag/'+encodeURIComponent(tag);releaseLink.textContent='View '+tag+' release';}
+    if(releaseNotice){
+        releaseNotice.hidden=!newer;
+        if(newer){releaseNotice.href=releaseLink.href;releaseNotice.textContent=tag+' available';releaseNotice.title='Lyrion Carousel '+tag+' is available. View the release on GitHub (opens in a new tab).';}
+    }
+}
+function showCachedRelease(){
+    releaseLink.hidden=true;
+    if(releaseNotice)releaseNotice.hidden=true;
+    try{
+        const cached=JSON.parse(get(storage.releaseResult,'null'));
+        if(releaseVersion(cached?.tag)&&releaseVersion(installedReleaseVersion)){showRelease(cached.tag);return;}
+    }catch(_){}
+    releaseStatus.textContent=releaseAutomatic.checked?'Not checked yet.':'Automatic checks off.';
+}
+function scheduleReleaseCheck(){
+    clearTimeout(releaseTimer);releaseTimer=0;
+    if(releaseStopped||!releaseAutomatic?.checked)return;
+    const last=Math.max(releaseLastAttempt,Number(get(storage.releaseAttempt,'0'))||0),age=Date.now()-last;
+    const delay=last>0&&age>=0&&age<RELEASE_INTERVAL_MS?RELEASE_INTERVAL_MS-age:0;
+    releaseTimer=setTimeout(()=>checkForReleases(),delay);
+}
+function stopReleaseCheck(){
+    releaseRequest++;clearTimeout(releaseTimer);releaseTimer=0;
+    releaseController?.abort();releaseController=null;
+    if(releaseCheck)releaseCheck.disabled=false;
+}
+async function checkForReleases(manual=false){
+    if(releaseStopped||releaseController||!releaseCheck||(!manual&&!releaseAutomatic.checked))return;
+    const last=Math.max(releaseLastAttempt,Number(get(storage.releaseAttempt,'0'))||0),age=Date.now()-last;
+    if(!manual&&last>0&&age>=0&&age<RELEASE_INTERVAL_MS){scheduleReleaseCheck();return;}
+    clearTimeout(releaseTimer);releaseTimer=0;
+    const request=++releaseRequest,controller=new AbortController();releaseController=controller;
+    releaseLastAttempt=Date.now();set(storage.releaseAttempt,String(releaseLastAttempt));
+    releaseCheck.disabled=true;releaseLink.hidden=true;releaseStatus.textContent='Checking for releases...';
+    const timeout=setTimeout(()=>controller.abort(),10000);
+    try{
+        if(!releaseVersion(installedReleaseVersion))await loadVersion(controller.signal);
+        if(request!==releaseRequest)return;
+        if(!releaseVersion(installedReleaseVersion))throw Error('Installed version unavailable');
+        const response=await fetch(RELEASE_API,{cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer',headers:{Accept:'application/vnd.github+json'},signal:controller.signal});
+        if(!response.ok)throw Error('Release check failed');
+        const result=await response.json();
+        if(request!==releaseRequest)return;
+        if(result.draft||result.prerelease||!releaseVersion(result.tag_name))throw Error('Invalid stable release');
+        set(storage.releaseResult,JSON.stringify({tag:result.tag_name,checkedAt:Date.now()}));
+        showRelease(result.tag_name);
+    }catch(_){
+        if(request===releaseRequest)releaseStatus.textContent='Could not check for updates. Try again later.';
+    }finally{
+        clearTimeout(timeout);
+        if(request===releaseRequest){releaseController=null;releaseCheck.disabled=false;scheduleReleaseCheck();}
+    }
+}
+function configureReleaseChecks(){
+    if(!releaseAutomatic)return;
+    stopReleaseCheck();releaseAutomatic.checked=get(storage.releaseAuto,'true')==='true';
+    showCachedRelease();scheduleReleaseCheck();
+}
+releaseAutomatic?.addEventListener('change',()=>{set(storage.releaseAuto,String(releaseAutomatic.checked));configureReleaseChecks()});
+releaseCheck?.addEventListener('click',()=>checkForReleases(true));
+window.addEventListener('storage',event=>{if(event.key===storage.releaseAuto)configureReleaseChecks();else if(event.key===storage.releaseAttempt)scheduleReleaseCheck();else if(event.key===storage.releaseResult)showCachedRelease()});
+window.addEventListener('pagehide',()=>{releaseStopped=true;stopReleaseCheck()});
+window.addEventListener('pageshow',()=>{if(releaseStopped){releaseStopped=false;configureReleaseChecks()}});
 function disabledGenres(){try{const values=JSON.parse(get(storage.genres,'[]'));return new Set(Array.isArray(values)?values.filter(value=>typeof value==='string'):[])}catch(_){return new Set()}}
 function applyGenres(fromBulkAction=false){
     if(!genreList)return;
@@ -67,8 +150,8 @@ async function loadGenres(){
 }
 function apply(value,name){set(storage[name],value);window.dispatchEvent(new CustomEvent('lyrion-carousel-setting',{detail:{name,value}}))}
 function refreshStatus(){const label=root.querySelector('.bf-connection-label')?.textContent?.trim()||'—',cached=root.dataset.catalogueSource==='cache';aboutConnection.textContent=root.dataset.connected==='true'?'Connected':'Not connected';if(aboutLive)aboutLive.textContent=root.dataset.liveUpdates==='true'?'Connected':root.dataset.liveUpdates==='connecting'?'Connecting…':'Disconnected';aboutLibrary.textContent=cached?label+' · cached':label;aboutPlayer.textContent=player?.selectedOptions?.[0]?.textContent||'—';if(aboutCache)aboutCache.textContent=cached?'Using cached catalogue':'Album cache enabled'}
-async function loadVersion(){try{const r=await fetch('VERSION',{cache:'no-store'});if(r.ok)aboutVersion.textContent='v'+(await r.text()).trim()}catch(_){aboutVersion.textContent=''}}
-function initialise(){coverSize.value=get(storage.coverSize,'512');idle.value=get(storage.idle,'30000');menuTimeout.value=get(storage.menuTimeout,'10000');frontTimeout.value=get(storage.frontTimeout,'10000');random.value=get(storage.random,'3000');displayCount.value=get(storage.displayCount,'30');cacheLimit.value=get(storage.cacheLimit,'512000000');window.__lyrionCarouselSettings={coverSize:Number(coverSize.value),idle:Number(idle.value),menuTimeout:Number(menuTimeout.value),frontTimeout:Number(frontTimeout.value),random:Number(random.value),displayCount:Number(displayCount.value)};loadVersion()}
+async function loadVersion(signal){try{const r=await fetch('VERSION',{cache:'no-store',signal});if(r.ok){installedReleaseVersion=(await r.text()).trim();aboutVersion.textContent='v'+installedReleaseVersion}}catch(_){aboutVersion.textContent=''}}
+function initialise(){coverSize.value=get(storage.coverSize,'512');idle.value=get(storage.idle,'30000');menuTimeout.value=get(storage.menuTimeout,'10000');frontTimeout.value=get(storage.frontTimeout,'10000');random.value=get(storage.random,'3000');displayCount.value=get(storage.displayCount,'30');cacheLimit.value=get(storage.cacheLimit,'512000000');window.__lyrionCarouselSettings={coverSize:Number(coverSize.value),idle:Number(idle.value),menuTimeout:Number(menuTimeout.value),frontTimeout:Number(frontTimeout.value),random:Number(random.value),displayCount:Number(displayCount.value)};return loadVersion()}
 function validLmsUrl(value){return /^https?:\/\/[^/?#]+(?:\/[^?#]*)?$/.test(value)}
 function applyRuntimeDefault(select,name,value){
     if(get(storage[name],null)!==null||!Number.isFinite(Number(value)))return;
@@ -138,7 +221,7 @@ cacheCancel?.addEventListener('click',()=>{dismissCacheConfirm();clearCacheButto
 cacheConfirmClear?.addEventListener('click',async()=>{if(clearCacheButton.disabled)return;dismissCacheConfirm();clearCacheButton.disabled=true;if(cacheFeedback)cacheFeedback.textContent='Clearing…';try{const response=await fetch('/api/cache/clear',{method:'POST',headers:{'X-Lyrion-Request':'1'}});if(!response.ok)throw Error('Cache clear failed');const result=await response.json();if(cacheFeedback)cacheFeedback.textContent=(result.removed??0)+' cached files removed';if(aboutCache)aboutCache.textContent='Album cache cleared';refreshWarmStatus();window.dispatchEvent(new Event('lyrion-carousel-cache-cleared'))}catch(_){if(cacheFeedback)cacheFeedback.textContent='Could not clear album cache'}finally{clearCacheButton.disabled=false;if(!overlay.hidden&&!root.querySelector('#settings-panel-cache')?.hidden)clearCacheButton.focus()}});
 window.addEventListener('lyrion-carousel-status',refreshStatus);
 openButton?.addEventListener('click',openSettings);closeButton?.addEventListener('click',closeSettings);overlay?.addEventListener('click',event=>{if(event.target===overlay)closeSettings()});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&overlay&&!overlay.hidden){if(cacheConfirm&&!cacheConfirm.hidden){dismissCacheConfirm();clearCacheButton?.focus()}else closeSettings()}});
-initialise();
+initialise().then(configureReleaseChecks);
 window.__lyrionLmsConfigReady=loadLmsConfig();
 loadGenres();
 window.addEventListener('lyrion-carousel-lms-change',loadGenres);

@@ -1,4 +1,45 @@
 /* Settings must cover the shelf, including the pinned playing cover. */
+.bf-header-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+.bf-header-status .bf-connection {
+    max-width: 100%;
+    min-width: 0;
+}
+.bf-header-status .bf-connection-label {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.bf-header-status .bf-settings-open {
+    flex-shrink: 0;
+}
+.bf-update-notice {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    color: #8fba91;
+    font-size: 10px;
+    line-height: 12px;
+    letter-spacing: 0;
+    text-transform: none;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: auto;
+}
+.bf-update-notice[hidden] {
+    display: none;
+}
+.bf-update-notice:hover,
+.bf-update-notice:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
 #book-fan-browser .bf-settings-overlay {
     z-index:220;
 }
@@ -101,13 +142,29 @@
     white-space: nowrap;
     text-overflow: ellipsis;
 }
+.bf-project-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+    text-underline-offset: 3px;
+}
+.bf-project-link:hover,
+.bf-project-link:focus-visible {
+    color: #f1eee8;
+}
+.bf-project-link:focus-visible {
+    outline: 2px solid #8fba91;
+    outline-offset: 3px;
+}
 .bf-cache-actions {
     display: flex;
     align-items: center;
     gap: 10px;
     margin-top: 13px;
 }
-.bf-clear-cache {
+.bf-clear-cache,
+.bf-release-check {
     min-height: 32px;
     border: 1px solid rgba(255, 255, 255, .14);
     border-radius: 7px;
@@ -118,11 +175,13 @@
     font-size: 11px;
     cursor: pointer;
 }
-.bf-clear-cache:hover:not(:disabled) {
+.bf-clear-cache:hover:not(:disabled),
+.bf-release-check:hover:not(:disabled) {
     border-color: rgba(255, 255, 255, .28);
     color: #f1eee8;
 }
-.bf-clear-cache:disabled {
+.bf-clear-cache:disabled,
+.bf-release-check:disabled {
     opacity: .5;
     cursor: wait;
 }
@@ -133,6 +192,37 @@
     font-size: 10px;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+.bf-release-updates {
+    display: block;
+}
+.bf-release-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 12px;
+}
+.bf-release-controls label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #c9c6c0;
+    font-size: 12px;
+}
+.bf-release-auto {
+    margin: 0;
+    accent-color: #8fba91;
+}
+.bf-release-status,
+.bf-release-link {
+    font-size: 12px;
+}
+.bf-release-status {
+    color: #aaa69f;
+}
+.bf-release-link[hidden] {
+    display: none;
 }
 .bf-settings-note {
     margin: 15px -20px -20px;
