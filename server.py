@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
-import time, io, random, argparse, colorsys, hashlib, ipaddress, json, os, re, shutil, socket, sqlite3, sys, threading
+import time, io, random, argparse, colorsys, hashlib, ipaddress, json, os, re, shutil, socket, sqlite3, subprocess, sys, threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
@@ -19,6 +19,36 @@ from PIL import Image, ImageStat, ImageOps
 # The pool below is shared across metadata requests; the optional artwork warmer
 # has its own single daemon thread so it does not occupy this foreground pool.
 METADATA_WORKERS=ThreadPoolExecutor(max_workers=6,thread_name_prefix="album-metadata")
+_CATALOGUE_CODES=OrderedDict()
+_CATALOGUE_CODES_LOCK=threading.Lock()
+
+def release_catalogue_number(track_url:str)->str:
+    """Read an explicitly selected release beside a locally accessible track."""
+    url=urlsplit(track_url)
+    if url.scheme!='file' or url.netloc not in ('','localhost'): return ''
+    track=Path(unquote(url.path))
+    folder=track.parent
+    if track.suffix.lower()=='.flac':
+        try:
+            result=subprocess.run(['metaflac','--show-tag=CATALOGNUMBER','--',str(track)],
+                                  capture_output=True,text=True,check=True,timeout=3)
+            codes=list(dict.fromkeys(line.partition('=')[2].strip() for line in result.stdout.splitlines()
+                        if line.partition('=')[0].upper()=='CATALOGNUMBER' and line.partition('=')[2].strip().casefold() not in ('','[none]','none','n/a')))
+            if codes:return ' / '.join(codes)[:160]
+        except (OSError,subprocess.SubprocessError,UnicodeError):pass
+    try:
+        path=folder/'selected-release-metadata.json'
+        with path.open('rb') as source:
+            payload=source.read(2*1024*1024+1)
+        if len(payload)>2*1024*1024:return ''
+        release=json.loads(payload)
+        codes=[]
+        for item in release.get('label-info',[]):
+            code=item.get('catalog-number') if isinstance(item,dict) else None
+            if isinstance(code,str) and code.strip() and code.strip().casefold() not in ('[none]','none','n/a'):
+                if code.strip() not in codes:codes.append(code.strip())
+        return ' / '.join(codes)[:160]
+    except (OSError,ValueError,AttributeError,TypeError):return ''
 # Incremental image-cache accounting avoids scanning thousands of cache files
 # after every newly generated cover. The first write after restart establishes
 # a disk baseline; explicit pruning/clearing reconciles the counter.
@@ -474,6 +504,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     def do_POST(self)->None:
         """Dispatch state-changing/cache APIs or forward bounded JSON to LMS."""
         path=urlsplit(self.path).path
+        if path=='/api/catalogue-codes': self._serve_catalogue_codes(); return
         if path=='/api/cache/warm': self._warm_cache(); return
         if path=='/api/art-meta':
             COLOUR_INDEXER.last_foreground=time.monotonic()
@@ -929,6 +960,9 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
 
     def _invalidate_catalogue_data(self,lms_url:str|None=None)->None:
         """Forget memory and disk snapshots after an LMS rescan or source change."""
+        with _CATALOGUE_CODES_LOCK:
+            for key in list(_CATALOGUE_CODES):
+                if key[0]==(lms_url or self.lms_url):_CATALOGUE_CODES.pop(key,None)
         with _CATALOGUE_LOCK:
             _CATALOGUE_MEMORY.pop(self._catalogue_snapshot_key(lms_url),None)
             self._catalogue_snapshot_path(lms_url).unlink(missing_ok=True)
@@ -1157,6 +1191,36 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         """Return cached/generated spine metadata, or a non-cacheable 404 when unavailable."""
         metadata=self._artwork_metadata(artwork_id)
         self._send_payload(200 if metadata else 404,json.dumps(metadata or {'error':'Artwork metadata unavailable'}).encode(),'application/json; charset=utf-8',cache_control='public, max-age=86400' if metadata else 'no-store')
+
+    def _album_catalogue_code(self,album_id:str)->str:
+        key=(self.lms_url,album_id)
+        with _CATALOGUE_CODES_LOCK:
+            cached=_CATALOGUE_CODES.get(key)
+            if cached and time.monotonic()-cached[0]<900:
+                _CATALOGUE_CODES.move_to_end(key)
+                return cached[1]
+        try:
+            result=self._lms_rpc('0',['titles',0,1,'album_id:'+album_id,'tags:u'])
+            tracks=result.get('titles_loop',[])
+            code=release_catalogue_number(tracks[0].get('url','')) if tracks else ''
+        except (OSError,ValueError,KeyError,TypeError):return ''
+        with _CATALOGUE_CODES_LOCK:
+            _CATALOGUE_CODES[key]=(time.monotonic(),code)
+            while len(_CATALOGUE_CODES)>2048:_CATALOGUE_CODES.popitem(last=False)
+        return code
+
+    def _serve_catalogue_codes(self)->None:
+        try:
+            length=int(self.headers.get('Content-Length','0'))
+            if not 0<length<=MAX_RPC_BYTES:raise ValueError
+            payload=json.loads(self.rfile.read(length))
+            ids=payload.get('album_ids') if isinstance(payload,dict) else None
+            if not isinstance(ids,list) or len(ids)>64 or any(not isinstance(i,str) or not re.fullmatch(r'[0-9]{1,12}',i) for i in ids):raise ValueError
+        except (ValueError,UnicodeError):
+            self.send_error(400,'Expected up to 64 album IDs');return
+        ids=list(dict.fromkeys(ids))
+        codes=dict(zip(ids,METADATA_WORKERS.map(self._album_catalogue_code,ids)))
+        self._send_payload(200,json.dumps({'codes':codes}).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
     def _serve_metadata_batch(self)->None:
         """Prepare at most 64 requested artwork IDs using the shared worker pool."""

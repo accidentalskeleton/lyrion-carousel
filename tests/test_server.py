@@ -28,6 +28,45 @@ class ServerTests(unittest.TestCase):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
         return self.handler.cache_dir / f'{key}.img', self.handler.cache_dir / f'{key}.meta'
 
+    def test_real_catalogue_number_from_selected_release(self):
+        folder=Path(self.temp.name)
+        metadata=folder/'selected-release-metadata.json'
+        metadata.write_text(json.dumps({'label-info':[
+            {'catalog-number':' ABC 123 '},{'catalog-number':'ABC 123'},
+            {'catalog-number':'[none]'},{'catalog-number':'XYZ 456'}]}))
+        self.assertEqual(server.release_catalogue_number((folder/'track.flac').as_uri()),'ABC 123 / XYZ 456')
+        self.assertEqual(server.release_catalogue_number('https://example.com/track.flac'),'')
+        self.assertEqual(server.release_catalogue_number('file://other-host/track.flac'),'')
+        metadata.write_text('invalid json')
+        self.assertEqual(server.release_catalogue_number((folder/'track.flac').as_uri()),'')
+
+    def test_catalogue_tag_takes_precedence_over_release_sidecar(self):
+        folder=Path(self.temp.name)
+        (folder/'selected-release-metadata.json').write_text(json.dumps({'label-info':[{'catalog-number':'SIDECAR'}]}))
+        with patch('server.subprocess.run') as run:
+            run.return_value.stdout='CATALOGNUMBER=TAG 123\nCATALOGNUMBER=TAG 123\nCATALOGNUMBER=[none]\n'
+            self.assertEqual(server.release_catalogue_number((folder/'track.flac').as_uri()),'TAG 123')
+            self.assertEqual(run.call_args.args[0][:3],['metaflac','--show-tag=CATALOGNUMBER','--'])
+
+    def test_catalogue_code_lookup_is_cached_and_server_scoped(self):
+        server._CATALOGUE_CODES.clear()
+        with patch.object(self.handler,'_lms_rpc',return_value={'titles_loop':[{'url':'file:///album/track.flac'}]}) as rpc, \
+             patch('server.release_catalogue_number',return_value='REAL 123'):
+            self.assertEqual(self.handler._album_catalogue_code('42'),'REAL 123')
+            self.assertEqual(self.handler._album_catalogue_code('42'),'REAL 123')
+            self.assertEqual(rpc.call_count,1)
+            self.handler.lms_url='http://other:9000'
+            self.assertEqual(self.handler._album_catalogue_code('42'),'REAL 123')
+            self.assertEqual(rpc.call_count,2)
+
+    def test_catalogue_code_batch_validation(self):
+        self.handler.headers={'Content-Length':'20'}
+        self.handler.rfile=io.BytesIO(b'{"album_ids":["../"]}')
+        errors=[]
+        self.handler.send_error=lambda status,*args:errors.append(status)
+        self.handler._serve_catalogue_codes()
+        self.assertEqual(errors,[400])
+
     def test_spine_coloured_text_meets_accessible_contrast(self):
         backgrounds=['#000000','#ffffff','#808080','#eacb43','#397da3',
                      '#63424f','#efe9df','#202628','#d02a3f','#32944e']
