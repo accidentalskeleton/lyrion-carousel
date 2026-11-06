@@ -8,7 +8,7 @@
 
 Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines, with enlarged jewel-case artwork when you select an album. It uses CSS transforms; no WebGL renderer or remote font downloads are required.
 
-Current application version: **0.11.2**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
+Current application version: **0.11.4**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
 ## Features
 
@@ -45,6 +45,19 @@ Current application version: **0.11.2**. The canonical version is stored in [`VE
 - zero-idle-loop long-task performance diagnostics.
 
 ## Source layout
+
+Spine footers show real catalogue numbers and can be shown or hidden in
+Settings → Display → Catalogue codes. The choice is saved per browser and
+codes are shown by default. Carousel first reads `CATALOGNUMBER` from the
+local FLAC track using `metaflac` (provided by the `flac` package). The ripper
+already writes this tag from the selected release's catalogue numbers.
+If the tag is missing, Carousel reads `label-info[].catalog-number` from
+`selected-release-metadata.json` beside the track. Both methods require local
+file access on the Carousel server; no external release search is performed.
+Albums without a real number show no code and retain the full title area.
+Only displayed albums are looked up in bounded batches. Server lookups,
+including missing numbers, are cached for 15 minutes with a 2,048-entry limit;
+the browser also keeps at most 2,048 results. Hiding codes stops new lookups.
 
 ```text
 lyrion-carousel/
@@ -134,7 +147,7 @@ Startup discovers players and loads the catalogue. If an album is playing, the s
 
 After the idle delay, the shelf returns to the playing album and opens its cover. Its preview does not time out. With **Keep playing album open** enabled (the default), it stays open while scrolling and moves with its position on the shelf; it can move offscreen and return as you browse. Clicking another spine temporarily previews that album; closing it or letting its preview time out restores the playing cover. When playback changes to another album, the shelf follows and opens the new cover. Turn the option off to restore click-to-close and scroll-to-dismiss behaviour; idle return will still open the playing cover.
 
-A short click on an ordinary preview or the surrounding shelf closes it. Hold a spine or cover for roughly half a second to open album actions. The cover’s play button loads that album. Search, Settings and Album Information appear above the shelf, and their input controls do not navigate the shelf.
+A short click or tap closes a non-playing album preview. The playing cover stays open on taps, clicks and Enter/Space; closing another preview restores the playing cover. Hold a spine or cover for roughly half a second to open album actions. The cover’s play button loads that album. Search, Settings and Album Information appear above the shelf, and their input controls do not navigate the shelf.
 
 The detail area shows the album under the pointer; outside the shelf it shows the playing album, or clears when nothing is playing. Track details and progress appear only for the playing album. The heading stays at the same vertical position in both states.
 

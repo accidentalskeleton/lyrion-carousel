@@ -4,6 +4,16 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add the Lyrion forums announcement thread to Settings > About > Project, opening in a new tab alongside the GitHub project link.
+
+## [0.11.4] - 2026-11-06
+
+- Give catalogue numbers their own muted stone/slate ink, distinct from artist/title text, with contrast checked against each spine colour.
+- Close non-playing album previews on a short click/tap or Enter/Space, restoring the playing cover when applicable. The playing album always stays open on those interactions. Keep drag-to-scroll, long-press actions and the Play button intact.
+- Apply cached spine colours and fonts synchronously when reusing shelf nodes, avoiding a temporary grey reset.
+- Display real catalogue numbers on CD spines: read local FLAC `CATALOGNUMBER` tags first, then saved selected-release metadata. Show no code when unavailable; restore the full title area. Batch visible-album lookups and bound browser/server caches; add the `flac` package dependency for tag reading.
+- Arrange catalogue numbers horizontally over two or three lines, preferring natural groups and using three lines for long numbers. Vary their vertical position consistently per album only where the artist/title leaves room, with a maximum 24-pixel lift and no continuous layout-measurement loop.
+- Add Settings > Display > Catalogue codes with a saved per-browser Show/Hide choice. Hiding codes restores the title area and stops new catalogue-number lookups.
 - Add a GitHub project link beside the application version in Settings > About, opening the repository in a new tab.
 - Check GitHub for newer stable releases once a day while Carousel is open, with a saved automatic-check toggle and a manual Check now action in Settings > About. Cache check times across reloads, cancel requests when disabled, and show release links without downloading or installing updates.
 - Show a discreet release link to the right of the main carousel's information button when a newer stable version is available, reusing cached check results without extra requests.

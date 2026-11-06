@@ -111,7 +111,7 @@ export async function runTests(sources) {
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -130,9 +130,22 @@ export async function runTests(sources) {
     if(error)throw error;if(!done)throw Error('Animation did not finish');
   }
   await api.loadInitialCatalogue();
+  assert(api.catalogueCodeLines('BEADYCD2')==='BEADYCD\n2','catalogue letter prefix stays intact');
+  for(const code of ['9362-49870-2','1234567890123','509999 65111 2 1']){
+    assert(api.catalogueCodeLines(code).split('\n').length===3,
+      'long catalogue numbers use three lines instead of shrinking into two');
+  }
+  for(const code of ['9362-49870-2','088 112 379-2','1234567890123','7243 8 53711 2 7 / CDDEEPP 2']){
+    const lines=api.catalogueCodeLines(code).split('\n');
+    assert(lines.length>=2&&lines.length<=3&&lines.join('').replace(/\s/g,'')===code.replace(/\s/g,''),
+      'catalogue wrapping preserves code characters in two or three lines');
+  }
   const firstSpine=stage.children.find(node=>node.className?.includes('bf-album'));
   const spineLabel=firstSpine?.children.find(node=>node.className==='bf-spine-label');
   const spineShell=firstSpine?.children.find(node=>node.className==='bf-spine-shell');
+  const catalogueFooter=firstSpine?.children.find(node=>node.className==='bf-spine-catalogue');
+  assert(catalogueFooter.hidden&&catalogueFooter.textContent==='',
+    'albums without real catalogue metadata have no fabricated code');
   const spineCover=firstSpine?.children.find(node=>node.className==='bf-spine-cover');
   assert(spineLabel?.textContent?.includes('Artist — Album'), 'one continuous artist and album spine label');
   assert(spineShell?.src==='/assets/jewel-case-spine-v1.svg', 'all spines use shared static shell image');
@@ -201,6 +214,18 @@ export async function runTests(sources) {
     'metadata batches resolve all callers and clear pending requests');
   await api.fetchSpineMeta(sampleAlbums[0]);
   assert(metadataBatches.length===2,'cached metadata is reused without another request');
+  const cachedSpine=new Element('cached-spine');
+  cachedSpine._boundAlbum=sampleAlbums[0];cachedSpine.dataset.index='0';
+  api.loadSpineMeta(sampleAlbums[0],cachedSpine);
+  assert(cachedSpine.style['--spine-color']==='#123456',
+    'cached spine colour is applied synchronously before the next paint');
+  const uncachedAlbum=[];
+  cachedSpine._boundAlbum=uncachedAlbum;
+  api.loadSpineMeta(uncachedAlbum,cachedSpine);
+  assert(cachedSpine.style['--spine-color']==='#202628'&&
+    cachedSpine.style['--spine-text']==='#f5f2ea'&&
+    cachedSpine.style['--spine-font-family']==='Arial,Helvetica,sans-serif',
+    'reusing a node without metadata clears the previous album styling');
 
   let spotifyMetaCalls=0;
   metadataFetch=async url=>{
@@ -314,7 +339,7 @@ export async function runTests(sources) {
   api.state().albums[firstPlayingIndex]=firstPlayingCover;
 
 
-  // Short clicks are inert; dragging the enlarged cover scrolls the same
+  // Short clicks close; dragging the enlarged cover scrolls the same
   // shelf with the same distance, momentum and snap as dragging the spines.
   // Album Information is only reached through the long-press album menu.
   const trackOverlay=element('.bf-track-overlay');
@@ -336,6 +361,18 @@ export async function runTests(sources) {
   preview.dispatchEvent({type:'pointerup',pointerId:31});
   assert(trackOverlay.hidden&&api.state().position===originalCoverPosition,
     'short cover tap neither opens Album Information nor moves the shelf');
+  assert(!preview.hidden&&preview.dataset.opening!=='true',
+    'short cover tap leaves the pinned playing cover open');
+  await api.ensurePlayingCover();
+  assert(!preview.hidden,'playback status keeps the playing cover open');
+  api.set({playing:false});
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:31,clientX:300,clientY:90});
+  preview.dispatchEvent({type:'pointerup',pointerId:31});
+  assert(preview.dataset.opening==='true','short tap still closes a non-playing preview');
+  await settle(api.closeFrontPreview(true,true));
+  assert(preview.hidden,'non-playing preview finishes closing');
+  api.set({playing:true});
+  api.openFrontPreview(originalCover,originalCoverIndex);
   frontCase.dispatchEvent({type:'click',target:{closest:()=>null}});
   assert(trackOverlay.hidden,'synthetic click after tap remains inert');
 
@@ -733,7 +770,7 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
-  assert(sources.index.includes('css/settings.css?v=release-notice-2'),
+  assert(sources.index.includes('css/settings.css?v=forum-project-link-2'),
     'project-link styles invalidate the settings stylesheet cache');
   tabs[5].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
@@ -1247,7 +1284,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=case-motion-1')&&sources.index.includes('css/shelf.css?v=case-opening-2'),
+  assert(sources.index.includes('js/app.js?v=keep-playing-open-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

@@ -29,7 +29,7 @@
        Fonts have different intrinsic widths, so an inset alone leaves
        their glyphs offset inside the case. */
     top:19px;
-    bottom:19px;
+    bottom:88px;
     left:50%;
     right:auto;
     transform:translateX(-50%)!important;
@@ -47,6 +47,27 @@
     color:var(--spine-text,#f5f2ea);
     text-shadow:0 1px 1px rgba(0,0,0,.16);
     background:transparent;
+    pointer-events:none;
+}
+#book-fan-browser[data-catalogue-codes="false"] .bf-spine-catalogue { display:none; }
+#book-fan-browser[data-catalogue-codes="false"] .bf-spine-label { bottom:19px; }
+.bf-stage.bf-shelf-active .bf-album:not([data-has-catalogue]) .bf-spine-label { bottom:19px; }
+.bf-stage.bf-shelf-active .bf-spine-catalogue {
+    position:absolute;
+    z-index:2;
+    bottom:19px;
+    width:calc(100% - 8px);
+    max-height:62px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    left:50%;
+    transform:translateX(-50%) translateY(calc(-1 * var(--catalogue-lift,0px)));
+    writing-mode:horizontal-tb;
+    white-space:pre;
+    text-align:center;
+    font:600 clamp(4px,calc((var(--spine-width,44px) - 8px) / var(--catalogue-chars,6) / .65),9px)/1.25 Arial,Helvetica,sans-serif;
+    letter-spacing:.15px;
+    color:var(--catalogue-ink,#bcb6aa);
     pointer-events:none;
 }
 /* Every album displays exactly the same transparent moulded plastic image. */
