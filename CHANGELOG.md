@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add the Lyrion forums announcement thread to Settings > About > Project, opening in a new tab alongside the GitHub project link.
+
 ## [0.11.4] - 2026-11-06
 
 - Give catalogue numbers their own muted stone/slate ink, distinct from artist/title text, with contrast checked against each spine colour.
