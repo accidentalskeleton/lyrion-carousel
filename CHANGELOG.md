@@ -4,6 +4,10 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add a GitHub project link beside the application version in Settings > About, opening the repository in a new tab.
+- Check GitHub for newer stable releases once a day while Carousel is open, with a saved automatic-check toggle and a manual Check now action in Settings > About. Cache check times across reloads, cancel requests when disabled, and show release links without downloading or installing updates.
+- Show a discreet release link to the right of the main carousel's information button when a newer stable version is available, reusing cached check results without extra requests.
+
 ## [0.11.3] - 2026-11-06
 
 - Animate clicked CD spines into their open covers over 320 ms while neighbouring spines slide apart; timeouts and dismissals reverse the turn and bring the spines back together before hiding the case. Reuse the shelf's existing frame loop and cached measurements, stop rendering when settled, honour reduced motion, and let wheel, keyboard or dragging interrupt immediately. Playback-status updates do not replay the transition, and an interrupted timeout cannot replace a newly selected cover.

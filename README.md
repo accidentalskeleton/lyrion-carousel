@@ -35,6 +35,7 @@ Current application version: **0.11.2**. The canonical version is stored in [`VE
 - saved player selection across browser sessions;
 - live configurable display count, preview/menu timeouts, idle return and maximum scroll duration;
 - Settings panel with explicit LMS, CometD/live-update, player, library, cache and application status;
+- daily GitHub stable-release checks while the page is open, enabled by default with a per-browser off switch and manual Check now action in Settings > About; requests contain no LMS/library details and do not download or install updates;
 - automatic LMS reconnection;
 - Library / Spotify source switching with Spotify saved albums supplied through LMS Spotty;
 - full Spotify album search through Spotty, with searched albums playable and savable to the Spotify library;
