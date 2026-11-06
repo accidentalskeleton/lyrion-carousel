@@ -52,6 +52,7 @@ export async function runTests(sources) {
     dispatchEvent(event){for(const fn of this.listeners[event.type]||[])fn(event);return true;}
     contains(el){return el===this||this.children.some(n=>n.contains?.(el));}
     focus(){} select(){} setPointerCapture(){}
+    get offsetWidth(){return this.name==='case'?(this.coverWidth||300):this.clientWidth;}
     getBoundingClientRect(){return {left:0,right:1000,top:0,bottom:400,width:this.name==='case'?(this.coverWidth||300):1000,height:400};}
     querySelectorAll(selector){return this.children.filter(el=>selector==='.'+el.className?.split(' ')[0]);}
     querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
@@ -114,10 +115,10 @@ export async function runTests(sources) {
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
-      finiteShelfBounds,
+      finiteShelfBounds,snapShelfPosition,
       prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
-      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex}),
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
   async function settle(promise) {
@@ -661,6 +662,7 @@ export async function runTests(sources) {
   await api.setDisplayOrder('recent');
   assert(api.state().orderMode==='recent'&&storage.get('albumBrowserOrderMode')==='recent',
     'Recently Added order is active and persisted');
+  api.closeFrontPreview();
   const recentLast=api.state().albums.length-1;
   const [firstStop,lastStop]=api.finiteShelfBounds();
   const visible=Math.min(api.state().DISPLAY_ALBUM_COUNT||30,api.state().albums.length);
@@ -693,6 +695,115 @@ export async function runTests(sources) {
     'last CD remains rendered at the right shelf edge');
   assert(api.geometry().nodes.every(node=>node.index>=0&&node.index<=recentLast),
     'bounded mode does not wrap spines at last album');
+  // A bounded shelf never extends its scroll range for an open case.
+  // The case is left off-centre, but fully visible inside the viewport.
+  const coverX=()=>Number(frontCase.style.transform.split('translate3d(')[1]?.split('px')[0]);
+  const caseWidth=api.frontCaseWidth();
+  const shelfWidth=stage.clientWidth;
+  api.set({playing:false,position:firstStop});
+  api.closeFrontPreview();api.draw();
+  api.openFrontPreview(api.state().albums[0],0);
+  api.draw();
+  const spineX=node=>Number(node.el.style.transform.split('translate3d(')[1]?.split('px')[0]);
+  const nextSpine=api.geometry().nodes.find(node=>node.index===1);
+  assert(Math.abs(spineX(nextSpine)-(coverX()+caseWidth/2))<.01,
+    'the next spine touches the open case without being covered');
+
+  assert(api.state().target===firstStop&&!preview.hidden,
+    'opening the newest album does not extend the finite scroll limit');
+  api.draw();
+  assert(coverX()<0&&coverX()>=-(shelfWidth-caseWidth)/2-.01,
+    'newest jewel case remains off-centre but fully visible');
+  api.browseWithArrow(-1);
+  assert(api.state().target===firstStop,
+    'open case cannot scroll past the first finite endpoint');
+  const beforeWheel=api.state().position;
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:1200,preventDefault(){}});
+  assert(api.state().position>beforeWheel&&api.state().target===api.state().position,
+    'wheel genuinely scrolls a bounded shelf while a cover is open');
+  const afterWheel=api.state().position;
+  preview.dispatchEvent({type:'wheel',deltaX:0,deltaY:700,preventDefault(){}});
+  assert(api.state().position>afterWheel&&!preview.hidden,
+    'wheel events on an open jewel case also scroll the bounded shelf');
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-2000,preventDefault(){}});
+  assert(api.state().position===firstStop,
+    'wheel can reverse back to the left bounded endpoint');
+  assert(api.state().wheelTimer===0,'finite wheel release never snaps small input back');
+  api.draw();
+  assert(api.state().target===firstStop&&api.state().position===firstStop,
+    'wheel snap does not shift a half-album endpoint inward');
+  api.browseWithArrow(1);
+  assert(api.state().target===firstStop+1,
+    'arrow from half-album endpoint advances exactly one album');
+  api.set({position:firstStop});
+  preview.dispatchEvent({type:'pointerdown',button:0,target:coverTarget,pointerId:231,clientX:400,clientY:90});
+  preview.dispatchEvent({type:'pointermove',target:coverTarget,pointerId:231,clientX:180,clientY:90});
+  preview.dispatchEvent({type:'pointerup',target:coverTarget,pointerId:231});
+  assert(api.state().target>firstStop,
+    'dragging an open edge case scrolls within the finite shelf');
+  api.set({position:firstStop});
+
+  // A playing cover is pinned to its album, not to the viewport or a
+  // perpetual recentering request. Browser navigation must remain usable.
+  api.set({playing:true,playingAlbumId:api.state().albums[0][6]});
+  api.browseWithArrow(1);
+  const browsingTarget=api.state().target;
+  assert(browsingTarget>firstStop,'arrow can browse away from an open edge cover');
+  await api.ensurePlayingCover();
+  assert(api.state().target===browsingTarget,
+    'reopening an already playing case never resets active shelf scrolling');
+  api.set({position:firstStop+4});api.draw();
+  const leftmostSpine=api.geometry().nodes.filter(n=>n.index>0)
+    .map(n=>Number(n.el.style.transform.split('translate3d(')[1]?.split('px')[0]))
+    .filter(Number.isFinite);
+  assert(leftmostSpine.length>0&&Math.min(...leftmostSpine)<stage.clientWidth/2,
+    'scrolling away from an edge does not leave all neighbouring spines offscreen');
+  api.set({playing:false,playingAlbumId:null,position:firstStop});
+  api.closeFrontPreview();
+  assert(api.state().target===firstStop,
+    'closing newest cover preserves the same finite endpoint');
+  api.set({position:lastStop});
+  api.openFrontPreview(api.state().albums[recentLast],recentLast);
+  assert(api.state().target===lastStop&&!preview.hidden,
+    'opening the oldest album does not extend the finite scroll limit');
+  api.draw();
+  assert(coverX()>0&&coverX()<=(shelfWidth-caseWidth)/2+.01,
+    'oldest jewel case remains off-centre but fully visible');
+  api.browseWithArrow(1);
+  assert(api.state().target===lastStop,
+    'open case cannot scroll past the last finite endpoint');
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-1200,preventDefault(){}});
+  assert(api.state().position<lastStop,
+    'mouse wheel scrolls inward from the right endpoint with cover open');
+  api.set({position:lastStop});
+  stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:1200,preventDefault(){}});
+  api.draw();
+  assert(api.state().target===lastStop,
+    'wheel snapping preserves the exact right endpoint');
+  api.closeFrontPreview();
+  assert(api.state().target===lastStop,
+    'closing oldest cover preserves the finite endpoint');
+  const seenPositions=[firstStop,firstStop+4,(firstStop+lastStop)/2,lastStop-4,lastStop];
+  for(const place of seenPositions){
+    api.set({playing:false,playingAlbumId:null,position:place});
+    api.closeFrontPreview();api.draw();
+    for(const coverIndex of [0,1,Math.floor(recentLast/2),recentLast-1,recentLast]){
+      api.openFrontPreview(api.state().albums[coverIndex],coverIndex);api.draw();
+      const openNodes=api.geometry().nodes;
+      const intervals=[[coverX()-caseWidth/2,coverX()+caseWidth/2]];
+      for(const node of openNodes){
+        if(node.index===coverIndex)continue;
+        const left=spineX(node),right=left+parseFloat(node.el.style.width);
+        assert(right<=coverX()-caseWidth/2+.01||left>=coverX()+caseWidth/2-.01,
+          'open finite case never covers another spine');
+        intervals.push([left,right]);
+      }
+      assert(Array.from({length:101},(_,index)=>-shelfWidth/2+index*shelfWidth/100)
+        .every(point=>intervals.some(([left,right])=>point>=left-.01&&point<=right+.01)),
+        'reserved open-case slot leaves no gaps across the finite shelf');
+      api.closeFrontPreview();api.draw();
+    }
+  }
   await api.setDisplayOrder('artistAlbum');
   api.set({position:recentLast});api.browseWithArrow(1);
   assert(api.state().target===recentLast+1,'circular shelf still wraps in other modes');
@@ -944,7 +1055,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=recently-added-1'),
+  assert(sources.index.includes('js/app.js?v=bounded-shelf-slots-2'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
