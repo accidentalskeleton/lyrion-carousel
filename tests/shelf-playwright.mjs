@@ -7,6 +7,29 @@ export async function runShelfGestures(page) {
     await page.goto(base + '/tests/shelf-browser.html', {waitUntil:'domcontentloaded'});
     const report = await page.evaluate(() => window.shelfBrowserResult);
     assert(!report.error, report.error);
+    await page.evaluate(()=>shelfBrowser.set(49,false));
+    await page.locator('.bf-album[data-index="49"]').click();
+    assert(await page.evaluate(()=>shelfBrowser.state().opening),'A trusted spine click starts the opening transition');
+    await page.waitForFunction(()=>!shelfBrowser.state().opening&&!shelfBrowser.state().raf);
+    await page.keyboard.press('Escape');
+    assert(await page.evaluate(()=>shelfBrowser.state().closing&&!shelfBrowser.state().hidden),'Escape starts reverse closing rather than hiding immediately');
+    await page.waitForFunction(()=>shelfBrowser.state().hidden&&!shelfBrowser.state().raf);
+    await page.evaluate(()=>{shelfBrowser.set(49,true);shelfBrowser.open(49,true)});
+    await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,70)));
+    const openingCase=await page.locator('.bf-front-case').boundingBox();
+    await page.mouse.move(openingCase.x+openingCase.width/2,openingCase.y+openingCase.height/2);
+    await page.mouse.down();
+    await page.mouse.move(openingCase.x+openingCase.width/2-35,openingCase.y+openingCase.height/2,{steps:4});
+    const interrupted=await page.evaluate(()=>shelfBrowser.state());
+    assert(interrupted.dragging&&!interrupted.opening,'Dragging an opening case immediately takes control of the shelf');
+    await page.mouse.up();
+    await page.waitForFunction(()=>!shelfBrowser.state().raf);
+    await page.emulateMedia({reducedMotion:'reduce'});
+    await page.evaluate(()=>{shelfBrowser.set(0,false);shelfBrowser.open(0,true)});
+    assert(!(await page.evaluate(()=>shelfBrowser.state().opening)),'Reduced motion skips the expanding transition');
+    await page.evaluate(()=>shelfBrowser.close());
+    assert(await page.evaluate(()=>shelfBrowser.state().hidden&&!shelfBrowser.state().closing),'Reduced motion closes immediately');
+    await page.emulateMedia({reducedMotion:'no-preference'});
     for (const index of [0,97]) {
       for (const surface of ['cover','spine']) {
         await page.evaluate(index => {shelfBrowser.set(index,true);shelfBrowser.open(index);}, index);

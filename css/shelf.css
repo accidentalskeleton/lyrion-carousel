@@ -93,6 +93,10 @@
     opacity:1;
     transform:scale(1);
 }
+.bf-front-preview[data-opening="true"] {
+    transform:none;
+    transition:none;
+}
 .bf-front-preview[hidden] { display:none; }
 .bf-front-case {
     pointer-events:auto;
@@ -150,4 +154,11 @@
 /* Let the shelf receive wheel and drag input around a pinned playing cover. */
 .bf-front-preview[data-pinned="true"] { pointer-events:none; }
 .bf-front-preview[data-pinned="true"] .bf-front-case { pointer-events:auto; }
+
+@media (prefers-reduced-motion:reduce) {
+    .bf-front-preview {
+        transform:none;
+        transition:opacity .12s ease;
+    }
+}
 

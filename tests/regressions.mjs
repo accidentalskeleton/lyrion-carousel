@@ -52,7 +52,7 @@ export async function runTests(sources) {
     dispatchEvent(event){for(const fn of this.listeners[event.type]||[])fn(event);return true;}
     contains(el){return el===this||this.children.some(n=>n.contains?.(el));}
     focus(){} select(){} setPointerCapture(){}
-    get offsetWidth(){return this.name==='case'?(this.coverWidth||300):this.clientWidth;}
+    get offsetWidth(){this.widthReads=(this.widthReads||0)+1;return this.name==='case'?(this.coverWidth||300):this.clientWidth;}
     getBoundingClientRect(){return {left:0,right:1000,top:0,bottom:400,width:this.name==='case'?(this.coverWidth||300):1000,height:400};}
     querySelectorAll(selector){return this.children.filter(el=>selector==='.'+el.className?.split(' ')[0]);}
     querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
@@ -118,7 +118,7 @@ export async function runTests(sources) {
       finiteShelfBounds,snapShelfPosition,
       prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
-      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer}),
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
   async function settle(promise) {
@@ -804,7 +804,92 @@ export async function runTests(sources) {
       api.closeFrontPreview();api.draw();
     }
   }
-  await api.setDisplayOrder('artistAlbum');
+  for(const mode of ['recent','artistAlbum']){
+    await api.setDisplayOrder(mode);
+    const index=Math.floor(recentLast/2);
+    api.set({playing:false,playingAlbumId:null,position:index});api.closeFrontPreview();
+    api.openFrontPreview(api.state().albums[index],index,true);
+    const opening=api.state().coverOpening;
+    const scale=()=>{
+      const angle=Number(/rotateY\(([^d]+)/.exec(frontCase.style.transform)?.[1]||0)*Math.PI/180;
+      const perspective=Number(/perspective\(([^p]+)/.exec(frontCase.style.transform)?.[1]||1200);
+      const depth=frontCase.offsetWidth/(2*perspective);
+      return Math.cos(angle)/(1-depth*depth*Math.sin(angle)*Math.sin(angle));
+    };
+    const initialScale=scale(),pool=api.geometry().nodes.map(node=>node.el),widthReads=frontCase.widthReads;
+    assert(!!opening&&initialScale>0&&initialScale<1,'explicit spine opening begins at spine width in '+mode);
+    time+=100;api.draw();
+    assert(frontCase.widthReads===widthReads,'opening frames reuse cached layout measurements');
+    assert(scale()>initialScale&&scale()<1,'case grows progressively rather than appearing at full width');
+    assert(api.geometry().nodes.every(node=>pool.includes(node.el)),'opening frames reuse the existing DOM pool');
+    api.set({playing:true,playingAlbumId:api.state().albums[index][6]});
+    await api.ensurePlayingCover();
+    assert(api.state().coverOpening===opening,'passive playback pinning never restarts the opening');
+    time+=400;api.draw();
+    assert(!api.state().coverOpening&&!api.state().raf&&scale()===1,'opening stops scheduling frames when settled');
+    await api.ensurePlayingCover();
+    assert(!api.state().coverOpening&&!api.state().raf,'settled playback cover stays idle');
+    api.set({playing:false});api.closeFrontPreview();
+    window.matchMedia=()=>({matches:true});
+    api.openFrontPreview(api.state().albums[index],index,true);
+    assert(!api.state().coverOpening&&scale()===1,'reduced motion skips the expanding case');
+    delete window.matchMedia;
+    api.closeFrontPreview();api.openFrontPreview(api.state().albums[index],index,true);
+    stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:120,preventDefault(){}});
+    assert(!api.state().coverOpening,'wheel input immediately interrupts the opening');
+    api.closeFrontPreview();api.openFrontPreview(api.state().albums[index],index,true);
+    api.browseWithArrow(1);
+    assert(!api.state().coverOpening,'keyboard navigation immediately interrupts the opening');
+    api.closeFrontPreview();api.openFrontPreview(api.state().albums[index],index,true);
+    stage.dispatchEvent({type:'pointerdown',button:0,pointerId:321,clientX:100,clientY:30,target:{closest:()=>null}});
+    assert(!api.state().coverOpening,'pointer dragging immediately interrupts the opening');
+    stage.dispatchEvent({type:'pointercancel',pointerId:321});
+    api.closeFrontPreview();
+    api.set({playing:false,playingAlbumId:null,position:index});
+    api.openFrontPreview(api.state().albums[index],index);
+    const closingAlbum=api.state().frontPreviewAlbum,closingPosition=api.state().position;
+    const closeReads=frontCase.widthReads,closingPool=api.geometry().nodes.map(node=>node.el);
+    const closing=api.closeFrontPreview(false,true);
+    assert(api.state().coverOpening?.closing&&!preview.hidden,'animated close keeps the case mounted in '+mode);
+    time+=100;api.draw();
+    assert(frontCase.widthReads===closeReads,'closing frames reuse cached layout measurements');
+    const closingScale=scale();
+    assert(closingScale>0&&closingScale<1&&api.state().frontPreviewAlbum===closingAlbum,'case turns progressively back toward spine width');
+    assert(api.geometry().nodes.every(node=>closingPool.includes(node.el)),'closing reuses the same spine pool');
+    time+=400;api.draw();
+    assert(await closing,'closing completes successfully');
+    assert(preview.hidden&&!api.state().coverOpening&&!api.state().raf,'completed close hides the case and stops rendering');
+    assert(api.state().position===closingPosition&&api.state().target===closingPosition,'closing never resets shelf navigation');
+    const restored=api.geometry().nodes.find(node=>node.index===index);
+    assert(restored&&!('data-front-preview' in restored.el.attributes),'the original spine is restored after closing');
+    api.openFrontPreview(api.state().albums[index],index,true);
+    time+=80;api.draw();
+    const partialScale=scale(),reversing=api.closeFrontPreview(false,true);
+    assert(Math.abs(scale()-partialScale)<.0001,'closing during opening reverses from the current pose');
+    time+=400;api.draw();await reversing;
+    api.openFrontPreview(api.state().albums[index],index);
+    const cancelledClose=api.closeFrontPreview(false,true);
+    time+=100;api.draw();
+    api.openFrontPreview(api.state().albums[index+1],index+1,true);
+    assert(!await cancelledClose,'selecting another album cancels the stale close completion');
+    time+=400;api.draw();
+    assert(!preview.hidden&&api.state().frontPreviewAlbum===api.state().albums[index+1],'a stale close never hides the replacement cover');
+    api.closeFrontPreview();api.openFrontPreview(api.state().albums[index],index);
+    const interruptedClose=api.closeFrontPreview(false,true);
+    stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:120,preventDefault(){}});
+    assert(!await interruptedClose&&!preview.hidden&&!api.state().coverOpening,'wheel browsing cancels closing and keeps the case usable');
+    window.matchMedia=()=>({matches:true});
+    await api.closeFrontPreview(false,true);
+    assert(preview.hidden&&!api.state().coverOpening,'reduced motion closes without an expanding or turning animation');
+    delete window.matchMedia;
+    api.set({playing:false,playingAlbumId:null});
+    api.openFrontPreview(api.state().albums[index],index);
+    const lateTimeout=timers.get(api.state().frontTimer);
+    api.set({playing:true,playingAlbumId:api.state().albums[index][6]});
+    await lateTimeout();
+    assert(!preview.hidden&&!api.state().coverOpening,'a late timeout never closes a newly pinned playing cover');
+    api.set({playing:false});api.closeFrontPreview();
+  }
   api.set({position:recentLast});api.browseWithArrow(1);
   assert(api.state().target===recentLast+1,'circular shelf still wraps in other modes');
 
@@ -897,7 +982,11 @@ export async function runTests(sources) {
     'idle return does not preempt the manual cover before timeout');
   const timeoutId=api.state().frontTimer;
   assert(timeoutId&&timers.has(timeoutId),'non-playing preview has an active timeout');
-  const expirePreview=timers.get(timeoutId);timers.delete(timeoutId);expirePreview();
+  const expirePreview=timers.get(timeoutId);timers.delete(timeoutId);
+  const expired=expirePreview();
+  assert(api.state().coverOpening?.closing&&!preview.hidden&&api.state().frontPreviewAlbum===previewBeforeIdle,
+    'manual preview timeout turns the existing case closed before replacing it');
+  await settle(expired);
   for(let i=0;i<15;i++)await Promise.resolve();
   assert(api.state().frontPreviewAlbum?.[6]===20&&!preview.hidden,
     'manual preview timeout restores the playing case');
@@ -1055,7 +1144,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=bounded-shelf-slots-2'),
+  assert(sources.index.includes('js/app.js?v=case-motion-1')&&sources.index.includes('css/shelf.css?v=case-opening-2'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

@@ -45,7 +45,9 @@ export async function runShelfBrowserTests() {
         playing=pinned;playingAlbumId=pinned?albums[index][6]:null;
         position=target=shelfPosition(index);closeFrontPreview(true);draw();
       },
-      open(index){openFrontPreview(albums[index],index);draw()},
+      open(index,animate=false){openFrontPreview(albums[index],index,animate);draw()},
+      close(){return closeFrontPreview(false,true)},
+      timeout:ms=>applySetting('frontTimeout',ms),
       status(mode='play'){applyStatus({mode,playlist_loop:[{
         album_id:playingAlbumId,album:frontPreviewAlbum[0],artist:frontPreviewAlbum[1]
       }]})},
@@ -53,7 +55,8 @@ export async function runShelfBrowserTests() {
       state:()=>({position,target,dragging,raf,wheelTimer,frontPreviewIndex,
         bounds:finiteShelfBounds(),pitch:shelfPitch(),width:frontCaseWidth(),
         scrollPitch:finiteShelfLayout().scrollPitch,
-        playing,followAnimation:!!followAnimation})
+        playing,followAnimation:!!followAnimation,opening:!!coverOpening&&!coverOpening.closing,
+        closing:!!coverOpening?.closing,hidden:frontPreview.hidden})
     };
   `)(...Object.values(env));
   window.shelfBrowser = api;
@@ -151,6 +154,57 @@ export async function runShelfBrowserTests() {
   coverage();noOverlap();
   cover.style.height='';
   await new Promise(resolve=>setTimeout(resolve,80));
-  api.set(0,true);api.open(0);
+  for(const mode of ['recent','album']){
+    await api.setDisplayOrder(mode);
+    for(const index of [0,1,49,96,97]){
+      api.set(index,true);api.open(index,true);
+      const initial=cover.getBoundingClientRect().width;
+      const pool=[...stage.querySelectorAll('.bf-album')];
+      let samples=0;
+      assert(api.state().opening&&initial<cover.offsetWidth*.5,'Explicit opening starts as a narrow case in '+mode);
+      while(api.state().opening){
+        await frame();samples++;
+        noOverlap();
+        assert([...stage.querySelectorAll('.bf-album')].every(element=>pool.includes(element)),'Opening reuses its DOM pool');
+        if(mode==='recent')coverage();
+        if(samples>120)throw Error('Opening animation did not finish');
+      }
+      await settle();
+      assert(samples>1&&Math.abs(cover.getBoundingClientRect().width-cover.offsetWidth)<1,'Opening progresses to the full layout width');
+      await api.ensurePlayingCover();
+      assert(!api.state().opening&&!api.state().raf,'Playback updates leave the completed animation idle');
+      api.set(index,false);api.open(index);
+      const beforeClose=api.state(),closed=api.close();
+      const fullWidth=cover.getBoundingClientRect().width;
+      assert(api.state().closing&&!preview.hidden,'Closing retains the case until the turn completes');
+      await frame();
+      assert(cover.getBoundingClientRect().width<fullWidth,'Closing progressively turns the cover toward spine width');
+      let closingFrames=0;
+      while(api.state().closing){
+        await frame();closingFrames++;
+        if(!preview.hidden){noOverlap();if(mode==='recent')coverage()}
+        if(closingFrames>120)throw Error('Closing animation did not finish');
+      }
+      assert(await closed,'Closing resolves after the case is hidden');
+      assert(preview.hidden&&!api.state().raf,'Completed closing returns the renderer to idle');
+      assert(api.state().position===beforeClose.position&&api.state().target===beforeClose.target,
+        'Closing never resets the browsed shelf position');
+      assert(api.state().bounds.join()===beforeClose.bounds.join(),'Closing preserves the finite boundaries');
+      assert(!stage.querySelector(`.bf-album[data-index="${index}"]`).hasAttribute('data-front-preview'),
+        'Closing restores the original spine');
+      if(mode==='recent')coverage();
+    }
+  }
+  await api.setDisplayOrder('recent');api.set(49,false);api.open(49);
+  const staleClose=api.close();await frame();api.open(50,true);
+  assert(!await staleClose,'A replacement cancels the previous closing promise');
+  await settle();
+  assert(!preview.hidden&&api.state().frontPreviewIndex===50,'A stale closing completion never hides the replacement');
+  api.set(49,false);api.open(49);api.timeout(30);
+  await new Promise(resolve=>setTimeout(resolve,70));
+  assert(api.state().closing&&!preview.hidden,'A real preview timeout starts reverse closing');
+  await settle();
+  assert(preview.hidden&&!api.state().raf,'Timeout hides only after reverse closing and leaves no animation loop');
+  api.timeout(0);api.set(0,true);api.open(0);
   return {checks,viewport:[innerWidth,innerHeight]};
 }
