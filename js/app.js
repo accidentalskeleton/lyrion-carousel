@@ -313,6 +313,20 @@ function fetchSpineMeta(album){
         });
     spineMetaPending.set(url,pending);return pending;
 }
+function catalogueInk(background,title){
+    const luminance=hex=>{
+        const rgb=(/^#[0-9a-f]{6}$/i.test(hex||'')?hex:'#202628').slice(1).match(/../g).map(v=>{
+            const c=parseInt(v,16)/255;return c<=.04045?c/12.92:Math.pow((c+.055)/1.055,2.4);
+        });
+        return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+    };
+    const bg=luminance(background),contrast=ink=>{
+        const value=luminance(ink);return (Math.max(bg,value)+.05)/(Math.min(bg,value)+.05);
+    };
+    // Quiet stone/slate inks distinguish the imprint from the coloured title.
+    const candidates=['#bcb6aa','#4b5057','#e1dcd2','#272c33','#ffffff','#000000'];
+    return candidates.find(ink=>ink!==title?.toLowerCase()&&contrast(ink)>=4.5)||'#ffffff';
+}
 function loadSpineMeta(album,element){
     const url=album?.[11],index=element.dataset.index;
     const cached=spineMetaCache.get(url);
@@ -320,6 +334,7 @@ function loadSpineMeta(album,element){
     // previous colour or a temporary grey fallback.
     element.style.setProperty('--spine-color',cached?.spine_color||'#202628');
     element.style.setProperty('--spine-text',cached?.text_color||'#f5f2ea');
+    element.style.setProperty('--catalogue-ink',catalogueInk(cached?.spine_color||'#202628',cached?.text_color||'#f5f2ea'));
     element.style.setProperty('--spine-font-family',cached?.spine_font||'Arial,Helvetica,sans-serif');
     if(cached){
         rememberSpineMeta(url,cached);
@@ -332,6 +347,7 @@ function loadSpineMeta(album,element){
         if(element.dataset.index!==index||element._boundAlbum!==album||album[11]!==url)return;
         if(meta?.spine_color)element.style.setProperty('--spine-color',meta.spine_color);
         if(meta?.text_color)element.style.setProperty('--spine-text',meta.text_color);
+        if(meta)element.style.setProperty('--catalogue-ink',catalogueInk(meta.spine_color,meta.text_color));
         if(meta?.spine_font)element.style.setProperty('--spine-font-family',meta.spine_font);
         if(Number.isFinite(meta?.colour_index))album[12]=meta.colour_index;
         scheduleCatalogueLayout();

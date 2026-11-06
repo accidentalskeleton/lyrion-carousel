@@ -4,6 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Give catalogue numbers their own muted stone/slate ink, distinct from artist/title text, with contrast checked against each spine colour.
 - Close non-playing album previews on a short click/tap or Enter/Space, restoring the playing cover when applicable. The playing album always stays open on those interactions. Keep drag-to-scroll, long-press actions and the Play button intact.
 
 - Apply cached spine colours and fonts synchronously when reusing shelf nodes, avoiding a temporary grey reset.

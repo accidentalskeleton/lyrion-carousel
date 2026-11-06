@@ -1284,7 +1284,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=keep-playing-open-1')&&sources.index.includes('css/shelf.css?v=catalogue-height-cap-1'),
+  assert(sources.index.includes('js/app.js?v=keep-playing-open-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
