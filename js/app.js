@@ -287,6 +287,17 @@ function fetchSpineMeta(album){
 }
 function loadSpineMeta(album,element){
     const url=album?.[11],index=element.dataset.index;
+    const cached=spineMetaCache.get(url);
+    // Bind cached colours before yielding, without flashing the pooled node's
+    // previous colour or a temporary grey fallback.
+    element.style.setProperty('--spine-color',cached?.spine_color||'#202628');
+    element.style.setProperty('--spine-text',cached?.text_color||'#f5f2ea');
+    element.style.setProperty('--spine-font-family',cached?.spine_font||'Arial,Helvetica,sans-serif');
+    if(cached){
+        rememberSpineMeta(url,cached);
+        if(Number.isFinite(cached.colour_index))album[12]=cached.colour_index;
+        return;
+    }
     fetchSpineMeta(album).then(meta=>{
         // A pooled element may already represent another album by the time an
         // asynchronous metadata batch finishes. Never recolour the new spine.
@@ -359,10 +370,6 @@ function bindAlbumNode(node,album,index){
     el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
     el.title=el.getAttribute('aria-label');
     el.style.setProperty('--art',album[2]);
-    // Reset colours from a previously pooled spine while the new batch loads.
-    el.style.setProperty('--spine-color','#202628');
-    el.style.setProperty('--spine-text','#f5f2ea');
-    el.style.setProperty('--spine-font-family','Arial,Helvetica,sans-serif');
     if(!node.label){
         const label=document.createElement('span');label.className='bf-spine-label';
         el.append(label);node.label=label;

@@ -111,7 +111,7 @@ export async function runTests(sources) {
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -201,6 +201,18 @@ export async function runTests(sources) {
     'metadata batches resolve all callers and clear pending requests');
   await api.fetchSpineMeta(sampleAlbums[0]);
   assert(metadataBatches.length===2,'cached metadata is reused without another request');
+  const cachedSpine=new Element('cached-spine');
+  cachedSpine._boundAlbum=sampleAlbums[0];cachedSpine.dataset.index='0';
+  api.loadSpineMeta(sampleAlbums[0],cachedSpine);
+  assert(cachedSpine.style['--spine-color']==='#123456',
+    'cached spine colour is applied synchronously before the next paint');
+  const uncachedAlbum=[];
+  cachedSpine._boundAlbum=uncachedAlbum;
+  api.loadSpineMeta(uncachedAlbum,cachedSpine);
+  assert(cachedSpine.style['--spine-color']==='#202628'&&
+    cachedSpine.style['--spine-text']==='#f5f2ea'&&
+    cachedSpine.style['--spine-font-family']==='Arial,Helvetica,sans-serif',
+    'reusing a node without metadata clears the previous album styling');
 
   let spotifyMetaCalls=0;
   metadataFetch=async url=>{
@@ -1247,7 +1259,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=case-motion-1')&&sources.index.includes('css/shelf.css?v=case-opening-2'),
+  assert(sources.index.includes('js/app.js?v=spine-cache-colours-1')&&sources.index.includes('css/shelf.css?v=case-opening-2'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
