@@ -52,6 +52,7 @@ export async function runTests(sources) {
     dispatchEvent(event){for(const fn of this.listeners[event.type]||[])fn(event);return true;}
     contains(el){return el===this||this.children.some(n=>n.contains?.(el));}
     focus(){} select(){} setPointerCapture(){}
+    get offsetWidth(){return this.name==='case'?(this.coverWidth||300):this.clientWidth;}
     getBoundingClientRect(){return {left:0,right:1000,top:0,bottom:400,width:this.name==='case'?(this.coverWidth||300):1000,height:400};}
     querySelectorAll(selector){return this.children.filter(el=>selector==='.'+el.className?.split(' ')[0]);}
     querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
@@ -701,17 +702,12 @@ export async function runTests(sources) {
   const shelfWidth=stage.clientWidth;
   api.set({playing:false,position:firstStop});
   api.closeFrontPreview();api.draw();
-  const closedSpines=new Map(api.geometry().nodes.map(node=>[node.index,node.el.style.transform]));
   api.openFrontPreview(api.state().albums[0],0);
   api.draw();
-  let stableSpines=0;
-  for(const node of api.geometry().nodes){
-    if(!closedSpines.has(node.index))continue;
-    stableSpines++;
-    assert(node.el.style.transform===closedSpines.get(node.index),
-      'opening an edge cover never displaces existing CD shelf spines');
-  }
-  assert(stableSpines>=15,'spine invariance is checked against actual occupied shelf');
+  const spineX=node=>Number(node.el.style.transform.split('translate3d(')[1]?.split('px')[0]);
+  const nextSpine=api.geometry().nodes.find(node=>node.index===1);
+  assert(Math.abs(spineX(nextSpine)-(coverX()+caseWidth/2))<.01,
+    'the next spine touches the open case without being covered');
 
   assert(api.state().target===firstStop&&!preview.hidden,
     'opening the newest album does not extend the finite scroll limit');
@@ -732,9 +728,8 @@ export async function runTests(sources) {
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:-2000,preventDefault(){}});
   assert(api.state().position===firstStop,
     'wheel can reverse back to the left bounded endpoint');
-  const snapTimer=api.state().wheelTimer;
-  assert(timers.has(snapTimer),'wheel release schedules endpoint snapping');
-  timers.get(snapTimer)();api.draw();
+  assert(api.state().wheelTimer===0,'finite wheel release never snaps small input back');
+  api.draw();
   assert(api.state().target===firstStop&&api.state().position===firstStop,
     'wheel snap does not shift a half-album endpoint inward');
   api.browseWithArrow(1);
@@ -782,32 +777,30 @@ export async function runTests(sources) {
     'mouse wheel scrolls inward from the right endpoint with cover open');
   api.set({position:lastStop});
   stage.dispatchEvent({type:'wheel',deltaX:0,deltaY:1200,preventDefault(){}});
-  const lastSnapTimer=api.state().wheelTimer;
-  timers.get(lastSnapTimer)();api.draw();
+  api.draw();
   assert(api.state().target===lastStop,
     'wheel snapping preserves the exact right endpoint');
   api.closeFrontPreview();
   assert(api.state().target===lastStop,
     'closing oldest cover preserves the finite endpoint');
-  // Opening a jewel case at any bounded position must NEVER move spines.
-  // Previously the whole left/right shelf was shifted, leaving wide gaps.
   const seenPositions=[firstStop,firstStop+4,(firstStop+lastStop)/2,lastStop-4,lastStop];
   for(const place of seenPositions){
     api.set({playing:false,playingAlbumId:null,position:place});
     api.closeFrontPreview();api.draw();
-    const closed=new Map(api.geometry().nodes.map(node=>[node.index,node.el.style.transform]));
-    for(const coverIndex of [0,7,Math.floor(recentLast/2),recentLast-7,recentLast]){
+    for(const coverIndex of [0,1,Math.floor(recentLast/2),recentLast-1,recentLast]){
       api.openFrontPreview(api.state().albums[coverIndex],coverIndex);api.draw();
       const openNodes=api.geometry().nodes;
-      let compared=0;
+      const intervals=[[coverX()-caseWidth/2,coverX()+caseWidth/2]];
       for(const node of openNodes){
-        if(!closed.has(node.index))continue;
-        compared++;
-        assert(node.el.style.transform===closed.get(node.index),
-          'finite shelf spine positions stay fixed when a cover opens (position '+place+', cover '+coverIndex+')');
+        if(node.index===coverIndex)continue;
+        const left=spineX(node),right=left+parseFloat(node.el.style.width);
+        assert(right<=coverX()-caseWidth/2+.01||left>=coverX()+caseWidth/2-.01,
+          'open finite case never covers another spine');
+        intervals.push([left,right]);
       }
-      assert(compared>=Math.min(10,visible),
-        'finite shelf retains the same adjacent CDs across the open-cover transition');
+      assert(Array.from({length:101},(_,index)=>-shelfWidth/2+index*shelfWidth/100)
+        .every(point=>intervals.some(([left,right])=>point>=left-.01&&point<=right+.01)),
+        'reserved open-case slot leaves no gaps across the finite shelf');
       api.closeFrontPreview();api.draw();
     }
   }
@@ -1062,7 +1055,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=bounded-shelf-rebuild-1'),
+  assert(sources.index.includes('js/app.js?v=bounded-shelf-slots-2'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

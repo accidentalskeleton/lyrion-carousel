@@ -79,7 +79,7 @@ const snapShelfPosition=value=>{
     return shelfPosition(Math.round(value));
 };
 const shelfDelta=(index,centre)=>boundedShelf()?index-centre:circularDelta(index,centre,totalAlbums);
-const selectedIndex=()=>boundedShelf()?Math.round(shelfPosition(position)):modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>boundedShelf()?clamp(index,0,Math.max(0,totalAlbums-1)):nearestPosition(index,position,totalAlbums);
+const selectedIndex=()=>boundedShelf()?Math.round(shelfPosition(position)):modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>boundedShelf()?finitePositionForIndex(index):nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||discoveryBusy||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
 function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=5&server='+artworkNamespace:'';if(album.spine_metadata?.text_style_version===3)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
 function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?version=3&path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg','spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId,undefined,spotifyAlbumUrl(album.spotifyUrl)]}
@@ -121,7 +121,7 @@ async function setCatalogueSource(source){
                 const arrived=await scrollToAlbumIndex(i);
                 if(arrived){
                     position=target=nearestPositionForIndex(i);
-                    renderAlbums();draw();openFrontPreview(albums[i],i);
+                    renderAlbums();draw();openFrontPreview(albums[i],i);target=nearestPositionForIndex(i);schedule();
                 }
             }else{
                 // Now Playing does not belong to the newly selected catalogue:
@@ -182,7 +182,7 @@ async function setDisplayOrder(mode){
         const nextIndex=playingIndex>=0?playingIndex:selected!=null?indexForAlbumId(selected):selectedIndex();
         if(nextIndex>=0)position=target=shelfPosition(nextIndex);
         hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();
-        if(playingIndex>=0)openFrontPreview(albums[playingIndex],playingIndex);
+        if(playingIndex>=0){openFrontPreview(albums[playingIndex],playingIndex);target=nearestPositionForIndex(playingIndex);schedule()}
         if(mode==='colour')setConnection(albumCountLabel()+' · colour order',true);
     }finally{
         if(generation===catalogueGeneration){
@@ -302,10 +302,21 @@ let cachedFrontCaseWidth=null;
 function invalidateFrontCaseWidth(){cachedFrontCaseWidth=null}
 function frontCaseWidth(){
     if(cachedFrontCaseWidth===null)
-        cachedFrontCaseWidth=measuredFrontCase?.getBoundingClientRect().width||0;
+        cachedFrontCaseWidth=measuredFrontCase?.offsetWidth||0;
     return cachedFrontCaseWidth;
 }
 function shelfPitch(){return stage.clientWidth/Math.max(1,Math.min(DISPLAY_ALBUM_COUNT,totalAlbums))}
+function finiteShelfLayout(){
+    const [first,last]=finiteShelfBounds(),pitch=shelfPitch();
+    const extra=!frontPreview.hidden&&frontPreviewIndex>=0?Math.max(0,frontCaseWidth()-pitch):0;
+    const range=last-first;
+    return {first,range,pitch,extra,scrollPitch:range>0?pitch+extra/range:pitch};
+}
+function finitePositionForIndex(index){
+    const {first,pitch,extra,scrollPitch}=finiteShelfLayout();
+    const before=index>frontPreviewIndex?extra:index===frontPreviewIndex?extra/2:0;
+    return shelfPosition(first+((index-first)*pitch+before)/scrollPitch);
+}
 function shelfWindowCount(){
     // An open cover displaces neighbouring spines by up to half its width.
     // Keep enough extra albums beyond both edges to fill that displacement.
@@ -389,29 +400,19 @@ function syncShelfDom(){
     const open=!frontPreview.hidden&&frontPreviewIndex>=0;
     const frontDelta=open?shelfDelta(frontPreviewIndex,position):0;
     const frontWidth=frontCaseWidth();
-    // For a finite shelf, the case can remain off-centre at either end.
-    // Gently keep it on screen only at the endpoint; when browsing away,
-    // let it travel with its album instead of pinning it to the viewport.
-    const naturalCoverX=frontDelta*pitch;
-    let coverX=naturalCoverX;
+    const gapShift=open?Math.max(0,(frontWidth-pitch)/2):0;
+    let layoutShift=0;
     if(open&&boundedShelf()){
-        const [first,last]=finiteShelfBounds();
-        const coverLimit=Math.max(0,(stage.clientWidth-frontWidth)/2);
-        const scrollFade=Math.max(1,frontWidth/Math.max(1,pitch));
-        const nearFirst=clamp(1-(position-first)/scrollFade,0,1);
-        const nearLast=clamp(1-(last-position)/scrollFade,0,1);
-        const edgeWeight=Math.max(nearFirst,nearLast);
-        coverX+=edgeWeight*(clamp(naturalCoverX,-coverLimit,coverLimit)-naturalCoverX);
+        const {first,range}=finiteShelfLayout();
+        const progress=range>0?clamp((position-first)/range,0,1):.5;
+        layoutShift=gapShift*(1-2*progress);
     }
+    const coverX=frontDelta*pitch+layoutShift;
+    frontPreview.style.transformOrigin=boundedShelf()?(stage.clientWidth/2+coverX)+'px center':'50% 50%';
     if(frontCase)frontCase.style.transform=`translate3d(${coverX}px,0,0)`;
-    // Finite shelves have a fixed physical layout: opening a cover must not
-    // shift the entire left/right group of CDs and create blank regions.
-    // The separate front-preview layer overlays the nearby spines instead.
-    // Circular shelves retain the established jewel-case clearance behaviour.
-    const gapShift=open&&!boundedShelf()?Math.max(0,(frontWidth-pitch)/2):0;
     nodes.forEach(node=>{
         const d=shelfDelta(node.index,position);
-        const sideShift=d<frontDelta?-gapShift:d>frontDelta?gapShift:0;
+        const sideShift=(d<frontDelta?-gapShift:d>frontDelta?gapShift:0)+layoutShift;
         const hiddenSpine=open&&node.index===frontPreviewIndex;
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
         if(node.cachedPitch!==pitch){
@@ -990,7 +991,7 @@ async function discoverAlbum(mode){
         const arrived=await scrollToAlbumIndex(index);
         if(arrived&&generation===catalogueGeneration&&connection===connectionGeneration&&expectedPlayer===playerId){
             // Selection only: never send a playback or playlist command.
-            pinnedRequest++;openFrontPreview(albums[index],index);
+            pinnedRequest++;openFrontPreview(albums[index],index);target=nearestPositionForIndex(index);schedule();
             noteUserActivity();
             setConnection('Rediscovered: '+albums[index][0]+' — '+albums[index][1],true);
         }
@@ -1085,10 +1086,11 @@ function updateMeta(force=false){
 function draw(){if(raf){cancelAnimationFrame(raf);raf=0}target=shelfPosition(target);position=shelfPosition(position);if(!dragging){const error=target-position;if(followAnimation){const animation=followAnimation,p=clamp((performance.now()-animation.start)/animation.duration,0,1);position=animation.from+(animation.to-animation.from)*(1-Math.pow(1-p,3));if(p>=1){position=target=animation.to;followAnimation=null;animation.resolve(true)}}else if(randomAnimating&&randomAnimationDuration>0){const p=clamp((performance.now()-randomAnimationStart)/randomAnimationDuration,0,1),e=1-Math.pow(1-p,3);position=shelfPosition(randomAnimationFrom+(randomAnimationTo-randomAnimationFrom)*e);if(p>=1)position=target}else{position+=error*.135;if(Math.abs(error)<.0004)position=target}}updateShelfWindow();updateMeta();prefetchAround(selectedIndex());prefetchCoverWindow(boundedShelf()?selectedIndex():modulo(Math.round(target),totalAlbums));syncShelfDom();if(followAnimation||dragging||Math.abs(target-position)>.0004)raf=requestAnimationFrame(draw);else raf=0}function schedule(){if(!raf)raf=requestAnimationFrame(draw)}
 let lastShelfScrollAt=-Infinity;
 function shelfIsScrolling(){return dragging&&moved||!!followAnimation||randomAnimating||Math.abs(target-position)>.04||performance.now()-lastShelfScrollAt<160}
-function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();lastShelfScrollAt=performance.now();followingNowPlaying=false;cancelFollowAnimation();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=shelfPosition(position+delta*.0028);draw();clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{target=snapShelfPosition(position);schedule()},110)}
+function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();lastShelfScrollAt=performance.now();followingNowPlaying=false;cancelFollowAnimation();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=shelfPosition(position+delta*.0028);draw();clearTimeout(wheelTimer);wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110)}
 // Shared pointer physics for shelf spines and the enlarged closed cover.
 function beginShelfDrag(event,pressedIndex=null,captureTarget=stage){
     if(randomAnimating)return false;
+    clearTimeout(wheelTimer);wheelTimer=0;
     dragging=true;moved=false;pressedAlbumIndex=pressedIndex;
     startX=lastX=event.clientX;startPosition=position;target=position;
     lastTime=performance.now();pointerVelocity=0;
@@ -1106,7 +1108,7 @@ function moveShelfDrag(event,closePreviewOnMove=true){
         // the open album; the boolean is kept for existing gesture callers.
         followingNowPlaying=false;cancelFollowAnimation();
     }
-    position=shelfPosition(startPosition-dx/175);target=position;
+    position=shelfPosition(startPosition-dx/(boundedShelf()?finiteShelfLayout().scrollPitch:175));target=position;
     pointerVelocity=(event.clientX-lastX)/Math.max(1,now-lastTime);
     lastX=event.clientX;lastTime=now;
 }
@@ -1143,9 +1145,9 @@ stage.addEventListener('pointerup',event=>{
     const album=albums[index],wasClick=!moved&&performance.now()-lastShelfScrollAt>=160&&Math.abs(target-position)<.04&&Math.hypot(event.clientX-focusClickX,event.clientY-focusClickY)<=6;
     if(wasClick&&album){
         event.stopImmediatePropagation();dragging=false;moved=true;pressedAlbumIndex=null;
-        stage.classList.remove('is-dragging');target=nearestPositionForIndex(index);
+        stage.classList.remove('is-dragging');
         // A deliberate spine click wins over any outstanding Now Playing lookup.
-        pinnedRequest++;openFrontPreview(album,index);schedule();
+        pinnedRequest++;openFrontPreview(album,index);target=nearestPositionForIndex(index);schedule();
     }
 },true);
 stage.addEventListener('pointercancel',()=>{focusClickIndex=null},true);

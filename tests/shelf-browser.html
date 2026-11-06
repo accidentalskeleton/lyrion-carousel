@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Shelf browser regressions</title></head>
+<body>
+<script type="module">
+import {runShelfBrowserTests} from './shelf-browser.mjs';
+window.shelfBrowserResult = runShelfBrowserTests().then(
+  result => { document.title = result.checks + ' shelf browser checks passed'; return result; },
+  error => { document.title = 'Shelf browser checks failed'; console.error(error); return {error:error.stack}; }
+);
+</script>
+</body>
+</html>

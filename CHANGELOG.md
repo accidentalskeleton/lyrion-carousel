@@ -4,7 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
-- Rework Recently Added shelf geometry: keep spine positions fixed when opening an album (the jewel case overlays nearby CDs instead of shifting entire groups), retain the edge-to-edge finite limits and show edge cases off-centre without permanent clipping. Fix half-album endpoint snapping, one-album keyboard steps and random-animation bounds; retain wheel, drag and playback-status navigation with a pinned cover.
+- Correct Recently Added scrolling with an open jewel case: reserve its full width and shift neighbouring spines without covering them, leaving gaps or changing the finite scroll limits. Use the same expanded-strip coordinates for centring, rendering and pointer dragging, preserve ordinary mouse-wheel notches instead of snapping them back, and measure case width independently of the opening animation. Add real-browser layout and trusted-input tests at desktop, ultrawide and mobile sizes.
 - Add **Recently Added** as a local LMS album-order option using the server's native date-added ranking (`sort:new`), with current genre exclusions and cached prepared catalogue ordering.
 - Make the Recently Added shelf finite: mouse wheel, touch/mouse drag, keyboard arrows and programmatic navigation stop when the first and last CD spines reach the outer viewport edges, keeping the shelf filled without half-screen gaps. Other ordering modes retain circular wraparound.
 

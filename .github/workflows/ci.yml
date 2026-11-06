@@ -40,3 +40,13 @@ jobs:
         run: node tests/regressions.mjs
       - name: Test Python
         run: python -W always::ResourceWarning -m unittest discover -s tests -p 'test_*.py'
+      - name: Install browser test tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/carousel-browser" playwright@1.56.1
+          "$RUNNER_TEMP/carousel-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Test shelf in Chromium
+        run: |
+          python3 -m http.server 8089 --bind 127.0.0.1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/shelf-playwright.mjs http://127.0.0.1:8089/
