@@ -111,7 +111,7 @@ export async function runTests(sources) {
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -130,9 +130,22 @@ export async function runTests(sources) {
     if(error)throw error;if(!done)throw Error('Animation did not finish');
   }
   await api.loadInitialCatalogue();
+  assert(api.catalogueCodeLines('BEADYCD2')==='BEADYCD\n2','catalogue letter prefix stays intact');
+  for(const code of ['9362-49870-2','1234567890123','509999 65111 2 1']){
+    assert(api.catalogueCodeLines(code).split('\n').length===3,
+      'long catalogue numbers use three lines instead of shrinking into two');
+  }
+  for(const code of ['9362-49870-2','088 112 379-2','1234567890123','7243 8 53711 2 7 / CDDEEPP 2']){
+    const lines=api.catalogueCodeLines(code).split('\n');
+    assert(lines.length>=2&&lines.length<=3&&lines.join('').replace(/\s/g,'')===code.replace(/\s/g,''),
+      'catalogue wrapping preserves code characters in two or three lines');
+  }
   const firstSpine=stage.children.find(node=>node.className?.includes('bf-album'));
   const spineLabel=firstSpine?.children.find(node=>node.className==='bf-spine-label');
   const spineShell=firstSpine?.children.find(node=>node.className==='bf-spine-shell');
+  const catalogueFooter=firstSpine?.children.find(node=>node.className==='bf-spine-catalogue');
+  assert(catalogueFooter.hidden&&catalogueFooter.textContent==='',
+    'albums without real catalogue metadata have no fabricated code');
   const spineCover=firstSpine?.children.find(node=>node.className==='bf-spine-cover');
   assert(spineLabel?.textContent?.includes('Artist — Album'), 'one continuous artist and album spine label');
   assert(spineShell?.src==='/assets/jewel-case-spine-v1.svg', 'all spines use shared static shell image');
@@ -1259,7 +1272,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=spine-cache-colours-1')&&sources.index.includes('css/shelf.css?v=case-opening-2'),
+  assert(sources.index.includes('js/app.js?v=catalogue-height-cap-1')&&sources.index.includes('css/shelf.css?v=catalogue-height-cap-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
