@@ -9,7 +9,8 @@
   <startmode>Automatic</startmode>
   <delayedAutoStart>true</delayedAutoStart>
   <serviceaccount>
-    <username>NT AUTHORITY\LocalService</username>
+    <domain>NT AUTHORITY</domain>
+    <user>LocalService</user>
   </serviceaccount>
   <logpath>%ProgramData%\LyrionCarousel\logs</logpath>
   <log mode="roll" />
