@@ -52,8 +52,11 @@ codes are shown by default. Carousel first reads `CATALOGNUMBER` from the
 local FLAC track using `metaflac` (provided by the `flac` package). The ripper
 already writes this tag from the selected release's catalogue numbers.
 If the tag is missing, Carousel reads `label-info[].catalog-number` from
-`selected-release-metadata.json` beside the track. Both methods require local
-file access on the Carousel server; no external release search is performed.
+`selected-release-metadata.json` beside the track. If the Carousel host cannot read those files (for example, Windows running
+against LMS on a Raspberry Pi), Carousel falls back to LMS's read-only `tags
+track_id:<id>` query so **LMS itself** reads the original file's
+`CATALOGNUMBER`. This works without mounting the music directory on the
+Carousel host. No external release search is performed.
 Albums without a real number show no code and retain the full title area.
 Only displayed albums are looked up in bounded batches. Server lookups,
 including missing numbers, are cached for 15 minutes with a 2,048-entry limit;
