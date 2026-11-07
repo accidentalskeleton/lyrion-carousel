@@ -82,7 +82,8 @@ jobs:
           }
           [xml]$service = Get-Content (Join-Path $root 'LyrionCarouselService.xml') -Raw
           if ($service.service.id -ne 'LyrionCarousel') { throw 'Invalid WinSW service ID' }
-          if ($service.service.serviceaccount.username -ne 'NT AUTHORITY\LocalService') {
+          if ($service.service.serviceaccount.domain -ne 'NT AUTHORITY' -or
+              $service.service.serviceaccount.user -ne 'LocalService') {
             throw 'WinSW service must run as LocalService'
           }
 
