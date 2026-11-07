@@ -1,0 +1,160 @@
+name: Build Windows server and optional service ZIP
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Test and package Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: x64
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify release tag
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($env:RELEASE_TAG -notin @("v$version", $version)) {
+            throw "Release tag '$env:RELEASE_TAG' does not match VERSION '$version'"
+          }
+
+      - name: Install build and test tools
+        shell: pwsh
+        run: python -m pip install "Pillow>=10,<14" "pyinstaller>=6.15,<7"
+
+      - name: Run JavaScript tests
+        run: node tests/regressions.mjs
+
+      - name: Run Python tests
+        env:
+          PYTHONUTF8: '1'
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Build Windows ZIP and service installer
+        shell: pwsh
+        run: ./packaging/windows/build-windows.ps1
+
+      - name: Validate packaged files
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $root = "dist/LyrionCarousel-Windows-x64-v$version"
+          foreach ($path in @(
+            'app/LyrionCarousel.exe',
+            'app/_internal/index.html',
+            'app/_internal/assets',
+            'app/_internal/css',
+            'app/_internal/js',
+            'LyrionCarouselService.exe',
+            'LyrionCarouselService.xml',
+            'Install-Service.ps1',
+            'Uninstall-Service.ps1',
+            'Start-Carousel.ps1',
+            'WinSW-LICENSE.txt'
+          )) {
+            if (-not (Test-Path (Join-Path $root $path))) {
+              throw "Windows ZIP is missing $path"
+            }
+          }
+          [xml]$service = Get-Content (Join-Path $root 'LyrionCarouselService.xml') -Raw
+          if ($service.service.id -ne 'LyrionCarousel') { throw 'Invalid WinSW service ID' }
+          if ($service.service.serviceaccount.domain -ne 'NT AUTHORITY' -or
+              $service.service.serviceaccount.user -ne 'LocalService') {
+            throw 'WinSW service must run as LocalService'
+          }
+
+      - name: Smoke-test standalone EXE
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $app = "dist/LyrionCarousel-Windows-x64-v$version/app/LyrionCarousel.exe"
+          $listener = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+          $listener.Start()
+          $port = $listener.LocalEndpoint.Port
+          $listener.Stop()
+          $process = Start-Process -FilePath (Resolve-Path $app) -ArgumentList @(
+            '--lms','http://127.0.0.1:9000',
+            '--port',"$port",
+            '--cache-dir',"$env:RUNNER_TEMP\carousel-cache"
+          ) -PassThru -RedirectStandardOutput "$env:RUNNER_TEMP\carousel.out" -RedirectStandardError "$env:RUNNER_TEMP\carousel.err"
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 40; $i++) {
+              Start-Sleep -Milliseconds 500
+              if ($process.HasExited) {
+                throw "Packaged server exited early; see $env:RUNNER_TEMP\carousel.err"
+              }
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:$port/" -TimeoutSec 2 -UseBasicParsing
+                if ($response.StatusCode -eq 200 -and $response.Content -match 'Lyrion Carousel') {
+                  $ready = $true
+                  break
+                }
+              } catch {}
+            }
+            if (-not $ready) { throw 'Packaged Windows server did not respond to HTTP smoke test' }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+
+      - name: Upload Windows ZIP and SHA-256
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyrion-carousel-windows-x64
+          path: |
+            dist/LyrionCarousel-Windows-x64-v*.zip
+            dist/LyrionCarousel-Windows-x64-v*.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  attach-release:
+    name: Attach Windows ZIP to published release
+    if: github.event_name == 'release'
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download tested Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: lyrion-carousel-windows-x64
+          path: windows-release
+
+      - name: Upload ZIP and checksum to existing release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          files=(windows-release/*.zip windows-release/*.zip.sha256)
+          test -f "${files[0]}"
+          test -f "${files[1]}"
+          gh release upload "$RELEASE_TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber

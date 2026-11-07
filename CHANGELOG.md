@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add an optional Windows x64 ZIP release build alongside Debian: package the Python/Pillow server with PyInstaller, bundle WinSW and PowerShell service install/uninstall and portable-run scripts, smoke-test the EXE on Windows CI, and attach the ZIP plus SHA-256 checksum to published GitHub releases. Linux/Debian remains the primary platform.
+- Make LMS's read-only raw track-tag API the exclusive source of catalogue numbers across Linux and Windows. Remove direct FLAC reads, `metaflac`, ripper release-sidecar lookups, and the obsolete Debian `flac` dependency; preserve caching, limits and missing-tag behaviour.
 - Add the Lyrion forums announcement thread to Settings > About > Project, opening in a new tab alongside the GitHub project link.
 
 ## [0.11.4] - 2026-11-06

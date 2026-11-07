@@ -28,36 +28,72 @@ class ServerTests(unittest.TestCase):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
         return self.handler.cache_dir / f'{key}.img', self.handler.cache_dir / f'{key}.meta'
 
-    def test_real_catalogue_number_from_selected_release(self):
-        folder=Path(self.temp.name)
-        metadata=folder/'selected-release-metadata.json'
-        metadata.write_text(json.dumps({'label-info':[
-            {'catalog-number':' ABC 123 '},{'catalog-number':'ABC 123'},
-            {'catalog-number':'[none]'},{'catalog-number':'XYZ 456'}]}))
-        self.assertEqual(server.release_catalogue_number((folder/'track.flac').as_uri()),'ABC 123 / XYZ 456')
-        self.assertEqual(server.release_catalogue_number('https://example.com/track.flac'),'')
-        self.assertEqual(server.release_catalogue_number('file://other-host/track.flac'),'')
-        metadata.write_text('invalid json')
-        self.assertEqual(server.release_catalogue_number((folder/'track.flac').as_uri()),'')
-
-    def test_catalogue_tag_takes_precedence_over_release_sidecar(self):
-        folder=Path(self.temp.name)
-        (folder/'selected-release-metadata.json').write_text(json.dumps({'label-info':[{'catalog-number':'SIDECAR'}]}))
-        with patch('server.subprocess.run') as run:
-            run.return_value.stdout='CATALOGNUMBER=TAG 123\nCATALOGNUMBER=TAG 123\nCATALOGNUMBER=[none]\n'
-            self.assertEqual(server.release_catalogue_number((folder/'track.flac').as_uri()),'TAG 123')
-            self.assertEqual(run.call_args.args[0][:3],['metaflac','--show-tag=CATALOGNUMBER','--'])
-
     def test_catalogue_code_lookup_is_cached_and_server_scoped(self):
         server._CATALOGUE_CODES.clear()
-        with patch.object(self.handler,'_lms_rpc',return_value={'titles_loop':[{'url':'file:///album/track.flac'}]}) as rpc, \
-             patch('server.release_catalogue_number',return_value='REAL 123'):
+        with patch.object(self.handler,'_lms_rpc',side_effect=[
+            {'titles_loop':[{'id':123}]},
+            {'CATALOGNUMBER':'REAL 123'},
+            {'titles_loop':[{'id':123}]},
+            {'CATALOGNUMBER':'OTHER 789'},
+        ]) as rpc:
             self.assertEqual(self.handler._album_catalogue_code('42'),'REAL 123')
-            self.assertEqual(self.handler._album_catalogue_code('42'),'REAL 123')
-            self.assertEqual(rpc.call_count,1)
-            self.handler.lms_url='http://other:9000'
             self.assertEqual(self.handler._album_catalogue_code('42'),'REAL 123')
             self.assertEqual(rpc.call_count,2)
+            self.handler.lms_url='http://other:9000'
+            self.assertEqual(self.handler._album_catalogue_code('42'),'OTHER 789')
+            self.assertEqual(rpc.call_count,4)
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_code_uses_lms_tags_without_any_file_access(self):
+        # The local music path belongs to the LMS host, not Carousel.
+        server._CATALOGUE_CODES.clear()
+        with patch.object(self.handler,'_lms_rpc',side_effect=[
+            {'titles_loop':[{'id':123,'url':'file:///srv/hifi/music/album/01.flac'}]},
+            {'ALBUM':'Album','CATALOGNUMBER':'CD 001-UK'}]) as rpc:
+            self.assertEqual(self.handler._album_catalogue_code('55'),'CD 001-UK')
+        self.assertEqual(rpc.call_args_list[0].args,('0',['titles',0,1,'album_id:55']))
+        self.assertEqual(rpc.call_args_list[1].args,('0',['tags','track_id:123']))
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_code_fetched_from_lms_even_without_track_url(self):
+        server._CATALOGUE_CODES.clear()
+        with patch.object(self.handler,'_lms_rpc',side_effect=[
+            {'titles_loop':[{'id':123}]},
+            {'cataloGnumber':'  AB 42  '}]) as rpc:
+            self.assertEqual(self.handler._album_catalogue_code('56'),'AB 42')
+            self.assertEqual(rpc.call_count,2)
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_code_missing_lms_tag_does_not_invent_one(self):
+        server._CATALOGUE_CODES.clear()
+        with patch.object(self.handler,'_lms_rpc',side_effect=[
+            {'titles_loop':[{'id':123}]},
+            {'ALBUM':'Album','COMMENT':'No catalogue number'}]):
+            self.assertEqual(self.handler._album_catalogue_code('57'),'')
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_code_placeholder_tag_is_ignored(self):
+        server._CATALOGUE_CODES.clear()
+        with patch.object(self.handler,'_lms_rpc',side_effect=[
+            {'titles_loop':[{'id':123}]},
+            {'CATALOGNUMBER':' [none] '}]):
+            self.assertEqual(self.handler._album_catalogue_code('59'),'')
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_code_remote_tag_request_requires_numeric_track_id(self):
+        server._CATALOGUE_CODES.clear()
+        with patch.object(self.handler,'_lms_rpc',return_value={
+            'titles_loop':[{'id':'bad/id','url':'file:///music/track.flac'}]}) as rpc:
+            self.assertEqual(self.handler._album_catalogue_code('58'),'')
+        rpc.assert_called_once()
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_codes_only_use_lms_protocol_not_ripper_metadata(self):
+        source=(Path(__file__).resolve().parents[1]/'server.py').read_text(encoding='utf-8')
+        self.assertNotIn('selected-release-metadata.json',source)
+        self.assertNotIn('metaflac',source)
+        self.assertNotIn('def release_catalogue_number',source)
+        self.assertIn("['tags','track_id:'+track_id]",source)
 
     def test_catalogue_code_batch_validation(self):
         self.handler.headers={'Content-Length':'20'}

@@ -98,7 +98,7 @@ python3 server.py --bind 0.0.0.0
 
 ### Running on Windows (best effort)
 
-**Linux/Debian is the primary development, deployment and testing platform.** Windows is useful for local development and browser testing, and the Python server can run there, but Windows is **not a primary platform focus**. There is no Windows installer or Windows service integration, and some OS-specific features may need additional setup or behave differently.
+**Linux/Debian is the primary development, deployment and testing platform.** Windows is useful for local development and browser testing, and the Python server can run there, but Windows is **not a primary platform focus**. A separately packaged Windows x64 ZIP provides a portable executable and optional service-installation scripts, but Windows remains a best-effort platform and some OS-specific features may differ.
 
 Install Python 3.9 or later (including the Python Launcher for Windows, `py`) and Git. From **PowerShell**, run:
 
@@ -111,6 +111,8 @@ py -m venv .venv
 ```
 
 Replace `http://streamer:9000` with the address of your reachable LMS server. Open **http://127.0.0.1:18088/** in Edge or another modern browser. Leave the PowerShell window open while using Carousel; press **Ctrl+C** to stop it. The virtual-environment commands above don't require PowerShell script activation. If `py` is unavailable, use `python` to create the virtual environment.
+
+If you prefer a packaged executable without installing Python, see [Windows packaging and optional service installation](packaging/windows/README-Windows.md). A Windows release ZIP includes WinSW scripts for installing and removing the optional Windows service; the scripts require Administrator privileges.
 
 Port `8088` is the default. The example uses `18088` because Windows may reserve or block `8088`, returning `[WinError 10013]`; choose another available port if necessary. To inspect reserved ports, run `netsh interface ipv4 show excludedportrange protocol=tcp`.
 
