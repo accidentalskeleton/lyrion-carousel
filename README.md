@@ -96,6 +96,28 @@ python3 server.py --bind 0.0.0.0
 
 `0.0.0.0` is a listening address, not a browser destination. Do not expose this server directly to the internet.
 
+### Running on Windows (best effort)
+
+**Linux/Debian is the primary development, deployment and testing platform.** Windows is useful for local development and browser testing, and the Python server can run there, but Windows is **not a primary platform focus**. There is no Windows installer or Windows service integration, and some OS-specific features may need additional setup or behave differently.
+
+Install Python 3.9 or later (including the Python Launcher for Windows, `py`) and Git. From **PowerShell**, run:
+
+```powershell
+git clone https://github.com/accidentalskeleton/lyrion-carousel.git
+cd lyrion-carousel
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install Pillow
+.\.venv\Scripts\python.exe server.py --lms http://streamer:9000 --port 18088
+```
+
+Replace `http://streamer:9000` with the address of your reachable LMS server. Open **http://127.0.0.1:18088/** in Edge or another modern browser. Leave the PowerShell window open while using Carousel; press **Ctrl+C** to stop it. The virtual-environment commands above don't require PowerShell script activation. If `py` is unavailable, use `python` to create the virtual environment.
+
+Port `8088` is the default. The example uses `18088` because Windows may reserve or block `8088`, returning `[WinError 10013]`; choose another available port if necessary. To inspect reserved ports, run `netsh interface ipv4 show excludedportrange protocol=tcp`.
+
+On first use, album spines may initially show neutral grey while the Windows server downloads artwork and computes colour metadata. The local cache at `.cache/album-art` makes repeat visits faster; **Settings → About → Prepare all artwork** can populate it in advance. A browser refresh can interrupt an outstanding CometD long-poll request and produce a `[WinError 10053]` aborted-connection message; that does not by itself mean LMS or artwork loading has failed.
+
+The Debian `.deb` packaging and `systemd` service do not apply on Windows. Features that rely on accessing LMS music files directly or invoking Linux-installed utilities such as `metaflac` (for example, some catalogue-number lookups) are not guaranteed to work in a Windows-only setup. Keep both the Windows HTTP server and LMS accessible only on a trusted local network; do not expose either to the public internet.
+
 ### HTTP Host and cross-site request protection
 
 Carousel validates every incoming HTTP `Host` header **before** serving static content or proxying LMS calls. Loopback IPs, RFC 1918 private IPv4 addresses, IPv6 unique-local/link-local addresses, `localhost`, the machine's hostname and its `.local` form are accepted. Arbitrary public DNS names and unconfigured `.local`, `.lan` and `.home.arpa` names are **not** accepted. Additional local names can be explicitly permitted:
