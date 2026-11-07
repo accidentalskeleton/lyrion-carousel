@@ -66,8 +66,9 @@ To inspect service state:
   Windows SmartScreen may warn when launching an unsigned executable.
 - This ZIP is a portable distribution with service helper scripts, **not**
   an MSI or interactive installer.
-- Certain local-file-derived catalogue numbers depend on access to LMS
-  music files and the optional metaflac program, which are not bundled.
+- Catalogue numbers are retrieved through LMS's read-only raw track-tag
+  API. The Windows server does not need access to the music files, the ripper,
+  or an installed metaflac binary.
 - Initial artwork colour calculation can take time on a cold Windows cache.
 - A browser refresh may abort an in-flight CometD long poll; this does not
   necessarily imply an LMS failure.
