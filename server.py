@@ -10,7 +10,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlsplit, parse_qs
-from urllib.request import Request, urlopen
+from urllib.request import Request, urlopen, url2pathname
 from PIL import Image, ImageStat, ImageOps
 
 # Architecture: HTTP threads serve static files and a small set of LMS proxy APIs.
@@ -26,7 +26,7 @@ def release_catalogue_number(track_url:str)->str:
     """Read an explicitly selected release beside a locally accessible track."""
     url=urlsplit(track_url)
     if url.scheme!='file' or url.netloc not in ('','localhost'): return ''
-    track=Path(unquote(url.path))
+    track=Path(url2pathname(url.path))
     folder=track.parent
     if track.suffix.lower()=='.flac':
         try:
