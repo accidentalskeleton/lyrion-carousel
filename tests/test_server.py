@@ -59,6 +59,46 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(self.handler._album_catalogue_code('42'),'REAL 123')
             self.assertEqual(rpc.call_count,2)
 
+    def test_catalogue_code_remote_lms_raw_tags_without_local_files(self):
+        # On Windows the FLAC URL refers to the Pi's filesystem, not Windows.
+        # LMS can read the raw CATALOGNUMBER tag without sharing that path.
+        server._CATALOGUE_CODES.clear()
+        with patch('server.release_catalogue_number',return_value='') as local, \
+             patch.object(self.handler,'_lms_rpc',side_effect=[
+                 {'titles_loop':[{'id':123,'url':'file:///srv/hifi/music/album/01.flac'}]},
+                 {'ALBUM':'Album','CATALOGNUMBER':'CD 001-UK'}]) as rpc:
+            self.assertEqual(self.handler._album_catalogue_code('55'),'CD 001-UK')
+        local.assert_called_once()
+        self.assertEqual(rpc.call_args_list[1].args,('0',['tags','track_id:123']))
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_code_local_files_win_over_remote_tags(self):
+        server._CATALOGUE_CODES.clear()
+        with patch('server.release_catalogue_number',return_value='LOCAL 42'), \
+             patch.object(self.handler,'_lms_rpc',return_value={
+                 'titles_loop':[{'id':123,'url':'file:///srv/hifi/music/album/01.flac'}]}) as rpc:
+            self.assertEqual(self.handler._album_catalogue_code('56'),'LOCAL 42')
+        rpc.assert_called_once()
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_code_missing_remote_tag_does_not_invent_one(self):
+        server._CATALOGUE_CODES.clear()
+        with patch('server.release_catalogue_number',return_value=''), \
+             patch.object(self.handler,'_lms_rpc',side_effect=[
+                 {'titles_loop':[{'id':123,'url':'file:///srv/hifi/music/album/01.flac'}]},
+                 {'ALBUM':'Album','COMMENT':'No catalogue number'}]):
+            self.assertEqual(self.handler._album_catalogue_code('57'),'')
+        server._CATALOGUE_CODES.clear()
+
+    def test_catalogue_code_remote_tag_request_requires_numeric_track_id(self):
+        server._CATALOGUE_CODES.clear()
+        with patch('server.release_catalogue_number',return_value=''), \
+             patch.object(self.handler,'_lms_rpc',return_value={
+                 'titles_loop':[{'id':'bad/id','url':'file:///music/track.flac'}]}) as rpc:
+            self.assertEqual(self.handler._album_catalogue_code('58'),'')
+        rpc.assert_called_once()
+        server._CATALOGUE_CODES.clear()
+
     def test_catalogue_code_batch_validation(self):
         self.handler.headers={'Content-Length':'20'}
         self.handler.rfile=io.BytesIO(b'{"album_ids":["../"]}')
