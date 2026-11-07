@@ -48,14 +48,14 @@ Current application version: **0.11.4**. The canonical version is stored in [`VE
 
 Spine footers show real catalogue numbers and can be shown or hidden in
 Settings → Display → Catalogue codes. The choice is saved per browser and
-codes are shown by default. Carousel first reads `CATALOGNUMBER` from the
-local FLAC track using `metaflac` (provided by the `flac` package). The ripper
-already writes this tag from the selected release's catalogue numbers.
-If the tag is missing, Carousel reads `label-info[].catalog-number` from
-`selected-release-metadata.json` beside the track. Both methods require local
-file access on the Carousel server; no external release search is performed.
-Albums without a real number show no code and retain the full title area.
-Only displayed albums are looked up in bounded batches. Server lookups,
+codes are shown by default. Carousel retrieves catalogue numbers **exclusively
+through LMS's read-only raw track-tag API** (`tags track_id:<id>`), obtaining
+`CATALOGNUMBER` from the album's first track when present. LMS reads the music
+file on its own host; Carousel never opens the FLAC, invokes `metaflac`, or
+reads the ripper's release metadata. This works identically whether Carousel
+runs on Debian, Windows, or another computer, without sharing music folders.
+Albums with no actual catalogue number show no code and retain the full title
+area. Only displayed albums are looked up in bounded batches. Server lookups,
 including missing numbers, are cached for 15 minutes with a 2,048-entry limit;
 the browser also keeps at most 2,048 results. Hiding codes stops new lookups.
 
