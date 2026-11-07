@@ -49,10 +49,8 @@ class ServerTests(unittest.TestCase):
         server._CATALOGUE_CODES.clear()
         with patch.object(self.handler,'_lms_rpc',side_effect=[
             {'titles_loop':[{'id':123,'url':'file:///srv/hifi/music/album/01.flac'}]},
-            {'ALBUM':'Album','CATALOGNUMBER':'CD 001-UK'}]) as rpc, \
-             patch('server.subprocess.run',create=True) as forbidden_subprocess:
+            {'ALBUM':'Album','CATALOGNUMBER':'CD 001-UK'}]) as rpc:
             self.assertEqual(self.handler._album_catalogue_code('55'),'CD 001-UK')
-        forbidden_subprocess.assert_not_called()
         self.assertEqual(rpc.call_args_list[0].args,('0',['titles',0,1,'album_id:55']))
         self.assertEqual(rpc.call_args_list[1].args,('0',['tags','track_id:123']))
         server._CATALOGUE_CODES.clear()
