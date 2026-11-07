@@ -1203,6 +1203,19 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             result=self._lms_rpc('0',['titles',0,1,'album_id:'+album_id,'tags:u'])
             tracks=result.get('titles_loop',[])
             code=release_catalogue_number(tracks[0].get('url','')) if tracks else ''
+            if not code and tracks:
+                # When Carousel runs on Windows or another machine, LMS file://
+                # paths often refer to storage only the LMS host can read.
+                # Ask LMS to read the original FLAC tags on its own machine.
+                track_id=str(tracks[0].get('id',''))
+                if re.fullmatch(r'[0-9]{1,12}',track_id):
+                    raw_tags=self._lms_rpc('0',['tags','track_id:'+track_id])
+                    if isinstance(raw_tags,dict):
+                        for name,value in raw_tags.items():
+                            if isinstance(name,str) and name.upper() in ('CATALOGNUMBER','CATALOG_NUMBER'):
+                                if isinstance(value,str) and value.strip().casefold() not in ('','[none]','none','n/a'):
+                                    code=value.strip()[:160]
+                                break
         except (OSError,ValueError,KeyError,TypeError):return ''
         with _CATALOGUE_CODES_LOCK:
             _CATALOGUE_CODES[key]=(time.monotonic(),code)
