@@ -4,7 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
-- Read catalogue numbers from LMS's raw track tags when the Carousel server cannot access local FLAC files (for example, a Windows server controlling a Raspberry Pi LMS). Prefer the existing local FLAC and release-sidecar metadata when available; never fabricate missing catalogue numbers.
+- Make LMS's read-only raw track-tag API the exclusive source of catalogue numbers across Linux and Windows. Remove direct FLAC reads, `metaflac`, ripper release-sidecar lookups, and the obsolete Debian `flac` dependency; preserve caching, limits and missing-tag behaviour.
 - Add the Lyrion forums announcement thread to Settings > About > Project, opening in a new tab alongside the GitHub project link.
 
 ## [0.11.4] - 2026-11-06
