@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
-import time, io, random, argparse, colorsys, hashlib, ipaddress, json, os, re, shutil, socket, sqlite3, subprocess, sys, threading
+import time, io, random, argparse, colorsys, hashlib, ipaddress, json, os, re, shutil, socket, sqlite3, sys, threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
@@ -22,33 +22,6 @@ METADATA_WORKERS=ThreadPoolExecutor(max_workers=6,thread_name_prefix="album-meta
 _CATALOGUE_CODES=OrderedDict()
 _CATALOGUE_CODES_LOCK=threading.Lock()
 
-def release_catalogue_number(track_url:str)->str:
-    """Read an explicitly selected release beside a locally accessible track."""
-    url=urlsplit(track_url)
-    if url.scheme!='file' or url.netloc not in ('','localhost'): return ''
-    track=Path(unquote(url.path))
-    folder=track.parent
-    if track.suffix.lower()=='.flac':
-        try:
-            result=subprocess.run(['metaflac','--show-tag=CATALOGNUMBER','--',str(track)],
-                                  capture_output=True,text=True,check=True,timeout=3)
-            codes=list(dict.fromkeys(line.partition('=')[2].strip() for line in result.stdout.splitlines()
-                        if line.partition('=')[0].upper()=='CATALOGNUMBER' and line.partition('=')[2].strip().casefold() not in ('','[none]','none','n/a')))
-            if codes:return ' / '.join(codes)[:160]
-        except (OSError,subprocess.SubprocessError,UnicodeError):pass
-    try:
-        path=folder/'selected-release-metadata.json'
-        with path.open('rb') as source:
-            payload=source.read(2*1024*1024+1)
-        if len(payload)>2*1024*1024:return ''
-        release=json.loads(payload)
-        codes=[]
-        for item in release.get('label-info',[]):
-            code=item.get('catalog-number') if isinstance(item,dict) else None
-            if isinstance(code,str) and code.strip() and code.strip().casefold() not in ('[none]','none','n/a'):
-                if code.strip() not in codes:codes.append(code.strip())
-        return ' / '.join(codes)[:160]
-    except (OSError,ValueError,AttributeError,TypeError):return ''
 # Incremental image-cache accounting avoids scanning thousands of cache files
 # after every newly generated cover. The first write after restart establishes
 # a disk baseline; explicit pruning/clearing reconciles the counter.
@@ -1199,10 +1172,21 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if cached and time.monotonic()-cached[0]<900:
                 _CATALOGUE_CODES.move_to_end(key)
                 return cached[1]
+        code=''
         try:
-            result=self._lms_rpc('0',['titles',0,1,'album_id:'+album_id,'tags:u'])
-            tracks=result.get('titles_loop',[])
-            code=release_catalogue_number(tracks[0].get('url','')) if tracks else ''
+            # Carousel never reads the music library, FLAC paths or ripper
+            # metadata. LMS owns those files and exposes their raw tags.
+            result=self._lms_rpc('0',['titles',0,1,'album_id:'+album_id])
+            tracks=result.get('titles_loop',[]) if isinstance(result,dict) else []
+            track_id=str(tracks[0].get('id','')) if tracks and isinstance(tracks[0],dict) else ''
+            if re.fullmatch(r'[0-9]{1,12}',track_id):
+                raw_tags=self._lms_rpc('0',['tags','track_id:'+track_id])
+                if isinstance(raw_tags,dict):
+                    for name,value in raw_tags.items():
+                        if isinstance(name,str) and name.upper() in ('CATALOGNUMBER','CATALOG_NUMBER'):
+                            if isinstance(value,str) and value.strip().casefold() not in ('','[none]','none','n/a'):
+                                code=value.strip()[:160]
+                            break
         except (OSError,ValueError,KeyError,TypeError):return ''
         with _CATALOGUE_CODES_LOCK:
             _CATALOGUE_CODES[key]=(time.monotonic(),code)

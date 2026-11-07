@@ -4,7 +4,7 @@ Section: sound
 Priority: optional
 Architecture: all
 Maintainer: accidentalskeleton <46867808+accidentalskeleton@users.noreply.github.com>
-Depends: python3 (>= 3.9), python3-pil, flac
+Depends: python3 (>= 3.9), python3-pil
 Description: Carousel controller for Lyrion Music Server
  Lyrion Carousel browses an LMS album library with a circular CD-spine shelf
  interface, controls playback and caches cover artwork locally.
