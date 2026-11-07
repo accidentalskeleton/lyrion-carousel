@@ -28,9 +28,9 @@ $pyinstallerArgs = @(
     '--name', 'LyrionCarousel',
     '--distpath', $pyDist, '--workpath', (Join-Path $buildRoot 'work'),
     '--specpath', $buildRoot,
-    '--add-data', 'index.html:.', '--add-data', 'manifest.webmanifest:.',
-    '--add-data', 'spotty-diagnostic.html:.', '--add-data', 'VERSION:.',
-    '--add-data', 'assets:assets', '--add-data', 'css:css', '--add-data', 'js:js',
+    '--add-data', "${root}\index.html:.", '--add-data', "${root}\manifest.webmanifest:.",
+    '--add-data', "${root}\spotty-diagnostic.html:.", '--add-data', "${root}\VERSION:.",
+    '--add-data', "${root}\assets:assets", '--add-data', "${root}\css:css", '--add-data', "${root}\js:js",
     'server.py'
 )
 Push-Location $root
