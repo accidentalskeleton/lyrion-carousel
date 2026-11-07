@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <id>LyrionCarousel</id>
+  <name>Lyrion Carousel</name>
+  <description>Locally hosted Lyrion Carousel album browser and LMS proxy.</description>
+  <executable>%BASE%\app\LyrionCarousel.exe</executable>
+  <workingdirectory>%BASE%</workingdirectory>
+  <arguments>--bind 127.0.0.1 --port 18088 --lms http://streamer:9000 --cache-dir "%ProgramData%\LyrionCarousel\cache\album-art"</arguments>
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <serviceaccount>
+    <domain>NT AUTHORITY</domain>
+    <user>LocalService</user>
+  </serviceaccount>
+  <logpath>%ProgramData%\LyrionCarousel\logs</logpath>
+  <log mode="roll" />
+  <onfailure action="restart" delay="5 sec" />
+</service>

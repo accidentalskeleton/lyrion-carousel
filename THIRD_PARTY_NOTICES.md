@@ -28,6 +28,19 @@ directory unless the distribution model changes. **If future binary bundles,
 wheels or vendored source are shipped, re-evaluate their actual included
 licenses and copyright/notice obligations.**
 
+## Optional Windows binary distribution
+
+The Windows x64 ZIP built by GitHub Actions bundles the Python runtime and
+Pillow through PyInstaller (PyInstaller is the build tool, not an application
+service). It also bundles **Windows Service Wrapper (WinSW) v2.12.0**, licensed
+under MIT, with its full `WinSW-LICENSE.txt` inside the downloadable ZIP.
+WinSW upstream: https://github.com/winsw/winsw
+
+These notices do not supersede the copyright and licence obligations of the
+Python runtime and third-party modules within the PyInstaller distribution.
+Release maintainers should check bundled dependency notices when updating
+Python, Pillow, PyInstaller or WinSW.
+
 ## External integrations — not bundled
 
 - **Lyrion Music Server (LMS), Squeezebox and Squeezelite:** Lyrion Carousel is

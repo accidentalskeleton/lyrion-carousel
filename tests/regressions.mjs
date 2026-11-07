@@ -3,7 +3,7 @@
 export async function runTests(sources) {
   let checks = 0;
   const assert = (value, message) => { if (!value) throw Error(message); checks++; };
-  const plain = source => source.replace(/^import .*;\n/gm, '').replace(/\bexport /g, '');
+  const plain = source => source.replace(/^import .*;\r?\n/gm, '').replace(/\bexport /g, '');
   const geometry = new Function(plain(sources.browser) + ';return {clamp,modulo,circularDelta,nearestPositionForIndex};')();
   assert(geometry.circularDelta(0, 99, 100) === 1, 'circular wrap');
   assert(geometry.nearestPositionForIndex(99, 0, 100) === -1, 'shortest route');
