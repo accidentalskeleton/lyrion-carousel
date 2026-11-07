@@ -48,14 +48,14 @@ Current application version: **0.11.4**. The canonical version is stored in [`VE
 
 Spine footers show real catalogue numbers and can be shown or hidden in
 Settings → Display → Catalogue codes. The choice is saved per browser and
-codes are shown by default. Carousel first reads `CATALOGNUMBER` from the
-local FLAC track using `metaflac` (provided by the `flac` package). The ripper
-already writes this tag from the selected release's catalogue numbers.
-If the tag is missing, Carousel reads `label-info[].catalog-number` from
-`selected-release-metadata.json` beside the track. Both methods require local
-file access on the Carousel server; no external release search is performed.
-Albums without a real number show no code and retain the full title area.
-Only displayed albums are looked up in bounded batches. Server lookups,
+codes are shown by default. Carousel retrieves catalogue numbers **exclusively
+through LMS's read-only raw track-tag API** (`tags track_id:<id>`), obtaining
+`CATALOGNUMBER` from the album's first track when present. LMS reads the music
+file on its own host; Carousel never opens the FLAC, invokes `metaflac`, or
+reads the ripper's release metadata. This works identically whether Carousel
+runs on Debian, Windows, or another computer, without sharing music folders.
+Albums with no actual catalogue number show no code and retain the full title
+area. Only displayed albums are looked up in bounded batches. Server lookups,
 including missing numbers, are cached for 15 minutes with a 2,048-entry limit;
 the browser also keeps at most 2,048 results. Hiding codes stops new lookups.
 
@@ -116,7 +116,7 @@ Port `8088` is the default. The example uses `18088` because Windows may reserve
 
 On first use, album spines may initially show neutral grey while the Windows server downloads artwork and computes colour metadata. The local cache at `.cache/album-art` makes repeat visits faster; **Settings → About → Prepare all artwork** can populate it in advance. A browser refresh can interrupt an outstanding CometD long-poll request and produce a `[WinError 10053]` aborted-connection message; that does not by itself mean LMS or artwork loading has failed.
 
-The Debian `.deb` packaging and `systemd` service do not apply on Windows. Features that rely on accessing LMS music files directly or invoking Linux-installed utilities such as `metaflac` (for example, some catalogue-number lookups) are not guaranteed to work in a Windows-only setup. Keep both the Windows HTTP server and LMS accessible only on a trusted local network; do not expose either to the public internet.
+The Debian `.deb` packaging and `systemd` service do not apply on Windows. Catalogue numbers come from LMS's raw track tags: **no music-folder mount, ripper metadata or Windows `metaflac` installation is necessary**. Other OS-specific behaviour may still differ. Keep both the Windows HTTP server and LMS accessible only on a trusted local network; do not expose either to the public internet.
 
 ### HTTP Host and cross-site request protection
 
