@@ -4,6 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add an optional Windows x64 ZIP release build alongside Debian: package the Python/Pillow server with PyInstaller, bundle WinSW and PowerShell service install/uninstall and portable-run scripts, smoke-test the EXE on Windows CI, and attach the ZIP plus SHA-256 checksum to published GitHub releases. Linux/Debian remains the primary platform.
 - Add the Lyrion forums announcement thread to Settings > About > Project, opening in a new tab alongside the GitHub project link.
 
 ## [0.11.4] - 2026-11-06
