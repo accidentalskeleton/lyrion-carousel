@@ -100,6 +100,8 @@ python3 server.py --bind 0.0.0.0
 
 **Linux/Debian is the primary development, deployment and testing platform.** Windows is useful for local development and browser testing, and the Python server can run there, but Windows is **not a primary platform focus**. A separately packaged Windows x64 ZIP provides a portable executable and optional service-installation scripts, but Windows remains a best-effort platform and some OS-specific features may differ.
 
+**Download:** [Lyrion Carousel Windows x64 ZIP (v0.11.5)](https://github.com/accidentalskeleton/lyrion-carousel/releases/download/v0.11.5/LyrionCarousel-Windows-x64-v0.11.5.zip) · [Latest release and downloads](https://github.com/accidentalskeleton/lyrion-carousel/releases/latest). The ZIP includes the standalone server and optional Windows Service scripts; extract the entire archive before running them.
+
 Install Python 3.9 or later (including the Python Launcher for Windows, `py`) and Git. From **PowerShell**, run:
 
 ```powershell
