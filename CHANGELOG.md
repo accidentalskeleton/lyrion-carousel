@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add faint occasional plastic scuffs and softened edge highlights with stable per-album wear patterns. Reuse decorative layers in the bounded spine pool and hide them when Shelf variety is off.
+
 - Mix stable regular, bold and condensed print treatments using local fonts when Shelf variety is enabled; do not download fonts or add scrolling work.
 
 - Use smaller artist lettering and a quieter separator to give album titles more prominence when Shelf variety is on; retain the selected artist/album ordering.

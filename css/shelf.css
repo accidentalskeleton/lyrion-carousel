@@ -95,6 +95,24 @@
 .bf-stage.bf-shelf-active:after { opacity:.25; }
 
 /* One switch returns optional typography and imprint treatments to uniform. */
+.bf-spine-wear {
+    display:none;
+    position:absolute;
+    z-index:4;
+    inset:5px 3px;
+    pointer-events:none;
+    background:linear-gradient(116deg,transparent 37%,rgba(255,255,255,.2) 37.2%,transparent 37.5%),
+        linear-gradient(169deg,transparent 68%,rgba(255,255,255,.16) 68.15%,transparent 68.4%);
+    border-inline-start:1px solid rgba(255,255,255,.12);
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-wear="light"] .bf-spine-wear {
+    display:block;
+    opacity:.35;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-wear="scuffed"] .bf-spine-wear {
+    display:block;
+    opacity:.65;
+}
 #book-fan-browser[data-shelf-variety="true"] .bf-album[data-print-style="regular"] .bf-spine-label {
     font-weight:500;
 }

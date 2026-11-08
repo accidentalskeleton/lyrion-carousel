@@ -568,6 +568,7 @@ function bindAlbumNode(node,album,index){
     el.dataset.discCount=String(album[17]||1);
     el.dataset.labelAlign=(albumCatalogueSeed(album)&1)?'start':'center';
     el.dataset.printStyle=['regular','bold','condensed'][(albumCatalogueSeed(album)>>>3)%3];
+    el.dataset.wear=['none','light','none','none','scuffed','none'][(albumCatalogueSeed(album)>>>7)%6];
     el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));
     el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
     el.title=el.getAttribute('aria-label');
@@ -583,6 +584,8 @@ function bindAlbumNode(node,album,index){
         shell.src='/assets/jewel-case-spine-v1.svg';shell.alt='';
         shell.setAttribute('aria-hidden','true');shell.draggable=false;
         el.append(shell);
+        const wear=document.createElement('span');wear.className='bf-spine-wear';
+        wear.setAttribute('aria-hidden','true');el.append(wear);
         const catalogue=document.createElement('span');catalogue.className='bf-spine-catalogue';
         catalogue.setAttribute('aria-hidden','true');
         el.append(catalogue);node.catalogue=catalogue;
