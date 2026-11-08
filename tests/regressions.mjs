@@ -149,6 +149,8 @@ export async function runTests(sources) {
     'albums without real catalogue metadata have no fabricated code');
   const spineCover=firstSpine?.children.find(node=>node.className==='bf-spine-cover');
   assert(spineLabel?.textContent?.includes('Artist — Album'), 'one continuous artist and album spine label');
+  assert(new Set(api.geometry().nodes.map(node=>node.el.dataset.labelAlign)).size===2,
+    'album identities produce both top-aligned and centred spine labels');
   assert(spineShell?.src==='/assets/jewel-case-spine-v1.svg', 'all spines use shared static shell image');
   assert(!spineCover, 'spines do not request or display cropped cover artwork');
   assert(firstSpine?.className?.includes('bf-album'), 'spines retain the normal cover-derived colour metadata path');
@@ -1338,7 +1340,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=shelf-variety-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-1'),
+  assert(sources.index.includes('js/app.js?v=shelf-variety-alignment-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-alignment-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
