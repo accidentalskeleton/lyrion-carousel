@@ -1,8 +1,24 @@
-# Lyrion Carousel — optional Windows server package
+# Windows installation — Lyrion Carousel
+
+[← Project overview](https://github.com/accidentalskeleton/lyrion-carousel#readme) · [Common server options and security](https://github.com/accidentalskeleton/lyrion-carousel/blob/main/docs/getting-started.md)
 
 **Linux/Debian remains the primary supported and tested platform.** This Windows x64
 package is a best-effort alternative for local browsing, development and
 dedicated Windows machines. It does **not** include Lyrion Music Server (LMS).
+
+## Contents
+
+- [Download the Windows ZIP](#download-the-windows-zip)
+- [Run the portable server](#use-the-portable-server-no-administrator-rights)
+- [Install the Windows service](#install-the-optional-automatic-windows-service)
+- [Run from source](#run-from-source-optional)
+- [Troubleshooting and limitations](#limitations-and-security)
+
+## Download the Windows ZIP
+
+**Windows ZIP download:** Open the [latest GitHub release](https://github.com/accidentalskeleton/lyrion-carousel/releases/latest) and download the `LyrionCarousel-Windows-x64-v*.zip` file from **Assets** (not the source-code ZIP). The bundle includes the standalone executable and optional Windows Service scripts.
+
+Download and extract the full ZIP before following the instructions below.
 
 The archive includes:
 - app/LyrionCarousel.exe with its PyInstaller runtime, Python dependencies,
@@ -11,6 +27,29 @@ The archive includes:
 - LyrionCarouselService.exe (WinSW 2.12.0) and its XML configuration;
 - Install-Service.ps1 and Uninstall-Service.ps1 for the optional automatic service;
 - VERSION, GPL licence, third-party notices, and WinSW MIT licence.
+
+
+## Run from source (optional)
+
+Install Python 3.9 or later (including the Python Launcher for Windows, `py`) and Git. From **PowerShell**, run:
+
+```powershell
+git clone https://github.com/accidentalskeleton/lyrion-carousel.git
+cd lyrion-carousel
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install Pillow
+.\.venv\Scripts\python.exe server.py --lms http://streamer:9000 --port 18088
+```
+
+Replace `http://streamer:9000` with the address of your reachable LMS server. Open **http://127.0.0.1:18088/** in Edge or another modern browser. Leave the PowerShell window open while using Carousel; press **Ctrl+C** to stop it. The virtual-environment commands above don't require PowerShell script activation. If `py` is unavailable, use `python` to create the virtual environment.
+
+Port `8088` is the default. The example uses `18088` because Windows may reserve or block `8088`, returning `[WinError 10013]`; choose another available port if necessary. To inspect reserved ports, run `netsh interface ipv4 show excludedportrange protocol=tcp`.
+
+On first use, album spines may initially show neutral grey while the Windows server downloads artwork and computes colour metadata. The local cache at `.cache/album-art` makes repeat visits faster; **Settings → About → Prepare all artwork** can populate it in advance. A browser refresh can interrupt an outstanding CometD long-poll request and produce a `[WinError 10053]` aborted-connection message; that does not by itself mean LMS or artwork loading has failed.
+
+Catalogue numbers come through LMS's raw track-tag API; no music-folder mount or access to the ripping engine is required. Windows runs separately from the Debian `.deb` and `systemd` deployment.
+
+Keep Carousel and LMS on trusted networks. Do not expose either service to the public internet.
 
 ## Use the portable server (no Administrator rights)
 
@@ -79,5 +118,5 @@ To inspect service state:
   separately for the album browser. No Raspberry Pi LMS installation is
   removed or altered by this Windows package.
 
-WinSW is MIT licensed. Its licence is included as WinSW-LICENSE.txt.
-See THIRD_PARTY_NOTICES.md for other dependencies and attribution.
+WinSW is MIT licensed. Its licence is included as `WinSW-LICENSE.txt` in the Windows ZIP.
+See `THIRD_PARTY_NOTICES.md` in the ZIP or the [repository's third-party notices](https://github.com/accidentalskeleton/lyrion-carousel/blob/main/THIRD_PARTY_NOTICES.md) for other dependencies and attribution.
