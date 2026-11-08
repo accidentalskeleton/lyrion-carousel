@@ -1,7 +1,7 @@
 import { rpc, CometDClient, resetRpcSession } from './lms.js?v=track-artist-roles-1';
 import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from './catalogue.js?v=display-choice-1';
 import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPosition } from './browser.js?v=display-choice-1';
-import { createLmsProvider } from './providers/lms-provider.js?v=providers-1';
+import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=providers-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=spotify-album-link-2';
 
@@ -81,6 +81,33 @@ function rebuildAlbumIndex(){
         if(album?.[6]!=null)albumIndexCache.set(String(album[6]),index);
         if(album)indexAlbumLetter(album,index);
     });
+    rebuildShelfGeometry();
+}
+let shelfCentres=[],shelfUnits=0;
+const spineWeight=album=>Number(album?.[17])>1?1.5:1;
+function rebuildShelfGeometry(){
+    let edge=-.5;
+    shelfCentres=Array.from({length:albums.length},(_,index)=>{
+        const width=spineWeight(albums[index]),centre=edge+width/2;edge+=width;return centre;
+    });
+    shelfUnits=edge+.5;
+}
+function shelfSpace(index){
+    if(shelfCentres.length!==albums.length)rebuildShelfGeometry();
+    if(!albums.length)return index;
+    const whole=Math.floor(index),i=modulo(whole,albums.length),cycle=Math.floor(whole/albums.length);
+    const a=shelfCentres[i]+cycle*shelfUnits;
+    const b=i+1<albums.length?shelfCentres[i+1]+cycle*shelfUnits:shelfCentres[0]+(cycle+1)*shelfUnits;
+    return a+(b-a)*(index-whole);
+}
+function shelfIndexAt(space){
+    if(shelfCentres.length!==albums.length)rebuildShelfGeometry();
+    if(!albums.length)return space;
+    const cycle=Math.floor((space-shelfCentres[0])/shelfUnits),local=space-cycle*shelfUnits;
+    let lo=0,hi=albums.length;
+    while(lo+1<hi){const mid=(lo+hi)>>1;if(shelfCentres[mid]<=local)lo=mid;else hi=mid}
+    const a=shelfCentres[lo],b=lo+1<albums.length?shelfCentres[lo+1]:shelfCentres[0]+shelfUnits;
+    return cycle*albums.length+lo+(local-a)/(b-a);
 }
 let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,discoveryBusy=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
 const boundedShelf=()=>orderMode==='recent'&&catalogueSource==='library';
@@ -89,7 +116,8 @@ const boundedShelf=()=>orderMode==='recent'&&catalogueSource==='library';
 const finiteShelfBounds=()=>{
     const visible=Math.max(1,Math.min(DISPLAY_ALBUM_COUNT,totalAlbums));
     const inset=(visible-1)/2;
-    return [inset,Math.max(inset,totalAlbums-1-inset)];
+    shelfSpace(0);
+    return [shelfIndexAt(inset),shelfIndexAt(Math.max(inset,shelfUnits-1-inset))];
 };
 const shelfPosition=value=>{
     if(!boundedShelf())return value;
@@ -106,10 +134,10 @@ const snapShelfPosition=value=>{
     if(value>=last-.5)return last;
     return shelfPosition(Math.round(value));
 };
-const shelfDelta=(index,centre)=>boundedShelf()?index-centre:circularDelta(index,centre,totalAlbums);
+const shelfDelta=(index,centre)=>boundedShelf()?shelfSpace(index)-shelfSpace(centre):circularDelta(shelfSpace(index),shelfSpace(centre),shelfUnits||totalAlbums);
 const selectedIndex=()=>boundedShelf()?Math.round(shelfPosition(position)):modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>boundedShelf()?finitePositionForIndex(index):nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||discoveryBusy||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
-function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=5&server='+artworkNamespace:'';if(album.spine_metadata?.text_style_version===3)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
+function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=5&server='+artworkNamespace:'';if(album.spine_metadata?.text_style_version===3)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index,undefined,undefined,undefined,undefined,Math.max(Number(album.disccount)||Number(album.discc)||1,Number(album.disc)||1)]}
 function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?version=3&path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg','spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId,undefined,spotifyAlbumUrl(album.spotifyUrl)]}
 const lmsProvider=createLmsProvider({
     mapAlbum:mapLyrionAlbum,getPlayerId:()=>playerId,getPageSize:()=>PAGE_SIZE,getSearchLimit:()=>SEARCH_LIMIT,
@@ -404,14 +432,14 @@ function frontCaseWidth(){
 function shelfPitch(){return stage.clientWidth/Math.max(1,Math.min(DISPLAY_ALBUM_COUNT,totalAlbums))}
 function finiteShelfLayout(){
     const [first,last]=finiteShelfBounds(),pitch=shelfPitch();
-    const extra=!frontPreview.hidden&&frontPreviewIndex>=0?Math.max(0,frontCaseWidth()-pitch):0;
-    const range=last-first;
+    const extra=!frontPreview.hidden&&frontPreviewIndex>=0?Math.max(0,frontCaseWidth()-pitch*spineWeight(albums[frontPreviewIndex])):0;
+    const range=shelfSpace(last)-shelfSpace(first);
     return {first,range,pitch,extra,scrollPitch:range>0?pitch+extra/range:pitch};
 }
 function finitePositionForIndex(index){
     const {first,pitch,extra,scrollPitch}=finiteShelfLayout();
     const before=index>frontPreviewIndex?extra:index===frontPreviewIndex?extra/2:0;
-    return shelfPosition(first+((index-first)*pitch+before)/scrollPitch);
+    return shelfPosition(shelfIndexAt(shelfSpace(first)+((shelfSpace(index)-shelfSpace(first))*pitch+before)/scrollPitch));
 }
 function shelfWindowCount(){
     // An open cover displaces neighbouring spines by up to half its width.
@@ -521,6 +549,7 @@ function bindAlbumNode(node,album,index){
     el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');
     el.role='option';
     el.dataset.index=String(index);
+    el.dataset.discCount=String(album[17]||1);
     el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));
     el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
     el.title=el.getAttribute('aria-label');
@@ -587,18 +616,18 @@ function syncShelfDom(){
     const open=!frontPreview.hidden&&frontPreviewIndex>=0;
     const frontDelta=open?shelfDelta(frontPreviewIndex,position):0;
     const frontWidth=frontCaseWidth();
-    const gapShift=open?Math.max(0,(frontWidth-pitch)/2)*opening:0;
+    const gapShift=open?Math.max(0,(frontWidth-pitch*spineWeight(albums[frontPreviewIndex]))/2)*opening:0;
     let layoutShift=0;
     if(open&&boundedShelf()){
         const {first,range}=finiteShelfLayout();
-        const progress=range>0?clamp((position-first)/range,0,1):.5;
+        const progress=range>0?clamp((shelfSpace(position)-shelfSpace(first))/range,0,1):.5;
         layoutShift=gapShift*(1-2*progress);
     }
     const coverX=frontDelta*pitch+layoutShift;
     frontPreview.style.transformOrigin=boundedShelf()?(stage.clientWidth/2+coverX)+'px center':'50% 50%';
     if(frontCase){
         if(opening<1){
-            const spineScale=frontWidth>0?Math.min(1,pitch/frontWidth):1;
+            const spineScale=frontWidth>0?Math.min(1,pitch*spineWeight(albums[frontPreviewIndex])/frontWidth):1;
             const ratio=spineScale+(1-spineScale)*opening;
             const perspective=Math.max(1200,frontWidth*2),depth=frontWidth/(2*perspective),depthSquared=depth*depth;
             const cosine=clamp(2*ratio*(1-depthSquared)/(1+Math.sqrt(1-4*ratio*ratio*depthSquared*(1-depthSquared))),0,1);
@@ -608,18 +637,18 @@ function syncShelfDom(){
         }else frontCase.style.transform=`translate3d(${coverX}px,0,0)`;
     }
     nodes.forEach(node=>{
-        const d=shelfDelta(node.index,position);
+        const d=shelfDelta(node.index,position),width=pitch*spineWeight(node.album);
         const sideShift=(d<frontDelta?-gapShift:d>frontDelta?gapShift:0)+layoutShift;
         const hiddenSpine=open&&node.index===frontPreviewIndex;
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
-        if(node.cachedPitch!==pitch){
-            node.el.style.setProperty('width',pitch+'px','important');
-            node.el.style.setProperty('--spine-width',pitch+'px');
-            node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(pitch-8)*.56))+'px');
-            node.cachedPitch=pitch;
+        if(node.cachedPitch!==width){
+            node.el.style.setProperty('width',width+'px','important');
+            node.el.style.setProperty('--spine-width',width+'px');
+            node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(width-8)*.56))+'px');
+            node.cachedPitch=width;
             scheduleCatalogueLayout();
         }
-        node.el.style.setProperty('transform',`translate3d(${d*pitch-pitch/2+sideShift}px,0,0)`,'important');
+        node.el.style.setProperty('transform',`translate3d(${d*pitch-width/2+sideShift}px,0,0)`,'important');
         node.el.style.zIndex=String(100-Math.round(Math.abs(d)));
         node.el.style.opacity=hiddenSpine?'0':String(clamp(1-Math.max(0,Math.abs(d)-nodes.length*.36)*.12,.18,1));
         node.el.style.pointerEvents=hiddenSpine?'none':Math.abs(d)<nodes.length/2?'auto':'none';
@@ -845,12 +874,12 @@ window.addEventListener('lyrion-carousel-cache-cleared',()=>{
     clearSpineMetadata();handleLibraryEvent();
 });
 function scheduleReconnect(){if(reconnectTimer)return;const delay=reconnectDelay;setConnection('Reconnecting to Lyrion Music Server in '+Math.ceil(delay/1000)+'s…',false);reconnectTimer=setTimeout(()=>{reconnectTimer=0;connectLyrion()},delay);reconnectDelay=Math.min(reconnectDelay*2,RECONNECT_MAX_MS)}function resetReconnect(){clearTimeout(reconnectTimer);reconnectTimer=0;reconnectDelay=1000}
-function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length){albums[start+o]=a;if(a?.[6]!=null)albumIndexCache.set(String(a[6]),start+o);indexAlbumLetter(a,start+o)}});loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
-async function fetchBatch(batchNumber,render=true){if(!liveCatalogue||!totalAlbums)return[];const normal=modulo(batchNumber,batchCount());if(loadedBatches.has(normal)){const start=normal*PAGE_SIZE;return albums.slice(start,Math.min(start+PAGE_SIZE,totalAlbums))}if(loadingBatches.has(normal))return loadingBatches.get(normal);const generation=catalogueGeneration,promise=(async()=>{const start=normal*PAGE_SIZE,result=await rpc('0',['albums',start,PAGE_SIZE,'sort:artflow','tags:ajlysg']);if(generation!==catalogueGeneration)return[];return storeBatch(normal,result,render)})().finally(()=>{if(loadingBatches.get(normal)===promise)loadingBatches.delete(normal)});loadingBatches.set(normal,promise);return promise}
+function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length){albums[start+o]=a;if(a?.[6]!=null)albumIndexCache.set(String(a[6]),start+o);indexAlbumLetter(a,start+o)}});rebuildShelfGeometry();loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
+async function fetchBatch(batchNumber,render=true){if(!liveCatalogue||!totalAlbums)return[];const normal=modulo(batchNumber,batchCount());if(loadedBatches.has(normal)){const start=normal*PAGE_SIZE;return albums.slice(start,Math.min(start+PAGE_SIZE,totalAlbums))}if(loadingBatches.has(normal))return loadingBatches.get(normal);const generation=catalogueGeneration,promise=(async()=>{const start=normal*PAGE_SIZE,result=await rpc('0',['albums',start,PAGE_SIZE,'sort:artflow','tags:ajlysgiq']);if(generation!==catalogueGeneration)return[];return storeBatch(normal,result,render)})().finally(()=>{if(loadingBatches.get(normal)===promise)loadingBatches.delete(normal)});loadingBatches.set(normal,promise);return promise}
 function prefetchAround(index){if(!liveCatalogue||!totalAlbums)return;const b=Math.floor(modulo(index,totalAlbums)/PAGE_SIZE);if(b===prefetchedWindowPage)return;prefetchedWindowPage=b;[-1,0,1].forEach(o=>fetchBatch(b+o).catch(()=>{if(prefetchedWindowPage===b)prefetchedWindowPage=-1}))}async function locateAlbum(id,render=true){const found=indexForAlbumId(id);if(found>=0)return found;await ensurePositionIndex();return locateIndexedAlbum(id,albums,albumPositionById,PAGE_SIZE,b=>fetchBatch(b,render))}
 async function loadInitialCatalogue(){
     const connection=connectionGeneration;
-    const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artflow','tags:ajlysg']);
+    const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artflow','tags:ajlysgiq']);
     if(connection!==connectionGeneration)return;
     const first=(result.albums_loop||[]).map(mapLyrionAlbum);
     libraryAlbumCount=Number(result.count)||first.length;
@@ -1199,13 +1228,13 @@ document.addEventListener('keydown',event=>{
 // only the tail of those orderings, where overlooked releases are found.
 // Intersect with the already genre-filtered local CD shelf by album ID.
 async function chooseDiscoveryAlbum(sort){
-    const first=await rpc('0',['albums',0,1,'sort:'+sort,'tags:ajlys']);
+    const first=await rpc('0',['albums',0,1,'sort:'+sort,'tags:ajlysiq']);
     const count=Number(first.count);
     if(!Number.isSafeInteger(count)||count<1)return null;
     let end=count;
     for(let page=0;page<10&&end>0;page++){
         const start=Math.max(0,end-DISCOVERY_PAGE_SIZE);
-        const result=await rpc('0',['albums',start,end-start,'sort:'+sort,'tags:ajlys']);
+        const result=await rpc('0',['albums',start,end-start,'sort:'+sort,'tags:ajlysiq']);
         const matches=(result.albums_loop||[]).map(a=>indexForAlbumId(a.id))
             .filter(i=>i>=0&&albums[i]&&(!playingAlbumId||String(albums[i][6])!==String(playingAlbumId)));
         if(matches.length)return matches[Math.floor(Math.random()*matches.length)];
@@ -1355,7 +1384,7 @@ function moveShelfDrag(event,closePreviewOnMove=true){
         // the open album; the boolean is kept for existing gesture callers.
         followingNowPlaying=false;cancelFollowAnimation();
     }
-    position=shelfPosition(startPosition-dx/(boundedShelf()?finiteShelfLayout().scrollPitch:175));target=position;
+    position=shelfPosition(shelfIndexAt(shelfSpace(startPosition)-dx/(boundedShelf()?finiteShelfLayout().scrollPitch:175)));target=position;
     pointerVelocity=(event.clientX-lastX)/Math.max(1,now-lastTime);
     lastX=event.clientX;lastTime=now;
 }

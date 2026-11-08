@@ -112,7 +112,7 @@ export async function runTests(sources) {
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -167,6 +167,29 @@ export async function runTests(sources) {
   spottyCapability=1;await api.checkSpottyAvailability();
   assert(api.spottyState()===true,'LMS capability check detects an installed Spotty plugin');
   assert(!sourceButtonsForTest[1].disabled,'Spotify becomes selectable when Spotty is installed');
+  assert(api.mapLyrionAlbum({id:999,disccount:2})[17]===2,'LMS disc count is retained');
+  assert(api.spineWeight(api.mapLyrionAlbum({id:999,disccount:2}))===1.5,'multi-disc spines are 1.5 times normal width');
+  const normalAlbums=api.state().albums;
+  const mixedAlbums=normalAlbums.map((album,index)=>{const copy=album.slice();copy[17]=index%3===0?2:1;return copy;});
+  api.replaceAlbumsForTest(mixedAlbums);api.set({position:40});api.draw();
+  for(const position of [-200,-1,0,1.5,40,94,95,201.25]){
+    assert(Math.abs(api.shelfIndexAt(api.shelfSpace(position))-position)<1e-9,
+      'weighted shelf positions round-trip across both wrap boundaries');
+  }
+  const mixedNodes=api.geometry().nodes;
+  for(const node of mixedNodes){
+    const normalWidth=stage.clientWidth/api.state().DISPLAY_ALBUM_COUNT;
+    assert(Math.abs(parseFloat(node.el.style.width)-normalWidth*api.spineWeight(node.album))<1e-8,
+      'rendered widths use real disc counts');
+  }
+  const leftFor=node=>Number(/translate3d\(([-.\d]+)px/.exec(node.el.style.transform)[1]);
+  const orderedNodes=mixedNodes.slice().sort((a,b)=>a.index-b.index);
+  for(let i=1;i<orderedNodes.length;i++){
+    const before=orderedNodes[i-1],after=orderedNodes[i];
+    assert(Math.abs(leftFor(before)+parseFloat(before.el.style.width)-leftFor(after))<1e-8,
+      'mixed single/multi-disc spines touch without overlaps or gaps');
+  }
+  api.replaceAlbumsForTest(normalAlbums);api.set({position:4});api.draw();
 
   // Phase 4: advancing the shelf should recycle the same physical elements
   // rather than destroying and constructing a row of new image/text nodes.
@@ -1298,7 +1321,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=spotty-availability-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
+  assert(sources.index.includes('js/app.js?v=multidisc-widths-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

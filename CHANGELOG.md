@@ -5,6 +5,7 @@ All notable changes to Lyrion Carousel are documented here.
 ## Unreleased
 
 - Disable the Spotify source when LMS does not expose Spotty; check again on reconnect or server changes and fall back to Library when a saved Spotify source is unavailable.
+- Give multi-disc library albums 1.5× spine width using LMS disc counts. Account for mixed widths in shelf spacing, finite endpoints, cover gaps and dragging, and refresh catalogue snapshots to include disc metadata.
 
 ## [0.11.5] - 2026-11-07
 

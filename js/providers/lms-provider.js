@@ -21,7 +21,7 @@ export function createLmsProvider({
 
     async load(){
       const PAGE_SIZE=getPageSize(),order=getOrderMode();
-      const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artflow','tags:ajlysg',...genreArgs()]);
+      const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artflow','tags:ajlysgiq',...genreArgs()]);
       const mapped=(result.albums_loop||[]).map(mapAlbum);
       const count=Number(result.count)||mapped.length;
       setLibraryCount(count);
@@ -29,7 +29,7 @@ export function createLmsProvider({
     },
 
     async search(query){
-      const command=['albums',0,getSearchLimit(),'sort:artflow','tags:ajlysg','search:'+query];
+      const command=['albums',0,getSearchLimit(),'sort:artflow','tags:ajlysgiq','search:'+query];
       const disabled=[...getDisabledGenres()].map(String).filter(id=>/^[1-9]\d*$/.test(id));
       // LMS supports genre_id but not exclude_genre_id. Find the excluded
       // matches with the same sort and limit, then subtract them by album ID.

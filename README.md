@@ -14,6 +14,7 @@ Current application version: **0.11.5**. The canonical version is stored in [`VE
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
 - circular CD shelf with artwork-derived spine colours, stable readable font choices, and configurable displayed-album count;
+- multi-disc CD spines displayed at 1.5× normal width using LMS disc-count metadata, with matching shelf spacing and cover transitions;
 - shelf-only display with server-prepared artist/album, album-only, colour, random or **Recently Added** ordering; Recently Added uses LMS's recorded first-added date, newest first, and stops at both shelf ends instead of wrapping; random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered; a 15-minute persistent catalogue snapshot avoids rescanning LMS for every sort or genre-filter change;

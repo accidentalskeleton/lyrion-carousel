@@ -2,9 +2,9 @@ export async function runShelfGestures(page) {
   const reports = [];
   const base = await page.evaluate(() => location.origin);
   const assert = (condition, message) => {if (!condition) throw Error(message);};
-  for (const viewport of [{width:1280,height:800},{width:2560,height:720},{width:390,height:844}]) {
-    await page.setViewportSize(viewport);
-    await page.goto(base + '/tests/shelf-browser.html', {waitUntil:'domcontentloaded'});
+  for (const viewport of [{width:1280,height:800},{width:2560,height:720},{width:390,height:844},{width:1280,height:800,multiDisc:true},{width:390,height:844,multiDisc:true}]) {
+    await page.setViewportSize({width:viewport.width,height:viewport.height});
+    await page.goto(base + '/tests/shelf-browser.html'+(viewport.multiDisc?'?multidisc=1':''), {waitUntil:'domcontentloaded'});
     const report = await page.evaluate(() => window.shelfBrowserResult);
     assert(!report.error, report.error);
     await page.evaluate(()=>shelfBrowser.set(49,false));
@@ -46,7 +46,7 @@ export async function runShelfGestures(page) {
         await page.mouse.move(start.x+distance,start.y,{steps:8});
         const during = await page.evaluate(() => shelfBrowser.state());
         assert(during.dragging, 'Pointer capture retains the ' + surface + ' drag');
-        assert(Math.abs((during.position-start.position)*start.scrollPitch+distance)<1,
+        assert(Math.abs((during.spacePosition-start.spacePosition)*start.scrollPitch+distance)<1,
           'Pointer and shelf travel together at '+viewport.width+'px on '+surface);
         await page.mouse.up();
         await page.waitForFunction(() => !shelfBrowser.state().raf);

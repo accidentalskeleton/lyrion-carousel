@@ -31,7 +31,7 @@ _IMAGE_CACHE_BYTES={}
 # catalogue HTTP requests; the on-disk snapshots survive application restarts.
 _CATALOGUE_LOCK=threading.RLock()
 _CATALOGUE_MEMORY={}
-CATALOGUE_SNAPSHOT_VERSION=1
+CATALOGUE_SNAPSHOT_VERSION=2
 CATALOGUE_SNAPSHOT_TTL_SECONDS=900
 CATALOGUE_MAX_SNAPSHOT_BYTES=64_000_000
 CATALOGUE_SORT_CACHE_ENTRIES=4
@@ -785,7 +785,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         """Yield bounded LMS album pages; callers decide how to process the full library."""
         start=0
         while True:
-            command=['albums',start,200,f'sort:{sort}','tags:ajlys']
+            command=['albums',start,200,f'sort:{sort}','tags:ajlysiq']
             if genre_id is not None: command.append(f'genre_id:{genre_id}')
             body=json.dumps({'id':1,'method':'slim.request','params':['0',command]}).encode()
             with urlopen(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'}),timeout=10) as response:
