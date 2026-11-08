@@ -190,6 +190,8 @@ export async function runTests(sources) {
   const mixedNodes=api.geometry().nodes;
   for(const node of mixedNodes){
     const normalWidth=stage.clientWidth/api.state().DISPLAY_ALBUM_COUNT;
+    assert(node.el.dataset.caseType===(Number(node.album[17])>1?'multi':'single'),
+      'only multi-disc albums receive the extra case seam');
     assert(Math.abs(parseFloat(node.el.style.width)-normalWidth*api.spineWeight(node.album))<1e-8,
       'rendered widths use real disc counts');
   }
@@ -1349,7 +1351,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=shelf-variety-wear-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-wear-1'),
+  assert(sources.index.includes('js/app.js?v=shelf-variety-seams-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-seams-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

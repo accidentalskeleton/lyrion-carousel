@@ -566,6 +566,7 @@ function bindAlbumNode(node,album,index){
     el.role='option';
     el.dataset.index=String(index);
     el.dataset.discCount=String(album[17]||1);
+    el.dataset.caseType=Number(album[17])>1?'multi':'single';
     el.dataset.labelAlign=(albumCatalogueSeed(album)&1)?'start':'center';
     el.dataset.printStyle=['regular','bold','condensed'][(albumCatalogueSeed(album)>>>3)%3];
     el.dataset.wear=['none','light','none','none','scuffed','none'][(albumCatalogueSeed(album)>>>7)%6];
@@ -586,6 +587,8 @@ function bindAlbumNode(node,album,index){
         el.append(shell);
         const wear=document.createElement('span');wear.className='bf-spine-wear';
         wear.setAttribute('aria-hidden','true');el.append(wear);
+        const binding=document.createElement('span');binding.className='bf-spine-binding';
+        binding.setAttribute('aria-hidden','true');el.append(binding);
         const catalogue=document.createElement('span');catalogue.className='bf-spine-catalogue';
         catalogue.setAttribute('aria-hidden','true');
         el.append(catalogue);node.catalogue=catalogue;
