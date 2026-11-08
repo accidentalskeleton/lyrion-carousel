@@ -1,5 +1,7 @@
 # Security policy
 
+[← Project overview](README.md)
+
 ## Supported versions
 
 Security fixes are considered for the latest code on `main`. Older releases

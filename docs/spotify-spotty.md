@@ -1,5 +1,7 @@
 # Spotify / Spotty integration
 
+[← Project overview](../README.md)
+
 Spotify support is part of Lyrion Carousel **0.10.0** on `main`.
 
 ## Architecture
