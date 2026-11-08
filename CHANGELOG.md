@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+## [0.11.7] - 2026-11-08
+
 - Consolidate Windows ZIP, portable, service and source-installation instructions into one dedicated guide; update README and deployment links and package the same guide in Windows release ZIPs.
 - Use stable sans-serif, serif and monospace catalogue lettering independently of the main spine label when Shelf variety is on; keep the same real codes, wrapping and height limits.
 - Give multi-disc cases a subtle additional moulded hinge seam when Shelf variety is enabled, without changing cover interactions or adding image requests.
