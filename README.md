@@ -74,6 +74,10 @@ For configuration, deployment and security guidance, see the linked documentatio
 - [Testing and development](docs/development.md)
 - [Spotify/Spotty integration](docs/spotify-spotty.md)
 - [Standalone wall controller](docs/wall-controller.md)
+- [Changelog and release history](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Public-release checklist](docs/public-release-checklist.md)
 
 
 ## License
