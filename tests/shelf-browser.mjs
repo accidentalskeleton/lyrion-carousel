@@ -48,6 +48,7 @@ export async function runShelfBrowserTests() {
       },
       open(index,animate=false){openFrontPreview(albums[index],index,animate);draw()},
       close(){return closeFrontPreview(false,true)},
+      widths:value=>applySetting('multiDiscWidths',value),
       timeout:ms=>applySetting('frontTimeout',ms),
       status(mode='play'){applyStatus({mode,playlist_loop:[{
         album_id:playingAlbumId,album:frontPreviewAlbum[0],artist:frontPreviewAlbum[1]
@@ -101,11 +102,21 @@ export async function runShelfBrowserTests() {
       assert(Math.abs(width-api.state().pitch*(index%4===0?1.5:1))<1,'Mixed disc widths follow LMS metadata');
     }
   }
+  if(multiDisc){
+    api.widths(false);
+    assert([...stage.querySelectorAll('.bf-album')].every(row=>Math.abs(row.getBoundingClientRect().width-api.state().pitch)<1),
+      'The width setting restores uniform real browser geometry');
+    api.widths(true);
+  }
   await api.setDisplayOrder('recent');
   for (const index of [0,1,49,96,97]) {
     api.set(index,true);
     const closedState = api.state();
     api.open(index);
+    if(multiDisc&&index===49){
+      api.widths(false);coverage();noOverlap();
+      api.widths(true);coverage();noOverlap();
+    }
     preview.dataset.visible = 'false';
     await new Promise(resolve => setTimeout(resolve, 250));
     api.open(index);

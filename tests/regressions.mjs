@@ -112,7 +112,7 @@ export async function runTests(sources) {
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -189,6 +189,23 @@ export async function runTests(sources) {
     assert(Math.abs(leftFor(before)+parseFloat(before.el.style.width)-leftFor(after))<1e-8,
       'mixed single/multi-disc spines touch without overlaps or gaps');
   }
+  api.applySetting('multiDiscWidths','false');
+  assert(api.geometry().nodes.every(node=>Math.abs(parseFloat(node.el.style.width)-stage.clientWidth/api.state().DISPLAY_ALBUM_COUNT)<1e-8),
+    'disabling wider multi-disc spines immediately restores uniform widths');
+  api.applySetting('multiDiscWidths','true');
+  assert(api.geometry().nodes.some(node=>api.spineWeight(node.album)===1.5),
+    'reenabling wider spines restores multi-disc widths');
+  api.setOrderForTest('recent');
+  for(const end of [0,1]){
+    api.set({position:api.finiteShelfBounds()[end]});
+    api.applySetting('multiDiscWidths','false');
+    assert(Math.abs(api.state().position-api.finiteShelfBounds()[end])<1e-8,
+      'turning multi-disc widths off preserves the current finite shelf endpoint');
+    api.applySetting('multiDiscWidths','true');
+    assert(Math.abs(api.state().position-api.finiteShelfBounds()[end])<1e-8,
+      'turning multi-disc widths on preserves the current finite shelf endpoint');
+  }
+  api.setOrderForTest('artistAlbum');
   api.replaceAlbumsForTest(normalAlbums);api.set({position:4});api.draw();
 
   // Phase 4: advancing the shelf should recycle the same physical elements
@@ -1321,7 +1338,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=multidisc-widths-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
+  assert(sources.index.includes('js/app.js?v=multidisc-toggle-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
