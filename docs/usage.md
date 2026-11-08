@@ -46,6 +46,8 @@ Labels scale with spine width, truncate with an ellipsis and retain their full t
 
 Resized cover requests use `case=realistic-v1`. The server composites artwork beneath `assets/jewel-case-realistic-v1.png` and caches a PNG at the selected resolution. Both local and Spotify open-shelf covers use this presentation. Original artwork still supplies spine colours. The browser adds restrained reflections without a Three.js/WebGL rendering loop.
 
+The [realistic jewel-case texture provenance notes](../assets/jewel-case-realistic-v1.md) document the source asset used by this rendering path.
+
 The browser preloads the focused cover and up to four neighbours on each side, with two low-priority image requests at a time. Queued work follows the latest browsing position, and at most 24 loaded images are retained by the preloader.
 
 ### Background artwork preparation
