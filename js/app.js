@@ -567,6 +567,7 @@ function bindAlbumNode(node,album,index){
     el.dataset.index=String(index);
     el.dataset.discCount=String(album[17]||1);
     el.dataset.labelAlign=(albumCatalogueSeed(album)&1)?'start':'center';
+    el.dataset.printStyle=['regular','bold','condensed'][(albumCatalogueSeed(album)>>>3)%3];
     el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));
     el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
     el.title=el.getAttribute('aria-label');

@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Mix stable regular, bold and condensed print treatments using local fonts when Shelf variety is enabled; do not download fonts or add scrolling work.
+
 - Use smaller artist lettering and a quieter separator to give album titles more prominence when Shelf variety is on; retain the selected artist/album ordering.
 
 - Alternate top-aligned and centred spine lettering consistently per album when Shelf variety is on, without changing the available title area.

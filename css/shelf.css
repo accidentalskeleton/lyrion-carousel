@@ -95,6 +95,14 @@
 .bf-stage.bf-shelf-active:after { opacity:.25; }
 
 /* One switch returns optional typography and imprint treatments to uniform. */
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-print-style="regular"] .bf-spine-label {
+    font-weight:500;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-print-style="condensed"] .bf-spine-label {
+    font-family:"Arial Narrow","Liberation Sans Narrow","DejaVu Sans Condensed",sans-serif;
+    font-stretch:condensed;
+    font-weight:600;
+}
 #book-fan-browser[data-shelf-variety="true"] .bf-spine-artist {
     font-size:.82em;
     font-weight:500;
