@@ -53,7 +53,7 @@ Current application version: **0.11.5**. The canonical version is stored in [`VE
 
 ## Quick start
 
-The server requires Python 3.9+ and Pillow for source installations. On Debian/Ubuntu install `python3-pil`. For Windows instructions, see the dedicated [Windows installation guide](docs/windows.md).
+The server requires Python 3.9+ and Pillow for source installations. On Debian/Ubuntu install `python3-pil`.
 
 ```bash
 python3 server.py --lms http://streamer:9000
@@ -61,14 +61,11 @@ python3 server.py --lms http://streamer:9000
 
 Open `http://127.0.0.1:8088/` in a browser. Replace the LMS address with your own if needed.
 
-**Windows:** See the [single Windows installation guide](docs/windows.md) for the latest ZIP download, portable mode, optional Windows Service, source setup and troubleshooting.
-
-For configuration, platform-specific installation, the optional Windows Service and security guidance, see the linked documentation.
+For configuration, deployment and security guidance, see the linked documentation.
 
 ## Documentation
 
 - [Getting started and common runtime options](docs/getting-started.md)
-- [Windows installation — ZIP, source, Service and troubleshooting](docs/windows.md)
 - [Debian deployment, Raspberry Pi kiosk and versioning](docs/deployment.md)
 - [Album discovery, browsing and artwork presentation](docs/usage.md)
 - [Architecture, LMS API, catalogue snapshots and server endpoints](docs/architecture.md)
