@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Replace the multi-disc width option with a saved Shelf variety switch that controls optional widths, typography and imprint treatments together. Preserve existing width preferences and retain artwork colours and real catalogue numbers when off.
+
 ## [0.11.6] - 2026-11-08
 
 - Disable the Spotify source when LMS does not expose Spotty; check again on reconnect or server changes and fall back to Library when a saved Spotify source is unavailable.

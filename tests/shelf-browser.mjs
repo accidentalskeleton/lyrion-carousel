@@ -48,7 +48,7 @@ export async function runShelfBrowserTests() {
       },
       open(index,animate=false){openFrontPreview(albums[index],index,animate);draw()},
       close(){return closeFrontPreview(false,true)},
-      widths:value=>applySetting('multiDiscWidths',value),
+      widths:value=>applySetting('shelfVariety',value),
       timeout:ms=>applySetting('frontTimeout',ms),
       status(mode='play'){applyStatus({mode,playlist_loop:[{
         album_id:playingAlbumId,album:frontPreviewAlbum[0],artist:frontPreviewAlbum[1]

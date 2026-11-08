@@ -94,6 +94,17 @@
 
 .bf-stage.bf-shelf-active:after { opacity:.25; }
 
+/* One switch returns optional typography and imprint treatments to uniform. */
+#book-fan-browser[data-shelf-variety="false"] .bf-spine-label {
+    font-family:Arial,Helvetica,sans-serif;
+    font-weight:700;
+    text-align:center;
+}
+#book-fan-browser[data-shelf-variety="false"] .bf-spine-catalogue {
+    color:var(--spine-text,#f5f2ea);
+    transform:translateX(-50%);
+}
+
 .bf-front-preview {
     position:absolute;
     z-index:180;

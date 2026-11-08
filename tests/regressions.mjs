@@ -189,19 +189,19 @@ export async function runTests(sources) {
     assert(Math.abs(leftFor(before)+parseFloat(before.el.style.width)-leftFor(after))<1e-8,
       'mixed single/multi-disc spines touch without overlaps or gaps');
   }
-  api.applySetting('multiDiscWidths','false');
+  api.applySetting('shelfVariety','false');
   assert(api.geometry().nodes.every(node=>Math.abs(parseFloat(node.el.style.width)-stage.clientWidth/api.state().DISPLAY_ALBUM_COUNT)<1e-8),
     'disabling wider multi-disc spines immediately restores uniform widths');
-  api.applySetting('multiDiscWidths','true');
+  api.applySetting('shelfVariety','true');
   assert(api.geometry().nodes.some(node=>api.spineWeight(node.album)===1.5),
     'reenabling wider spines restores multi-disc widths');
   api.setOrderForTest('recent');
   for(const end of [0,1]){
     api.set({position:api.finiteShelfBounds()[end]});
-    api.applySetting('multiDiscWidths','false');
+    api.applySetting('shelfVariety','false');
     assert(Math.abs(api.state().position-api.finiteShelfBounds()[end])<1e-8,
       'turning multi-disc widths off preserves the current finite shelf endpoint');
-    api.applySetting('multiDiscWidths','true');
+    api.applySetting('shelfVariety','true');
     assert(Math.abs(api.state().position-api.finiteShelfBounds()[end])<1e-8,
       'turning multi-disc widths on preserves the current finite shelf endpoint');
   }
@@ -1338,7 +1338,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=multidisc-toggle-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
+  assert(sources.index.includes('js/app.js?v=shelf-variety-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

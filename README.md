@@ -181,9 +181,11 @@ The detail area shows the album under the pointer; outside the shelf it shows th
 
 Carousel uses a single **Shelf** display. **Settings → Displayed albums** controls shelf density. Existing obsolete browser display-mode preferences are ignored automatically.
 
-**Settings → Display → Multi-disc spine width** switches between **Wider (1.5×)**
-and **Uniform** spines. Wider is enabled by default. Changes apply immediately
-and the choice is saved per browser.
+**Settings → Display → Shelf variety** enables or disables the optional spine
+styling and wider multi-disc cases together. It is on by default, applies
+immediately and is saved per browser. Existing multi-disc width preferences
+are carried over. Artwork-derived background colours and real catalogue
+numbers remain available with variety off; catalogue visibility has its own switch.
 
 **Settings → Album cover size** selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls image resolution, not the displayed case size. Server-generated JPEG variants preserve aspect ratio and never upscale. Originals remain available for spine-colour calculation.
 
