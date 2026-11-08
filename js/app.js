@@ -574,6 +574,10 @@ function bindAlbumNode(node,album,index){
     if(!node.label){
         const label=document.createElement('span');label.className='bf-spine-label';
         el.append(label);node.label=label;
+        node.artistLabel=document.createElement('span');node.artistLabel.className='bf-spine-artist';
+        node.titleLabel=document.createElement('span');node.titleLabel.className='bf-spine-title';
+        node.separator=document.createElement('span');node.separator.className='bf-spine-separator';
+        node.separator.textContent=' — ';
         const shell=document.createElement('img');shell.className='bf-spine-shell';
         shell.src='/assets/jewel-case-spine-v1.svg';shell.alt='';
         shell.setAttribute('aria-hidden','true');shell.draggable=false;
@@ -583,9 +587,11 @@ function bindAlbumNode(node,album,index){
         el.append(catalogue);node.catalogue=catalogue;
     }
         bindCatalogueCode(node,album);
-        node.label.textContent=orderMode==='artistAlbum'
-            ?(album[1]||'Unknown artist')+' — '+(album[0]||'Untitled')
-            :(album[0]||'Untitled')+' — '+(album[1]||'Unknown artist');
+        node.artistLabel.textContent=album[1]||'Unknown artist';
+        node.titleLabel.textContent=album[0]||'Untitled';
+        node.label.replaceChildren(...(orderMode==='artistAlbum'
+            ?[node.artistLabel,node.separator,node.titleLabel]
+            :[node.titleLabel,node.separator,node.artistLabel]));
         node.label.title=node.label.textContent;
         loadSpineMeta(album,el);
 }

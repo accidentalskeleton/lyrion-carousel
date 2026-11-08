@@ -41,8 +41,10 @@ export async function runTests(sources) {
       const classes=new Set();this.classList={add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x),toggle:(x,on)=>{if(on)classes.add(x);else classes.delete(x);return on;}};
     }
     get options(){return this.children;}
+    get textContent(){return (this._text||'')+this.children.map(child=>child.textContent||'').join('');}
+    set textContent(value){this._text=String(value);this.children=[];}
     append(...nodes){for(const n of nodes){n.parent=this;this.children.push(n);}}
-    replaceChildren(...nodes){this.children=[];this.append(...nodes);}
+    replaceChildren(...nodes){this._text='';this.children=[];this.append(...nodes);}
     remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}
     setAttribute(k,v){this.attributes[k]=v;}
     removeAttribute(k){delete this.attributes[k];}
@@ -149,6 +151,9 @@ export async function runTests(sources) {
     'albums without real catalogue metadata have no fabricated code');
   const spineCover=firstSpine?.children.find(node=>node.className==='bf-spine-cover');
   assert(spineLabel?.textContent?.includes('Artist — Album'), 'one continuous artist and album spine label');
+  assert(spineLabel.children.some(child=>child.className==='bf-spine-artist')&&
+    spineLabel.children.some(child=>child.className==='bf-spine-title'),
+    'artist and title retain separate styling without changing their text');
   assert(new Set(api.geometry().nodes.map(node=>node.el.dataset.labelAlign)).size===2,
     'album identities produce both top-aligned and centred spine labels');
   assert(spineShell?.src==='/assets/jewel-case-spine-v1.svg', 'all spines use shared static shell image');
@@ -1340,7 +1345,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=shelf-variety-alignment-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-alignment-1'),
+  assert(sources.index.includes('js/app.js?v=shelf-variety-hierarchy-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-hierarchy-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

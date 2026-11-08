@@ -95,6 +95,14 @@
 .bf-stage.bf-shelf-active:after { opacity:.25; }
 
 /* One switch returns optional typography and imprint treatments to uniform. */
+#book-fan-browser[data-shelf-variety="true"] .bf-spine-artist {
+    font-size:.82em;
+    font-weight:500;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-spine-separator {
+    font-weight:400;
+    opacity:.65;
+}
 #book-fan-browser[data-shelf-variety="true"] .bf-album[data-label-align="start"] .bf-spine-label {
     text-align:start;
 }

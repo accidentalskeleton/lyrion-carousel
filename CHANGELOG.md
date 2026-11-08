@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Use smaller artist lettering and a quieter separator to give album titles more prominence when Shelf variety is on; retain the selected artist/album ordering.
+
 - Alternate top-aligned and centred spine lettering consistently per album when Shelf variety is on, without changing the available title area.
 
 - Replace the multi-disc width option with a saved Shelf variety switch that controls optional widths, typography and imprint treatments together. Preserve existing width preferences and retain artwork colours and real catalogue numbers when off.
