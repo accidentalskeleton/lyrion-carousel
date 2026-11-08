@@ -1,5 +1,7 @@
 # Public-release security checklist
 
+[← Project overview](../README.md)
+
 Repository owner: `accidentalskeleton`
 
 ## Confirmed configuration (4 November 2026)
