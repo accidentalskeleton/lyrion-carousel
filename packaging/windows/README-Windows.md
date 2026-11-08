@@ -4,6 +4,10 @@
 package is a best-effort alternative for local browsing, development and
 dedicated Windows machines. It does **not** include Lyrion Music Server (LMS).
 
+**Windows ZIP download:** Open the [latest GitHub release](https://github.com/accidentalskeleton/lyrion-carousel/releases/latest) and download the `LyrionCarousel-Windows-x64-v*.zip` file from **Assets** (not the source-code ZIP). The bundle includes the standalone executable and optional Windows Service scripts.
+
+Download and extract the full ZIP before following the instructions below.
+
 The archive includes:
 - app/LyrionCarousel.exe with its PyInstaller runtime, Python dependencies,
   artwork assets, JavaScript and CSS (no separate Python install required);
