@@ -1,6 +1,6 @@
 # Getting started
 
-[← Project overview](../README.md) · [Windows service guide](../packaging/windows/README-Windows.md)
+[← Project overview](../README.md)
 
 ## Run directly
 
@@ -18,32 +18,6 @@ python3 server.py --bind 0.0.0.0
 ```
 
 `0.0.0.0` is a listening address, not a browser destination. Do not expose this server directly to the internet.
-
-### Running on Windows (best effort)
-
-**Linux/Debian is the primary development, deployment and testing platform.** Windows is useful for local development and browser testing, and the Python server can run there, but Windows is **not a primary platform focus**. A separately packaged Windows x64 ZIP provides a portable executable and optional service-installation scripts, but Windows remains a best-effort platform and some OS-specific features may differ.
-
-**Windows ZIP download:** Open the [latest GitHub release](https://github.com/accidentalskeleton/lyrion-carousel/releases/latest) and download the `LyrionCarousel-Windows-x64-v*.zip` file from **Assets** (not the source-code ZIP). The bundle includes the standalone executable and optional Windows Service scripts.
-
-Install Python 3.9 or later (including the Python Launcher for Windows, `py`) and Git. From **PowerShell**, run:
-
-```powershell
-git clone https://github.com/accidentalskeleton/lyrion-carousel.git
-cd lyrion-carousel
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install Pillow
-.\.venv\Scripts\python.exe server.py --lms http://streamer:9000 --port 18088
-```
-
-Replace `http://streamer:9000` with the address of your reachable LMS server. Open **http://127.0.0.1:18088/** in Edge or another modern browser. Leave the PowerShell window open while using Carousel; press **Ctrl+C** to stop it. The virtual-environment commands above don't require PowerShell script activation. If `py` is unavailable, use `python` to create the virtual environment.
-
-If you prefer a packaged executable without installing Python, see [Windows packaging and optional service installation](../packaging/windows/README-Windows.md). A Windows release ZIP includes WinSW scripts for installing and removing the optional Windows service; the scripts require Administrator privileges.
-
-Port `8088` is the default. The example uses `18088` because Windows may reserve or block `8088`, returning `[WinError 10013]`; choose another available port if necessary. To inspect reserved ports, run `netsh interface ipv4 show excludedportrange protocol=tcp`.
-
-On first use, album spines may initially show neutral grey while the Windows server downloads artwork and computes colour metadata. The local cache at `.cache/album-art` makes repeat visits faster; **Settings → About → Prepare all artwork** can populate it in advance. A browser refresh can interrupt an outstanding CometD long-poll request and produce a `[WinError 10053]` aborted-connection message; that does not by itself mean LMS or artwork loading has failed.
-
-The Debian `.deb` packaging and `systemd` service do not apply on Windows. Catalogue numbers come from LMS's raw track tags: **no music-folder mount, ripper metadata or Windows `metaflac` installation is necessary**. Other OS-specific behaviour may still differ. Keep both the Windows HTTP server and LMS accessible only on a trusted local network; do not expose either to the public internet.
 
 ### HTTP Host and cross-site request protection
 

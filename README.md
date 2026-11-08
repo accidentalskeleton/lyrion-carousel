@@ -53,22 +53,19 @@ Current application version: **0.11.5**. The canonical version is stored in [`VE
 
 ## Quick start
 
-The server requires Python 3.9+ and Pillow for source installations. On Debian/Ubuntu install `python3-pil`; on Windows install Pillow with `py -m pip install Pillow`.
+The server requires Python 3.9+ and Pillow for source installations. On Debian/Ubuntu install `python3-pil`.
 
 ```bash
 python3 server.py --lms http://streamer:9000
 ```
 
-Open `http://127.0.0.1:8088/` in a browser. Replace the LMS address with your own if needed. For Windows, port `18088` may work when `8088` is reserved; use `py server.py --lms http://streamer:9000 --port 18088`.
+Open `http://127.0.0.1:8088/` in a browser. Replace the LMS address with your own if needed.
 
-**Windows standalone ZIP:** Visit the [latest GitHub release](https://github.com/accidentalskeleton/lyrion-carousel/releases/latest), expand **Assets**, and download `LyrionCarousel-Windows-x64-v*.zip` (not the GitHub source-code ZIP). No separate Python installation is needed for the packaged executable.
-
-For configuration, platform-specific installation, the optional Windows Service and security guidance, see the linked documentation.
+For configuration, deployment and security guidance, see the linked documentation.
 
 ## Documentation
 
-- [Getting started, Windows and runtime options](docs/getting-started.md)
-- [Windows ZIP, portable executable and Service installation](packaging/windows/README-Windows.md)
+- [Getting started and common runtime options](docs/getting-started.md)
 - [Debian deployment, Raspberry Pi kiosk and versioning](docs/deployment.md)
 - [Album discovery, browsing and artwork presentation](docs/usage.md)
 - [Architecture, LMS API, catalogue snapshots and server endpoints](docs/architecture.md)

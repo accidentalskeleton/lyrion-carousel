@@ -1,6 +1,6 @@
 # Deployment and kiosk setup
 
-[← Project overview](../README.md) · [Windows installation](../packaging/windows/README-Windows.md)
+[← Project overview](../README.md)
 
 ## Web-app / kiosk use
 
