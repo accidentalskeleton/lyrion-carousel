@@ -66,6 +66,7 @@ For configuration, deployment and security guidance, see the linked documentatio
 ## Documentation
 
 - [Getting started and common runtime options](docs/getting-started.md)
+- [Windows installation — download, portable use, service and troubleshooting](docs/windows.md)
 - [Debian deployment, Raspberry Pi kiosk and versioning](docs/deployment.md)
 - [Album discovery, browsing and artwork presentation](docs/usage.md)
 - [Architecture, LMS API, catalogue snapshots and server endpoints](docs/architecture.md)
