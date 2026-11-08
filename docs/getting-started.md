@@ -1,6 +1,6 @@
 # Getting started
 
-[← Project overview](../README.md) · [Windows installation](windows.md)
+[← Project overview](../README.md)
 
 ## Run directly
 
@@ -18,8 +18,6 @@ python3 server.py --bind 0.0.0.0
 ```
 
 `0.0.0.0` is a listening address, not a browser destination. Do not expose this server directly to the internet.
-
-For Windows, including the latest ZIP download, portable execution, Windows Service installation and troubleshooting, see the **[Windows installation guide](windows.md)**.
 
 ### HTTP Host and cross-site request protection
 
