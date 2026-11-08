@@ -92,7 +92,10 @@ export async function runTests(sources) {
   const imageRequests=[];
   class PreloadImage{set src(url){this.url=url;imageRequests.push(this)}}
   let metadataFetch=async()=>({ok:false});
-  const env={document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
+  // Discovery must choose a different album when the test requires scrolling.
+  // A real random draw can select the centred album and legitimately skip it.
+  const appMath=Object.create(Math);appMath.random=()=>.37;
+  const env={Math:appMath,document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
     ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>{
       if(url==='/api/catalogue/invalidate'){
         catalogueEvents.push({action:'invalidate',method:args[0]?.method});
