@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Use stable sans-serif, serif and monospace catalogue lettering independently of the main spine label when Shelf variety is on; keep the same real codes, wrapping and height limits.
+
 - Give multi-disc cases a subtle additional moulded hinge seam when Shelf variety is enabled, without changing cover interactions or adding image requests.
 
 - Add faint occasional plastic scuffs and softened edge highlights with stable per-album wear patterns. Reuse decorative layers in the bounded spine pool and hide them when Shelf variety is off.

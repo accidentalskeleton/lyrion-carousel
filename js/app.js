@@ -570,6 +570,7 @@ function bindAlbumNode(node,album,index){
     el.dataset.labelAlign=(albumCatalogueSeed(album)&1)?'start':'center';
     el.dataset.printStyle=['regular','bold','condensed'][(albumCatalogueSeed(album)>>>3)%3];
     el.dataset.wear=['none','light','none','none','scuffed','none'][(albumCatalogueSeed(album)>>>7)%6];
+    el.dataset.catalogueStyle=['sans','serif','mono'][(albumCatalogueSeed(album)>>>13)%3];
     el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));
     el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
     el.title=el.getAttribute('aria-label');

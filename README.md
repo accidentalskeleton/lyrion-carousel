@@ -182,7 +182,9 @@ The detail area shows the album under the pointer; outside the shelf it shows th
 Carousel uses a single **Shelf** display. **Settings → Displayed albums** controls shelf density. Existing obsolete browser display-mode preferences are ignored automatically.
 
 **Settings → Display → Shelf variety** enables or disables the optional spine
-styling and wider multi-disc cases together. It is on by default, applies
+styling and wider multi-disc cases together: title alignment, artist/title
+hierarchy, print styles, subtle plastic wear, multi-disc seams, and catalogue
+fonts, ink and placement. It is on by default, applies
 immediately and is saved per browser. Existing multi-disc width preferences
 are carried over. Artwork-derived background colours and real catalogue
 numbers remain available with variety off; catalogue visibility has its own switch.

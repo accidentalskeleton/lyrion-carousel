@@ -95,6 +95,15 @@
 .bf-stage.bf-shelf-active:after { opacity:.25; }
 
 /* One switch returns optional typography and imprint treatments to uniform. */
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-catalogue-style="serif"] .bf-spine-catalogue {
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:700;
+    letter-spacing:0;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-catalogue-style="mono"] .bf-spine-catalogue {
+    font-family:"Courier New",Courier,monospace;
+    letter-spacing:.05px;
+}
 .bf-spine-binding {
     display:none;
     position:absolute;

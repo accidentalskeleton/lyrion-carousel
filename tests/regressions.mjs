@@ -160,6 +160,8 @@ export async function runTests(sources) {
     'varied spines offer regular, bold and condensed print treatments');
   assert(firstSpine.children.some(child=>child.className==='bf-spine-wear'&&child.getAttribute('aria-hidden')==='true'),
     'wear is a reusable decorative layer hidden from assistive technology');
+  assert(new Set(api.geometry().nodes.map(node=>node.el.dataset.catalogueStyle)).size===3,
+    'catalogue lettering varies independently across sans serif and monospace treatments');
   assert(spineShell?.src==='/assets/jewel-case-spine-v1.svg', 'all spines use shared static shell image');
   assert(!spineCover, 'spines do not request or display cropped cover artwork');
   assert(firstSpine?.className?.includes('bf-album'), 'spines retain the normal cover-derived colour metadata path');
@@ -1351,7 +1353,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=shelf-variety-seams-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-seams-1'),
+  assert(sources.index.includes('js/app.js?v=shelf-variety-catalogue-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
