@@ -47,11 +47,15 @@ if (-not (Test-Path (Join-Path $builtApp 'LyrionCarousel.exe'))) {
 }
 Copy-Item -Path $builtApp -Destination (Join-Path $staging 'app') -Recurse
 foreach ($file in @('Install-Service.ps1', 'Uninstall-Service.ps1',
-                     'Start-Carousel.ps1', 'LyrionCarouselService.xml', 'README-Windows.md')) {
+                     'Start-Carousel.ps1', 'LyrionCarouselService.xml')) {
     $source = Join-Path $PSScriptRoot $file
     if (-not (Test-Path $source)) { throw "Missing packaging file: $source" }
     Copy-Item $source $staging
 }
+# Distribute the canonical Windows guide as README-Windows.md in each ZIP.
+$windowsGuide = Join-Path $root 'docs\windows.md'
+if (-not (Test-Path $windowsGuide)) { throw "Missing Windows guide: $windowsGuide" }
+Copy-Item $windowsGuide (Join-Path $staging 'README-Windows.md')
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $staging 'LICENSE.txt')
 Copy-Item (Join-Path $root 'THIRD_PARTY_NOTICES.md') $staging
 Copy-Item (Join-Path $root 'VERSION') $staging
