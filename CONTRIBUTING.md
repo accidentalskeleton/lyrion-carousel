@@ -1,5 +1,7 @@
 # Contributing to Lyrion Carousel
 
+[← Project overview](README.md)
+
 Thank you for helping improve Lyrion Carousel.
 
 ## Submitting changes
