@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Disable the Spotify source when LMS does not expose Spotty; check again on reconnect or server changes and fall back to Library when a saved Spotify source is unavailable.
+
 ## [0.11.5] - 2026-11-07
 
 - Add an optional Windows x64 ZIP release build alongside Debian: package the Python/Pillow server with PyInstaller, bundle WinSW and PowerShell service install/uninstall and portable-run scripts, smoke-test the EXE on Windows CI, and attach the ZIP plus SHA-256 checksum to published GitHub releases. Linux/Debian remains the primary platform.

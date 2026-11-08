@@ -38,7 +38,7 @@ export async function runTests(sources) {
       this.name=name;this.children=[];this.hidden=/overlay|menu|front-preview/.test(name);
       this.dataset={};this.attributes={};this.listeners={};this.value='';this.clientWidth=1000;this.clientHeight=400;
       this.style={writes:{},setProperty(k,v){this[k]=v;this.writes[k]=(this.writes[k]||0)+1;},getPropertyValue(k){return this[k]||'';}};
-      const classes=new Set();this.classList={add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x)};
+      const classes=new Set();this.classList={add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x),toggle:(x,on)=>{if(on)classes.add(x);else classes.delete(x);return on;}};
     }
     get options(){return this.children;}
     append(...nodes){for(const n of nodes){n.parent=this;this.children.push(n);}}
@@ -69,7 +69,8 @@ export async function runTests(sources) {
     previewHideWrites.push(Boolean(value));previewHiddenState=Boolean(value);
   }});
   preview.querySelector=()=>frontCase;
-  const document=new Element('document');document.querySelectorAll=()=>[];document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
+  const sourceButtonsForTest=['library','spotify'].map(source=>{const button=new Element('source');button.dataset.source=source;return button;});
+  const document=new Element('document');document.querySelectorAll=selector=>selector==='.bf-source-button'?sourceButtonsForTest:[];document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
   const window=new Element('window');window.innerWidth=1000;window.innerHeight=600;
   const storage=new Map();const localStorage={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v))};
   let time=0,nextId=0;const frames=new Map(),timers=new Map();
@@ -78,9 +79,9 @@ export async function runTests(sources) {
   const rpcCalls=[];
   const catalogueEvents=[];
   let catalogueReconcileChanged=true;
-  let tracksFixture=null;
+  let tracksFixture=null,spottyCapability=1;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
-  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums'){
+  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='can')return {_can:spottyCapability};if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums'){
     const sort=cmd.find(arg=>typeof arg==='string'&&arg.startsWith('sort:'));
     const ordered=sort==='sort:recentlyplayed'?library.slice().reverse():library;
     return {count:ordered.length,albums_loop:ordered.slice(cmd[1],cmd[1]+cmd[2])};
@@ -111,7 +112,7 @@ export async function runTests(sources) {
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -153,6 +154,19 @@ export async function runTests(sources) {
   assert(firstSpine?.className?.includes('bf-album'), 'spines retain the normal cover-derived colour metadata path');
   assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
   assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
+
+  api.setSourceForTest('spotify');spottyCapability=0;await api.checkSpottyAvailability();
+  assert(api.sourceForTest()==='library'&&storage.get('albumBrowserSource')==='library',
+    'missing Spotty restores the saved Spotify source to Library');
+  assert(api.spottyState()===false,'LMS capability check detects an absent Spotty plugin');
+  assert(sourceButtonsForTest[1].disabled&&!sourceButtonsForTest[0].disabled,
+    'Spotify is disabled while the LMS library remains selectable without Spotty');
+  const callsBeforeDisabledSpotify=rpcCalls.length;
+  await api.setCatalogueSource('spotify');
+  assert(rpcCalls.length===callsBeforeDisabledSpotify,'disabled Spotify never tries to load Spotty albums');
+  spottyCapability=1;await api.checkSpottyAvailability();
+  assert(api.spottyState()===true,'LMS capability check detects an installed Spotty plugin');
+  assert(!sourceButtonsForTest[1].disabled,'Spotify becomes selectable when Spotty is installed');
 
   // Phase 4: advancing the shelf should recycle the same physical elements
   // rather than destroying and constructing a row of new image/text nodes.
@@ -1284,7 +1298,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=keep-playing-open-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
+  assert(sources.index.includes('js/app.js?v=spotty-availability-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

@@ -38,6 +38,7 @@ Current application version: **0.11.5**. The canonical version is stored in [`VE
 - daily GitHub stable-release checks while the page is open, enabled by default with a per-browser off switch and manual Check now action in Settings > About; requests contain no LMS/library details and do not download or install updates;
 - automatic LMS reconnection;
 - Library / Spotify source switching with Spotify saved albums supplied through LMS Spotty;
+- automatic Spotty capability detection: Spotify is disabled without the plugin and a saved Spotify source falls back to Library;
 - full Spotify album search through Spotty, with searched albums playable and savable to the Spotify library;
 - source-aware now-playing navigation and Spotify artwork rendered with the same jewel-case presentation as local albums;
 - Album Information for local and Spotify albums, including genre when the upstream metadata provides it;
