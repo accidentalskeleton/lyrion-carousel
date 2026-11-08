@@ -1,5 +1,7 @@
 # Wall Controller / Display
 
+[← Project overview](../README.md)
+
 Status: **primary hardware selected; Linux-supported alternative evaluated; deployment and on-device validation remain**.
 
 ## Purpose
