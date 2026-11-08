@@ -38,11 +38,13 @@ export async function runTests(sources) {
       this.name=name;this.children=[];this.hidden=/overlay|menu|front-preview/.test(name);
       this.dataset={};this.attributes={};this.listeners={};this.value='';this.clientWidth=1000;this.clientHeight=400;
       this.style={writes:{},setProperty(k,v){this[k]=v;this.writes[k]=(this.writes[k]||0)+1;},getPropertyValue(k){return this[k]||'';}};
-      const classes=new Set();this.classList={add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x)};
+      const classes=new Set();this.classList={add:(...v)=>v.forEach(x=>classes.add(x)),remove:(...v)=>v.forEach(x=>classes.delete(x)),contains:x=>classes.has(x),toggle:(x,on)=>{if(on)classes.add(x);else classes.delete(x);return on;}};
     }
     get options(){return this.children;}
+    get textContent(){return (this._text||'')+this.children.map(child=>child.textContent||'').join('');}
+    set textContent(value){this._text=String(value);this.children=[];}
     append(...nodes){for(const n of nodes){n.parent=this;this.children.push(n);}}
-    replaceChildren(...nodes){this.children=[];this.append(...nodes);}
+    replaceChildren(...nodes){this._text='';this.children=[];this.append(...nodes);}
     remove(){if(this.parent)this.parent.children=this.parent.children.filter(n=>n!==this);}
     setAttribute(k,v){this.attributes[k]=v;}
     removeAttribute(k){delete this.attributes[k];}
@@ -69,7 +71,8 @@ export async function runTests(sources) {
     previewHideWrites.push(Boolean(value));previewHiddenState=Boolean(value);
   }});
   preview.querySelector=()=>frontCase;
-  const document=new Element('document');document.querySelectorAll=()=>[];document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
+  const sourceButtonsForTest=['library','spotify'].map(source=>{const button=new Element('source');button.dataset.source=source;return button;});
+  const document=new Element('document');document.querySelectorAll=selector=>selector==='.bf-source-button'?sourceButtonsForTest:[];document.getElementById=()=>root;document.createElement=tag=>new Element(tag);document.elementFromPoint=()=>null;
   const window=new Element('window');window.innerWidth=1000;window.innerHeight=600;
   const storage=new Map();const localStorage={getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,String(v))};
   let time=0,nextId=0;const frames=new Map(),timers=new Map();
@@ -78,9 +81,9 @@ export async function runTests(sources) {
   const rpcCalls=[];
   const catalogueEvents=[];
   let catalogueReconcileChanged=true;
-  let tracksFixture=null;
+  let tracksFixture=null,spottyCapability=1;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
-  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums'){
+  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='can')return {_can:spottyCapability};if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums'){
     const sort=cmd.find(arg=>typeof arg==='string'&&arg.startsWith('sort:'));
     const ordered=sort==='sort:recentlyplayed'?library.slice().reverse():library;
     return {count:ordered.length,albums_loop:ordered.slice(cmd[1],cmd[1]+cmd[2])};
@@ -89,7 +92,10 @@ export async function runTests(sources) {
   const imageRequests=[];
   class PreloadImage{set src(url){this.url=url;imageRequests.push(this)}}
   let metadataFetch=async()=>({ok:false});
-  const env={document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
+  // Discovery must choose a different album when the test requires scrolling.
+  // A real random draw can select the centred album and legitimately skip it.
+  const appMath=Object.create(Math);appMath.random=()=>.37;
+  const env={Math:appMath,document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
     ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>{
       if(url==='/api/catalogue/invalidate'){
         catalogueEvents.push({action:'invalidate',method:args[0]?.method});
@@ -111,7 +117,7 @@ export async function runTests(sources) {
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -148,11 +154,77 @@ export async function runTests(sources) {
     'albums without real catalogue metadata have no fabricated code');
   const spineCover=firstSpine?.children.find(node=>node.className==='bf-spine-cover');
   assert(spineLabel?.textContent?.includes('Artist — Album'), 'one continuous artist and album spine label');
+  assert(spineLabel.children.some(child=>child.className==='bf-spine-artist')&&
+    spineLabel.children.some(child=>child.className==='bf-spine-title'),
+    'artist and title retain separate styling without changing their text');
+  assert(new Set(api.geometry().nodes.map(node=>node.el.dataset.labelAlign)).size===2,
+    'album identities produce both top-aligned and centred spine labels');
+  assert(new Set(api.geometry().nodes.map(node=>node.el.dataset.printStyle)).size===3,
+    'varied spines offer regular, bold and condensed print treatments');
+  assert(firstSpine.children.some(child=>child.className==='bf-spine-wear'&&child.getAttribute('aria-hidden')==='true'),
+    'wear is a reusable decorative layer hidden from assistive technology');
+  assert(new Set(api.geometry().nodes.map(node=>node.el.dataset.catalogueStyle)).size===3,
+    'catalogue lettering varies independently across sans serif and monospace treatments');
   assert(spineShell?.src==='/assets/jewel-case-spine-v1.svg', 'all spines use shared static shell image');
   assert(!spineCover, 'spines do not request or display cropped cover artwork');
   assert(firstSpine?.className?.includes('bf-album'), 'spines retain the normal cover-derived colour metadata path');
   assert(api.state().albums.length===95 && api.state().albums.every(Boolean), 'full catalogue loaded in bounded pages');
   assert(rpcCalls.filter(c=>c[0]==='albums').every(c=>c[2]<=40), 'catalogue page limit');
+
+  api.setSourceForTest('spotify');spottyCapability=0;await api.checkSpottyAvailability();
+  assert(api.sourceForTest()==='library'&&storage.get('albumBrowserSource')==='library',
+    'missing Spotty restores the saved Spotify source to Library');
+  assert(api.spottyState()===false,'LMS capability check detects an absent Spotty plugin');
+  assert(sourceButtonsForTest[1].disabled&&!sourceButtonsForTest[0].disabled,
+    'Spotify is disabled while the LMS library remains selectable without Spotty');
+  const callsBeforeDisabledSpotify=rpcCalls.length;
+  await api.setCatalogueSource('spotify');
+  assert(rpcCalls.length===callsBeforeDisabledSpotify,'disabled Spotify never tries to load Spotty albums');
+  spottyCapability=1;await api.checkSpottyAvailability();
+  assert(api.spottyState()===true,'LMS capability check detects an installed Spotty plugin');
+  assert(!sourceButtonsForTest[1].disabled,'Spotify becomes selectable when Spotty is installed');
+  assert(api.mapLyrionAlbum({id:999,disccount:2})[17]===2,'LMS disc count is retained');
+  assert(api.spineWeight(api.mapLyrionAlbum({id:999,disccount:2}))===1.5,'multi-disc spines are 1.5 times normal width');
+  const normalAlbums=api.state().albums;
+  const mixedAlbums=normalAlbums.map((album,index)=>{const copy=album.slice();copy[17]=index%3===0?2:1;return copy;});
+  api.replaceAlbumsForTest(mixedAlbums);api.set({position:40});api.draw();
+  for(const position of [-200,-1,0,1.5,40,94,95,201.25]){
+    assert(Math.abs(api.shelfIndexAt(api.shelfSpace(position))-position)<1e-9,
+      'weighted shelf positions round-trip across both wrap boundaries');
+  }
+  const mixedNodes=api.geometry().nodes;
+  for(const node of mixedNodes){
+    const normalWidth=stage.clientWidth/api.state().DISPLAY_ALBUM_COUNT;
+    assert(node.el.dataset.caseType===(Number(node.album[17])>1?'multi':'single'),
+      'only multi-disc albums receive the extra case seam');
+    assert(Math.abs(parseFloat(node.el.style.width)-normalWidth*api.spineWeight(node.album))<1e-8,
+      'rendered widths use real disc counts');
+  }
+  const leftFor=node=>Number(/translate3d\(([-.\d]+)px/.exec(node.el.style.transform)[1]);
+  const orderedNodes=mixedNodes.slice().sort((a,b)=>a.index-b.index);
+  for(let i=1;i<orderedNodes.length;i++){
+    const before=orderedNodes[i-1],after=orderedNodes[i];
+    assert(Math.abs(leftFor(before)+parseFloat(before.el.style.width)-leftFor(after))<1e-8,
+      'mixed single/multi-disc spines touch without overlaps or gaps');
+  }
+  api.applySetting('shelfVariety','false');
+  assert(api.geometry().nodes.every(node=>Math.abs(parseFloat(node.el.style.width)-stage.clientWidth/api.state().DISPLAY_ALBUM_COUNT)<1e-8),
+    'disabling wider multi-disc spines immediately restores uniform widths');
+  api.applySetting('shelfVariety','true');
+  assert(api.geometry().nodes.some(node=>api.spineWeight(node.album)===1.5),
+    'reenabling wider spines restores multi-disc widths');
+  api.setOrderForTest('recent');
+  for(const end of [0,1]){
+    api.set({position:api.finiteShelfBounds()[end]});
+    api.applySetting('shelfVariety','false');
+    assert(Math.abs(api.state().position-api.finiteShelfBounds()[end])<1e-8,
+      'turning multi-disc widths off preserves the current finite shelf endpoint');
+    api.applySetting('shelfVariety','true');
+    assert(Math.abs(api.state().position-api.finiteShelfBounds()[end])<1e-8,
+      'turning multi-disc widths on preserves the current finite shelf endpoint');
+  }
+  api.setOrderForTest('artistAlbum');
+  api.replaceAlbumsForTest(normalAlbums);api.set({position:4});api.draw();
 
   // Phase 4: advancing the shelf should recycle the same physical elements
   // rather than destroying and constructing a row of new image/text nodes.
@@ -1284,7 +1356,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=keep-playing-open-1')&&sources.index.includes('css/shelf.css?v=catalogue-ink-1'),
+  assert(sources.index.includes('js/app.js?v=shelf-variety-catalogue-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

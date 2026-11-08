@@ -26,6 +26,14 @@ The detail area shows the album under the pointer; outside the shelf it shows th
 
 Carousel uses a single **Shelf** display. **Settings → Displayed albums** controls shelf density. Existing obsolete browser display-mode preferences are ignored automatically.
 
+**Settings → Display → Shelf variety** enables or disables the optional spine
+styling and wider multi-disc cases together: title alignment, artist/title
+hierarchy, print styles, subtle plastic wear, multi-disc seams, and catalogue
+fonts, ink and placement. It is on by default, applies
+immediately and is saved per browser. Existing multi-disc width preferences
+are carried over. Artwork-derived background colours and real catalogue
+numbers remain available with variety off; catalogue visibility has its own switch.
+
 **Settings → Album cover size** selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls image resolution, not the displayed case size. Server-generated JPEG variants preserve aspect ratio and never upscale. Originals remain available for spine-colour calculation.
 
 **Settings → Cache → Clear album cache** uses an inline confirmation and removes artwork, resized covers and derived colours, fonts and colour indexes. Metadata rebuilds as needed; colour ordering prepares it for the whole library. The Cache tab starts at a 512 MB soft limit by default; the browser may raise or lower it, but never above the server-only 2 GB hard limit. Set `CACHE_LIMIT_MB` and `CACHE_HARD_LIMIT_MB` in `/etc/default/lyrion-carousel` (or pass the corresponding command-line options) before starting the service to change those defaults.

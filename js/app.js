@@ -1,7 +1,7 @@
 import { rpc, CometDClient, resetRpcSession } from './lms.js?v=track-artist-roles-1';
 import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from './catalogue.js?v=display-choice-1';
 import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPosition } from './browser.js?v=display-choice-1';
-import { createLmsProvider } from './providers/lms-provider.js?v=providers-1';
+import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=providers-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=spotify-album-link-2';
 
@@ -35,7 +35,7 @@ function scheduleCatalogueLayout(){
             const spare=fits?Math.max(0,spine.bottom-19-codeHeight-text.bottom-12):0;
             const seed=albumCatalogueSeed(node.album);
             // Keep the imprint in the bottom band even on tall displays.
-            const lift=Math.min(spare,24,spine.height*.06)*((seed%5)/4);
+            const lift=shelfVariety?Math.min(spare,24,spine.height*.06)*((seed%5)/4):0;
             return [code,lift];
         });
         for(const [code,lift] of placements)code?.style.setProperty('--catalogue-lift',lift.toFixed(1)+'px');
@@ -81,6 +81,49 @@ function rebuildAlbumIndex(){
         if(album?.[6]!=null)albumIndexCache.set(String(album[6]),index);
         if(album)indexAlbumLetter(album,index);
     });
+    rebuildShelfGeometry();
+}
+let shelfCentres=[],shelfUnits=0,shelfVariety=true;
+const spineWeight=album=>shelfVariety&&Number(album?.[17])>1?1.5:1;
+function setShelfVariety(value,render=true){
+    const enabled=value!==false&&value!=='false';
+    root.dataset.shelfVariety=String(enabled);
+    if(enabled===shelfVariety)return;
+    const oldBounds=boundedShelf()?finiteShelfBounds():null;
+    const atStart=oldBounds&&Math.abs(position-oldBounds[0])<.001;
+    const atEnd=oldBounds&&Math.abs(position-oldBounds[1])<.001;
+    if(render){finishCoverOpening();cancelFollowAnimation()}
+    shelfVariety=enabled;rebuildShelfGeometry();
+    if(render){
+        if(atStart)position=target=finiteShelfBounds()[0];
+        else if(atEnd)position=target=finiteShelfBounds()[1];
+        else{position=shelfPosition(position);target=shelfPosition(target)}
+        draw();scheduleCatalogueLayout();
+    }
+}
+function rebuildShelfGeometry(){
+    let edge=-.5;
+    shelfCentres=Array.from({length:albums.length},(_,index)=>{
+        const width=spineWeight(albums[index]),centre=edge+width/2;edge+=width;return centre;
+    });
+    shelfUnits=edge+.5;
+}
+function shelfSpace(index){
+    if(shelfCentres.length!==albums.length)rebuildShelfGeometry();
+    if(!albums.length)return index;
+    const whole=Math.floor(index),i=modulo(whole,albums.length),cycle=Math.floor(whole/albums.length);
+    const a=shelfCentres[i]+cycle*shelfUnits;
+    const b=i+1<albums.length?shelfCentres[i+1]+cycle*shelfUnits:shelfCentres[0]+(cycle+1)*shelfUnits;
+    return a+(b-a)*(index-whole);
+}
+function shelfIndexAt(space){
+    if(shelfCentres.length!==albums.length)rebuildShelfGeometry();
+    if(!albums.length)return space;
+    const cycle=Math.floor((space-shelfCentres[0])/shelfUnits),local=space-cycle*shelfUnits;
+    let lo=0,hi=albums.length;
+    while(lo+1<hi){const mid=(lo+hi)>>1;if(shelfCentres[mid]<=local)lo=mid;else hi=mid}
+    const a=shelfCentres[lo],b=lo+1<albums.length?shelfCentres[lo+1]:shelfCentres[0]+shelfUnits;
+    return cycle*albums.length+lo+(local-a)/(b-a);
 }
 let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,discoveryBusy=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
 const boundedShelf=()=>orderMode==='recent'&&catalogueSource==='library';
@@ -89,7 +132,8 @@ const boundedShelf=()=>orderMode==='recent'&&catalogueSource==='library';
 const finiteShelfBounds=()=>{
     const visible=Math.max(1,Math.min(DISPLAY_ALBUM_COUNT,totalAlbums));
     const inset=(visible-1)/2;
-    return [inset,Math.max(inset,totalAlbums-1-inset)];
+    shelfSpace(0);
+    return [shelfIndexAt(inset),shelfIndexAt(Math.max(inset,shelfUnits-1-inset))];
 };
 const shelfPosition=value=>{
     if(!boundedShelf())return value;
@@ -106,10 +150,10 @@ const snapShelfPosition=value=>{
     if(value>=last-.5)return last;
     return shelfPosition(Math.round(value));
 };
-const shelfDelta=(index,centre)=>boundedShelf()?index-centre:circularDelta(index,centre,totalAlbums);
+const shelfDelta=(index,centre)=>boundedShelf()?shelfSpace(index)-shelfSpace(centre):circularDelta(shelfSpace(index),shelfSpace(centre),shelfUnits||totalAlbums);
 const selectedIndex=()=>boundedShelf()?Math.round(shelfPosition(position)):modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>boundedShelf()?finitePositionForIndex(index):nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||discoveryBusy||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
-function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=5&server='+artworkNamespace:'';if(album.spine_metadata?.text_style_version===3)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index]}
+function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=5&server='+artworkNamespace:'';if(album.spine_metadata?.text_style_version===3)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index,undefined,undefined,undefined,undefined,Math.max(Number(album.disccount)||Number(album.discc)||1,Number(album.disc)||1)]}
 function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?version=3&path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg','spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId,undefined,spotifyAlbumUrl(album.spotifyUrl)]}
 const lmsProvider=createLmsProvider({
     mapAlbum:mapLyrionAlbum,getPlayerId:()=>playerId,getPageSize:()=>PAGE_SIZE,getSearchLimit:()=>SEARCH_LIMIT,
@@ -129,9 +173,29 @@ async function loadSpotifyCatalogue(){
     position=target=0;hoveredAlbumIndex=-1;lastSelected=-1;closeFrontPreview();renderAlbums();draw();setConnection(albumCountLabel()+' · Spotify',true);
 }
 
-function updateSourceButtons(){sourceButtons.forEach(button=>{const active=button.dataset.source===catalogueSource;button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active))})}
+let spottyAvailable=null;
+function updateSourceButtons(){sourceButtons.forEach(button=>{
+    const spotify=button.dataset.source==='spotify',active=button.dataset.source===catalogueSource;
+    button.classList.toggle('is-active',active);button.setAttribute('aria-pressed',String(active));
+    button.disabled=orderBusy||libraryRefreshing||(spotify&&spottyAvailable!==true);
+    button.title=spotify?(spottyAvailable===false?'Spotify requires the Spotty plugin on LMS':spottyAvailable===null?'Checking Spotty availability…':'Browse Spotify albums'):'Browse LMS albums';
+})}
+async function checkSpottyAvailability(){
+    const generation=connectionGeneration;
+    try{
+        const result=await rpc('0',['can','spotty','items','?']);
+        if(generation!==connectionGeneration)return;
+        spottyAvailable=Number(result._can)===1;
+    }catch(_){if(generation!==connectionGeneration)return;spottyAvailable=null;}
+    if(spottyAvailable!==true&&catalogueSource==='spotify'){
+        catalogueSource='library';
+        try{localStorage.setItem('albumBrowserSource','library')}catch(_){}
+    }
+    updateSourceButtons();
+}
 
 async function setCatalogueSource(source){
+    if(source==='spotify'&&spottyAvailable===false)return;
     if(source===catalogueSource||orderBusy||libraryRefreshing)return;
     const previous=catalogueSource;catalogueSource=source==='spotify'?'spotify':'library';updateSourceButtons();sourceButtons.forEach(b=>b.disabled=true);
     try{
@@ -160,7 +224,7 @@ async function setCatalogueSource(source){
         }
     }
     catch(error){catalogueSource=previous;updateSourceButtons();setConnection(error.message||'Could not change music source',false)}
-    finally{sourceButtons.forEach(b=>b.disabled=false);updateBusyState()}
+    finally{updateSourceButtons();updateBusyState()}
 }
 
 // Each browser has its own catalogue view, but playback belongs to the shared
@@ -384,14 +448,14 @@ function frontCaseWidth(){
 function shelfPitch(){return stage.clientWidth/Math.max(1,Math.min(DISPLAY_ALBUM_COUNT,totalAlbums))}
 function finiteShelfLayout(){
     const [first,last]=finiteShelfBounds(),pitch=shelfPitch();
-    const extra=!frontPreview.hidden&&frontPreviewIndex>=0?Math.max(0,frontCaseWidth()-pitch):0;
-    const range=last-first;
+    const extra=!frontPreview.hidden&&frontPreviewIndex>=0?Math.max(0,frontCaseWidth()-pitch*spineWeight(albums[frontPreviewIndex])):0;
+    const range=shelfSpace(last)-shelfSpace(first);
     return {first,range,pitch,extra,scrollPitch:range>0?pitch+extra/range:pitch};
 }
 function finitePositionForIndex(index){
     const {first,pitch,extra,scrollPitch}=finiteShelfLayout();
     const before=index>frontPreviewIndex?extra:index===frontPreviewIndex?extra/2:0;
-    return shelfPosition(first+((index-first)*pitch+before)/scrollPitch);
+    return shelfPosition(shelfIndexAt(shelfSpace(first)+((shelfSpace(index)-shelfSpace(first))*pitch+before)/scrollPitch));
 }
 function shelfWindowCount(){
     // An open cover displaces neighbouring spines by up to half its width.
@@ -501,6 +565,12 @@ function bindAlbumNode(node,album,index){
     el.className='bf-album cursor-interaction'+(album[7]?' is-live':'');
     el.role='option';
     el.dataset.index=String(index);
+    el.dataset.discCount=String(album[17]||1);
+    el.dataset.caseType=Number(album[17])>1?'multi':'single';
+    el.dataset.labelAlign=(albumCatalogueSeed(album)&1)?'start':'center';
+    el.dataset.printStyle=['regular','bold','condensed'][(albumCatalogueSeed(album)>>>3)%3];
+    el.dataset.wear=['none','light','none','none','scuffed','none'][(albumCatalogueSeed(album)>>>7)%6];
+    el.dataset.catalogueStyle=['sans','serif','mono'][(albumCatalogueSeed(album)>>>13)%3];
     el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));
     el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
     el.title=el.getAttribute('aria-label');
@@ -508,18 +578,28 @@ function bindAlbumNode(node,album,index){
     if(!node.label){
         const label=document.createElement('span');label.className='bf-spine-label';
         el.append(label);node.label=label;
+        node.artistLabel=document.createElement('span');node.artistLabel.className='bf-spine-artist';
+        node.titleLabel=document.createElement('span');node.titleLabel.className='bf-spine-title';
+        node.separator=document.createElement('span');node.separator.className='bf-spine-separator';
+        node.separator.textContent=' — ';
         const shell=document.createElement('img');shell.className='bf-spine-shell';
         shell.src='/assets/jewel-case-spine-v1.svg';shell.alt='';
         shell.setAttribute('aria-hidden','true');shell.draggable=false;
         el.append(shell);
+        const wear=document.createElement('span');wear.className='bf-spine-wear';
+        wear.setAttribute('aria-hidden','true');el.append(wear);
+        const binding=document.createElement('span');binding.className='bf-spine-binding';
+        binding.setAttribute('aria-hidden','true');el.append(binding);
         const catalogue=document.createElement('span');catalogue.className='bf-spine-catalogue';
         catalogue.setAttribute('aria-hidden','true');
         el.append(catalogue);node.catalogue=catalogue;
     }
         bindCatalogueCode(node,album);
-        node.label.textContent=orderMode==='artistAlbum'
-            ?(album[1]||'Unknown artist')+' — '+(album[0]||'Untitled')
-            :(album[0]||'Untitled')+' — '+(album[1]||'Unknown artist');
+        node.artistLabel.textContent=album[1]||'Unknown artist';
+        node.titleLabel.textContent=album[0]||'Untitled';
+        node.label.replaceChildren(...(orderMode==='artistAlbum'
+            ?[node.artistLabel,node.separator,node.titleLabel]
+            :[node.titleLabel,node.separator,node.artistLabel]));
         node.label.title=node.label.textContent;
         loadSpineMeta(album,el);
 }
@@ -567,18 +647,18 @@ function syncShelfDom(){
     const open=!frontPreview.hidden&&frontPreviewIndex>=0;
     const frontDelta=open?shelfDelta(frontPreviewIndex,position):0;
     const frontWidth=frontCaseWidth();
-    const gapShift=open?Math.max(0,(frontWidth-pitch)/2)*opening:0;
+    const gapShift=open?Math.max(0,(frontWidth-pitch*spineWeight(albums[frontPreviewIndex]))/2)*opening:0;
     let layoutShift=0;
     if(open&&boundedShelf()){
         const {first,range}=finiteShelfLayout();
-        const progress=range>0?clamp((position-first)/range,0,1):.5;
+        const progress=range>0?clamp((shelfSpace(position)-shelfSpace(first))/range,0,1):.5;
         layoutShift=gapShift*(1-2*progress);
     }
     const coverX=frontDelta*pitch+layoutShift;
     frontPreview.style.transformOrigin=boundedShelf()?(stage.clientWidth/2+coverX)+'px center':'50% 50%';
     if(frontCase){
         if(opening<1){
-            const spineScale=frontWidth>0?Math.min(1,pitch/frontWidth):1;
+            const spineScale=frontWidth>0?Math.min(1,pitch*spineWeight(albums[frontPreviewIndex])/frontWidth):1;
             const ratio=spineScale+(1-spineScale)*opening;
             const perspective=Math.max(1200,frontWidth*2),depth=frontWidth/(2*perspective),depthSquared=depth*depth;
             const cosine=clamp(2*ratio*(1-depthSquared)/(1+Math.sqrt(1-4*ratio*ratio*depthSquared*(1-depthSquared))),0,1);
@@ -588,18 +668,18 @@ function syncShelfDom(){
         }else frontCase.style.transform=`translate3d(${coverX}px,0,0)`;
     }
     nodes.forEach(node=>{
-        const d=shelfDelta(node.index,position);
+        const d=shelfDelta(node.index,position),width=pitch*spineWeight(node.album);
         const sideShift=(d<frontDelta?-gapShift:d>frontDelta?gapShift:0)+layoutShift;
         const hiddenSpine=open&&node.index===frontPreviewIndex;
         node.el.toggleAttribute('data-front-preview',hiddenSpine);
-        if(node.cachedPitch!==pitch){
-            node.el.style.setProperty('width',pitch+'px','important');
-            node.el.style.setProperty('--spine-width',pitch+'px');
-            node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(pitch-8)*.56))+'px');
-            node.cachedPitch=pitch;
+        if(node.cachedPitch!==width){
+            node.el.style.setProperty('width',width+'px','important');
+            node.el.style.setProperty('--spine-width',width+'px');
+            node.el.style.setProperty('--spine-font-size',Math.min(17,Math.max(10,(width-8)*.56))+'px');
+            node.cachedPitch=width;
             scheduleCatalogueLayout();
         }
-        node.el.style.setProperty('transform',`translate3d(${d*pitch-pitch/2+sideShift}px,0,0)`,'important');
+        node.el.style.setProperty('transform',`translate3d(${d*pitch-width/2+sideShift}px,0,0)`,'important');
         node.el.style.zIndex=String(100-Math.round(Math.abs(d)));
         node.el.style.opacity=hiddenSpine?'0':String(clamp(1-Math.max(0,Math.abs(d)-nodes.length*.36)*.12,.18,1));
         node.el.style.pointerEvents=hiddenSpine?'none':Math.abs(d)<nodes.length/2?'auto':'none';
@@ -798,8 +878,8 @@ function updateShelfWindow(){if(selectedIndex()!==renderedWindowAnchor||shelfWin
 function scheduleShelfDom(){if(!shelfDomFrame)shelfDomFrame=requestAnimationFrame(syncShelfDom)}
 window.addEventListener('resize',()=>{invalidateFrontCaseWidth();scheduleShelfDom()});new ResizeObserver(()=>{invalidateFrontCaseWidth();scheduleShelfDom()}).observe(measuredFrontCase);root.addEventListener('pointermove',scheduleShelfDom,{capture:true,passive:true});root.addEventListener('pointerup',scheduleShelfDom,{capture:true});root.addEventListener('wheel',scheduleShelfDom,{capture:true,passive:true});document.addEventListener('keydown',scheduleShelfDom,{capture:true});setTimeout(scheduleShelfDom,0);
 async function ensurePositionIndex(){if(albumPositionById.size)return albumPositionById;if(positionIndexPromise)return positionIndexPromise;const generation=catalogueGeneration;positionIndexPromise=buildAlbumPositionIndex(rpc,totalAlbums,generation,()=>catalogueGeneration,PAGE_SIZE).then(index=>{if(index&&generation===catalogueGeneration)albumPositionById=index;return index}).finally(()=>{if(generation===catalogueGeneration)positionIndexPromise=null});return positionIndexPromise}
-async function loadRuntimeConfig(){try{const r=await fetch('/api/config',{cache:'no-store'});if(!r.ok)throw 0;const c=await r.json(),pos=(v,f)=>Number(v)>0?Number(v):f,non=(v,f)=>Number(v)>=0?Number(v):f;artworkNamespace=encodeURIComponent(c.lms_url||'');PAGE_SIZE=pos(c.batch_size,PAGE_SIZE);IDLE_RETURN_MS=non(c.idle_return_ms,IDLE_RETURN_MS);RECONNECT_MAX_MS=pos(c.reconnect_max_ms,RECONNECT_MAX_MS);RANDOM_SCROLL_MAX_MS=pos(c.random_scroll_max_ms,RANDOM_SCROLL_MAX_MS);SEARCH_LIMIT=pos(c.search_limit,SEARCH_LIMIT)}catch(_){}const s=window.__lyrionCarouselSettings||{};setCatalogueVisibility(s.catalogueCodes);stage.classList.add('bf-shelf-active');COVER_SIZE=[128,256,384,512,768,1024].includes(Number(s.coverSize))?Number(s.coverSize):512;DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(s.displayCount)||30));try{const saved=localStorage.getItem('albumBrowserOrderMode');desiredOrderMode=['artistAlbum','album','random','colour','recent'].includes(saved)?saved:localStorage.getItem('albumBrowserRandomOrder')==='true'?'random':'artistAlbum'}catch(_){}if(Number.isFinite(Number(s.idle)))IDLE_RETURN_MS=Number(s.idle);if(Number.isFinite(Number(s.frontTimeout)))FRONT_TIMEOUT_MS=Math.max(0,Number(s.frontTimeout)||0);if(Number(s.random)>0)RANDOM_SCROLL_MAX_MS=Number(s.random);if(Number.isFinite(Number(s.menuTimeout)))MENU_TIMEOUT_MS=Math.max(0,Number(s.menuTimeout))}
-function applySetting(name,value){if(name==='catalogueCodes'){setCatalogueVisibility(value)}else if(name==='coverSize'){COVER_SIZE=[128,256,384,512,768,1024].includes(Number(value))?Number(value):512;for(const album of albums){if(!album?.[8])continue;album[8]=album[8].replace(/size=\d+/, 'size='+COVER_SIZE);album[2]=`url("${album[8]}") center / contain no-repeat`;}if(frontPreviewAlbum)frontArt.style.background=frontPreviewAlbum[2];renderAlbums();draw()}else if(name==='displayCount'){DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(value)||30));renderAlbums();draw()}else if(name==='frontTimeout'){FRONT_TIMEOUT_MS=Math.max(0,Number(value)||0);if(!frontPreview.hidden){resumeFrontTimeout()}}else if(name==='idle'){IDLE_RETURN_MS=Math.max(0,Number(value)||0);armIdleReturn()}else if(name==='menuTimeout'){MENU_TIMEOUT_MS=Math.max(0,Number(value)||0);if(typeof albumMenu!=='undefined'&&!albumMenu.hidden){clearTimeout(menuIdleTimer);menuIdleTimer=MENU_TIMEOUT_MS>0?setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS):0}}else if(name==='random'){const n=Number(value);if(n>0)RANDOM_SCROLL_MAX_MS=n}}
+async function loadRuntimeConfig(){try{const r=await fetch('/api/config',{cache:'no-store'});if(!r.ok)throw 0;const c=await r.json(),pos=(v,f)=>Number(v)>0?Number(v):f,non=(v,f)=>Number(v)>=0?Number(v):f;artworkNamespace=encodeURIComponent(c.lms_url||'');PAGE_SIZE=pos(c.batch_size,PAGE_SIZE);IDLE_RETURN_MS=non(c.idle_return_ms,IDLE_RETURN_MS);RECONNECT_MAX_MS=pos(c.reconnect_max_ms,RECONNECT_MAX_MS);RANDOM_SCROLL_MAX_MS=pos(c.random_scroll_max_ms,RANDOM_SCROLL_MAX_MS);SEARCH_LIMIT=pos(c.search_limit,SEARCH_LIMIT)}catch(_){}const s=window.__lyrionCarouselSettings||{};setCatalogueVisibility(s.catalogueCodes);setShelfVariety(s.shelfVariety,false);stage.classList.add('bf-shelf-active');COVER_SIZE=[128,256,384,512,768,1024].includes(Number(s.coverSize))?Number(s.coverSize):512;DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(s.displayCount)||30));try{const saved=localStorage.getItem('albumBrowserOrderMode');desiredOrderMode=['artistAlbum','album','random','colour','recent'].includes(saved)?saved:localStorage.getItem('albumBrowserRandomOrder')==='true'?'random':'artistAlbum'}catch(_){}if(Number.isFinite(Number(s.idle)))IDLE_RETURN_MS=Number(s.idle);if(Number.isFinite(Number(s.frontTimeout)))FRONT_TIMEOUT_MS=Math.max(0,Number(s.frontTimeout)||0);if(Number(s.random)>0)RANDOM_SCROLL_MAX_MS=Number(s.random);if(Number.isFinite(Number(s.menuTimeout)))MENU_TIMEOUT_MS=Math.max(0,Number(s.menuTimeout))}
+function applySetting(name,value){if(name==='shelfVariety'){setShelfVariety(value)}else if(name==='catalogueCodes'){setCatalogueVisibility(value)}else if(name==='coverSize'){COVER_SIZE=[128,256,384,512,768,1024].includes(Number(value))?Number(value):512;for(const album of albums){if(!album?.[8])continue;album[8]=album[8].replace(/size=\d+/, 'size='+COVER_SIZE);album[2]=`url("${album[8]}") center / contain no-repeat`;}if(frontPreviewAlbum)frontArt.style.background=frontPreviewAlbum[2];renderAlbums();draw()}else if(name==='displayCount'){DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(value)||30));renderAlbums();draw()}else if(name==='frontTimeout'){FRONT_TIMEOUT_MS=Math.max(0,Number(value)||0);if(!frontPreview.hidden){resumeFrontTimeout()}}else if(name==='idle'){IDLE_RETURN_MS=Math.max(0,Number(value)||0);armIdleReturn()}else if(name==='menuTimeout'){MENU_TIMEOUT_MS=Math.max(0,Number(value)||0);if(typeof albumMenu!=='undefined'&&!albumMenu.hidden){clearTimeout(menuIdleTimer);menuIdleTimer=MENU_TIMEOUT_MS>0?setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS):0}}else if(name==='random'){const n=Number(value);if(n>0)RANDOM_SCROLL_MAX_MS=n}}
 window.addEventListener('lyrion-carousel-setting',e=>applySetting(e.detail?.name,e.detail?.value));
 window.addEventListener('lyrion-carousel-genres-change',event=>{
     disabledGenres=new Set(Array.isArray(event.detail?.disabled)?event.detail.disabled:[]);
@@ -809,6 +889,7 @@ window.addEventListener('lyrion-carousel-genres-change',event=>{
     }
 });
 window.addEventListener('lyrion-carousel-lms-change',event=>{
+    spottyAvailable=null;updateSourceButtons();
     resetRpcSession();connectionGeneration++;catalogueGeneration++;pinnedRequest++;
     artworkNamespace=encodeURIComponent(event.detail?.lmsUrl||'');
     cometd.stop();resetReconnect();clearInterval(progressTimer);clearTimeout(idleTimer);
@@ -824,12 +905,12 @@ window.addEventListener('lyrion-carousel-cache-cleared',()=>{
     clearSpineMetadata();handleLibraryEvent();
 });
 function scheduleReconnect(){if(reconnectTimer)return;const delay=reconnectDelay;setConnection('Reconnecting to Lyrion Music Server in '+Math.ceil(delay/1000)+'s…',false);reconnectTimer=setTimeout(()=>{reconnectTimer=0;connectLyrion()},delay);reconnectDelay=Math.min(reconnectDelay*2,RECONNECT_MAX_MS)}function resetReconnect(){clearTimeout(reconnectTimer);reconnectTimer=0;reconnectDelay=1000}
-function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length){albums[start+o]=a;if(a?.[6]!=null)albumIndexCache.set(String(a[6]),start+o);indexAlbumLetter(a,start+o)}});loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
-async function fetchBatch(batchNumber,render=true){if(!liveCatalogue||!totalAlbums)return[];const normal=modulo(batchNumber,batchCount());if(loadedBatches.has(normal)){const start=normal*PAGE_SIZE;return albums.slice(start,Math.min(start+PAGE_SIZE,totalAlbums))}if(loadingBatches.has(normal))return loadingBatches.get(normal);const generation=catalogueGeneration,promise=(async()=>{const start=normal*PAGE_SIZE,result=await rpc('0',['albums',start,PAGE_SIZE,'sort:artflow','tags:ajlysg']);if(generation!==catalogueGeneration)return[];return storeBatch(normal,result,render)})().finally(()=>{if(loadingBatches.get(normal)===promise)loadingBatches.delete(normal)});loadingBatches.set(normal,promise);return promise}
+function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{if(start+o<albums.length){albums[start+o]=a;if(a?.[6]!=null)albumIndexCache.set(String(a[6]),start+o);indexAlbumLetter(a,start+o)}});rebuildShelfGeometry();loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
+async function fetchBatch(batchNumber,render=true){if(!liveCatalogue||!totalAlbums)return[];const normal=modulo(batchNumber,batchCount());if(loadedBatches.has(normal)){const start=normal*PAGE_SIZE;return albums.slice(start,Math.min(start+PAGE_SIZE,totalAlbums))}if(loadingBatches.has(normal))return loadingBatches.get(normal);const generation=catalogueGeneration,promise=(async()=>{const start=normal*PAGE_SIZE,result=await rpc('0',['albums',start,PAGE_SIZE,'sort:artflow','tags:ajlysgiq']);if(generation!==catalogueGeneration)return[];return storeBatch(normal,result,render)})().finally(()=>{if(loadingBatches.get(normal)===promise)loadingBatches.delete(normal)});loadingBatches.set(normal,promise);return promise}
 function prefetchAround(index){if(!liveCatalogue||!totalAlbums)return;const b=Math.floor(modulo(index,totalAlbums)/PAGE_SIZE);if(b===prefetchedWindowPage)return;prefetchedWindowPage=b;[-1,0,1].forEach(o=>fetchBatch(b+o).catch(()=>{if(prefetchedWindowPage===b)prefetchedWindowPage=-1}))}async function locateAlbum(id,render=true){const found=indexForAlbumId(id);if(found>=0)return found;await ensurePositionIndex();return locateIndexedAlbum(id,albums,albumPositionById,PAGE_SIZE,b=>fetchBatch(b,render))}
 async function loadInitialCatalogue(){
     const connection=connectionGeneration;
-    const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artflow','tags:ajlysg']);
+    const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artflow','tags:ajlysgiq']);
     if(connection!==connectionGeneration)return;
     const first=(result.albums_loop||[]).map(mapLyrionAlbum);
     libraryAlbumCount=Number(result.count)||first.length;
@@ -1178,13 +1259,13 @@ document.addEventListener('keydown',event=>{
 // only the tail of those orderings, where overlooked releases are found.
 // Intersect with the already genre-filtered local CD shelf by album ID.
 async function chooseDiscoveryAlbum(sort){
-    const first=await rpc('0',['albums',0,1,'sort:'+sort,'tags:ajlys']);
+    const first=await rpc('0',['albums',0,1,'sort:'+sort,'tags:ajlysiq']);
     const count=Number(first.count);
     if(!Number.isSafeInteger(count)||count<1)return null;
     let end=count;
     for(let page=0;page<10&&end>0;page++){
         const start=Math.max(0,end-DISCOVERY_PAGE_SIZE);
-        const result=await rpc('0',['albums',start,end-start,'sort:'+sort,'tags:ajlys']);
+        const result=await rpc('0',['albums',start,end-start,'sort:'+sort,'tags:ajlysiq']);
         const matches=(result.albums_loop||[]).map(a=>indexForAlbumId(a.id))
             .filter(i=>i>=0&&albums[i]&&(!playingAlbumId||String(albums[i][6])!==String(playingAlbumId)));
         if(matches.length)return matches[Math.floor(Math.random()*matches.length)];
@@ -1334,7 +1415,7 @@ function moveShelfDrag(event,closePreviewOnMove=true){
         // the open album; the boolean is kept for existing gesture callers.
         followingNowPlaying=false;cancelFollowAnimation();
     }
-    position=shelfPosition(startPosition-dx/(boundedShelf()?finiteShelfLayout().scrollPitch:175));target=position;
+    position=shelfPosition(shelfIndexAt(shelfSpace(startPosition)-dx/(boundedShelf()?finiteShelfLayout().scrollPitch:175)));target=position;
     pointerVelocity=(event.clientX-lastX)/Math.max(1,now-lastTime);
     lastX=event.clientX;lastTime=now;
 }
@@ -1352,7 +1433,7 @@ stage.addEventListener('pointerdown',event=>{
 stage.addEventListener('pointermove',event=>moveShelfDrag(event));
 stage.addEventListener('pointerup',()=>finishShelfDrag(false));
 stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{cancelFollowAnimation();pinnedRequest++;playing=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
-async function connectLyrion(){if(connecting)return;connecting=true;const connection=connectionGeneration;try{const result=await rpc('0',['players',0,100]),players=(result.players_loop||[]).filter(p=>String(p.connected)!=='0');if(connection!==connectionGeneration)return;playerSelect.replaceChildren();for(const p of players){const o=document.createElement('option');o.value=p.playerid;o.textContent=p.name||p.playerid;playerSelect.append(o)}let remembered='';try{remembered=localStorage.getItem('albumBrowserPlayer')||''}catch(_){}const selected=players.find(p=>p.playerid===remembered)||players.find(p=>String(p.isplaying)==='1')||players[0];playerId=selected?.playerid||'';setPlayerPower(null);if(playerId)playerSelect.value=playerId;playerSelect.disabled=!players.length;updateBusyState();if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();if(connection!==connectionGeneration)return;const status=await getStatus();if(connection!==connectionGeneration)return;await selectStartupAlbum(status);if(connection!==connectionGeneration)return;await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();armIdleReturn();cometd.start(playerId);clearInterval(progressTimer);progressTimer=setInterval(updateProgressDisplay,500)}catch(error){if(connection!==connectionGeneration)return;console.warn(error);cometd.stop();root.dataset.liveUpdates='false';emitStatus();if(!liveCatalogue){albums=demoAlbums.slice();totalAlbums=libraryAlbumCount=albums.length;position=target=Math.floor(Math.random()*albums.length);renderAlbums();draw();root.classList.remove('is-starting');root.dataset.ready='true';playerSelect.innerHTML='<option>Demo mode</option>'}playing=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);root.classList.remove('is-starting');root.dataset.ready='true';playerId='';playerSelect.disabled=true;updateBusyState();setConnection('Lyrion Music Server unavailable',false);scheduleReconnect()}finally{if(connection===connectionGeneration)connecting=false}}
+async function connectLyrion(){if(connecting)return;connecting=true;const connection=connectionGeneration;try{const result=await rpc('0',['players',0,100]),players=(result.players_loop||[]).filter(p=>String(p.connected)!=='0');if(connection!==connectionGeneration)return;playerSelect.replaceChildren();for(const p of players){const o=document.createElement('option');o.value=p.playerid;o.textContent=p.name||p.playerid;playerSelect.append(o)}let remembered='';try{remembered=localStorage.getItem('albumBrowserPlayer')||''}catch(_){}const selected=players.find(p=>p.playerid===remembered)||players.find(p=>String(p.isplaying)==='1')||players[0];playerId=selected?.playerid||'';setPlayerPower(null);if(playerId)playerSelect.value=playerId;playerSelect.disabled=!players.length;updateBusyState();await checkSpottyAvailability();if(connection!==connectionGeneration)return;if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();if(connection!==connectionGeneration)return;const status=await getStatus();if(connection!==connectionGeneration)return;await selectStartupAlbum(status);if(connection!==connectionGeneration)return;await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();armIdleReturn();cometd.start(playerId);clearInterval(progressTimer);progressTimer=setInterval(updateProgressDisplay,500)}catch(error){if(connection!==connectionGeneration)return;console.warn(error);cometd.stop();root.dataset.liveUpdates='false';emitStatus();if(!liveCatalogue){albums=demoAlbums.slice();totalAlbums=libraryAlbumCount=albums.length;position=target=Math.floor(Math.random()*albums.length);renderAlbums();draw();root.classList.remove('is-starting');root.dataset.ready='true';playerSelect.innerHTML='<option>Demo mode</option>'}playing=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);root.classList.remove('is-starting');root.dataset.ready='true';playerId='';playerSelect.disabled=true;updateBusyState();setConnection('Lyrion Music Server unavailable',false);scheduleReconnect()}finally{if(connection===connectionGeneration)connecting=false}}
 orderToggle.onclick=()=>orderMenu.hidden?openOrderMenu():closeOrderMenu();orderMenu.querySelectorAll('[data-order]').forEach(button=>button.onclick=()=>{closeOrderMenu();setDisplayOrder(button.dataset.order).catch(error=>{setConnection(error.message||'Could not change album order',false)}).finally(()=>{if(libraryRefreshPending)handleLibraryEvent()})});updateOrderToggle();
 previousTrack.onclick=()=>skipTrack(-1);nextTrack.onclick=()=>skipTrack(1);
 let focusClickIndex=null,focusClickX=0,focusClickY=0;

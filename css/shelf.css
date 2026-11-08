@@ -94,6 +94,78 @@
 
 .bf-stage.bf-shelf-active:after { opacity:.25; }
 
+/* One switch returns optional typography and imprint treatments to uniform. */
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-catalogue-style="serif"] .bf-spine-catalogue {
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:700;
+    letter-spacing:0;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-catalogue-style="mono"] .bf-spine-catalogue {
+    font-family:"Courier New",Courier,monospace;
+    letter-spacing:.05px;
+}
+.bf-spine-binding {
+    display:none;
+    position:absolute;
+    z-index:4;
+    left:3px;
+    top:6px;
+    bottom:6px;
+    width:min(6px,10%);
+    pointer-events:none;
+    background:linear-gradient(90deg,rgba(255,255,255,.2),rgba(0,0,0,.38) 35%,rgba(255,255,255,.13) 65%,rgba(0,0,0,.22));
+    box-shadow:1px 0 0 rgba(255,255,255,.12);
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-case-type="multi"] .bf-spine-binding {
+    display:block;
+}
+.bf-spine-wear {
+    display:none;
+    position:absolute;
+    z-index:4;
+    inset:5px 3px;
+    pointer-events:none;
+    background:linear-gradient(116deg,transparent 37%,rgba(255,255,255,.2) 37.2%,transparent 37.5%),
+        linear-gradient(169deg,transparent 68%,rgba(255,255,255,.16) 68.15%,transparent 68.4%);
+    border-inline-start:1px solid rgba(255,255,255,.12);
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-wear="light"] .bf-spine-wear {
+    display:block;
+    opacity:.35;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-wear="scuffed"] .bf-spine-wear {
+    display:block;
+    opacity:.65;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-print-style="regular"] .bf-spine-label {
+    font-weight:500;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-print-style="condensed"] .bf-spine-label {
+    font-family:"Arial Narrow","Liberation Sans Narrow","DejaVu Sans Condensed",sans-serif;
+    font-stretch:condensed;
+    font-weight:600;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-spine-artist {
+    font-size:.82em;
+    font-weight:500;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-spine-separator {
+    font-weight:400;
+    opacity:.65;
+}
+#book-fan-browser[data-shelf-variety="true"] .bf-album[data-label-align="start"] .bf-spine-label {
+    text-align:start;
+}
+#book-fan-browser[data-shelf-variety="false"] .bf-spine-label {
+    font-family:Arial,Helvetica,sans-serif;
+    font-weight:700;
+    text-align:center;
+}
+#book-fan-browser[data-shelf-variety="false"] .bf-spine-catalogue {
+    color:var(--spine-text,#f5f2ea);
+    transform:translateX(-50%);
+}
+
 .bf-front-preview {
     position:absolute;
     z-index:180;

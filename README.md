@@ -8,12 +8,13 @@
 
 Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines, with enlarged jewel-case artwork when you select an album. It uses CSS transforms; no WebGL renderer or remote font downloads are required.
 
-Current application version: **0.11.5**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
+Current application version: **0.11.6**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
 ## Features
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
 - circular CD shelf with artwork-derived spine colours, stable readable font choices, and configurable displayed-album count;
+- optional shelf variety with stable title alignment, artist/title hierarchy, print treatments, subtle case wear, catalogue typography and 1.5× multi-disc spines;
 - shelf-only display with server-prepared artist/album, album-only, colour, random or **Recently Added** ordering; Recently Added uses LMS's recorded first-added date, newest first, and stops at both shelf ends instead of wrapping; random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered; a 15-minute persistent catalogue snapshot avoids rescanning LMS for every sort or genre-filter change;
@@ -38,6 +39,7 @@ Current application version: **0.11.5**. The canonical version is stored in [`VE
 - daily GitHub stable-release checks while the page is open, enabled by default with a per-browser off switch and manual Check now action in Settings > About; requests contain no LMS/library details and do not download or install updates;
 - automatic LMS reconnection;
 - Library / Spotify source switching with Spotify saved albums supplied through LMS Spotty;
+- automatic Spotty capability detection: Spotify is disabled without the plugin and a saved Spotify source falls back to Library;
 - full Spotify album search through Spotty, with searched albums playable and savable to the Spotify library;
 - source-aware now-playing navigation and Spotify artwork rendered with the same jewel-case presentation as local albums;
 - Album Information for local and Spotify albums, including genre when the upstream metadata provides it;

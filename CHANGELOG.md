@@ -5,6 +5,19 @@ All notable changes to Lyrion Carousel are documented here.
 ## Unreleased
 
 - Consolidate Windows ZIP, portable, service and source-installation instructions into one dedicated guide; update README and deployment links and package the same guide in Windows release ZIPs.
+- Use stable sans-serif, serif and monospace catalogue lettering independently of the main spine label when Shelf variety is on; keep the same real codes, wrapping and height limits.
+- Give multi-disc cases a subtle additional moulded hinge seam when Shelf variety is enabled, without changing cover interactions or adding image requests.
+- Add faint occasional plastic scuffs and softened edge highlights with stable per-album wear patterns. Reuse decorative layers in the bounded spine pool and hide them when Shelf variety is off.
+- Mix stable regular, bold and condensed print treatments using local fonts when Shelf variety is enabled; do not download fonts or add scrolling work.
+- Use smaller artist lettering and a quieter separator to give album titles more prominence when Shelf variety is on; retain the selected artist/album ordering.
+- Alternate top-aligned and centred spine lettering consistently per album when Shelf variety is on, without changing the available title area.
+- Replace the multi-disc width option with a saved Shelf variety switch that controls optional widths, typography and imprint treatments together. Preserve existing width preferences and retain artwork colours and real catalogue numbers when off.
+
+## [0.11.6] - 2026-11-08
+
+- Disable the Spotify source when LMS does not expose Spotty; check again on reconnect or server changes and fall back to Library when a saved Spotify source is unavailable.
+- Give multi-disc library albums 1.5× spine width using LMS disc counts. Account for mixed widths in shelf spacing, finite endpoints, cover gaps and dragging, and refresh catalogue snapshots to include disc metadata.
+- Add Settings > Display > Multi-disc spine width with Wider (1.5×) and Uniform choices. Apply changes immediately, preserve finite shelf endpoints, and remember the choice per browser; wider spines are enabled by default.
 
 ## [0.11.5] - 2026-11-07
 

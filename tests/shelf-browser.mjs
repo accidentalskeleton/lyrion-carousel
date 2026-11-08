@@ -19,8 +19,9 @@ export async function runShelfBrowserTests() {
   await Promise.all([...document.querySelectorAll('link[rel="stylesheet"]')].map(link =>
     link.sheet ? Promise.resolve() : new Promise(resolve => { link.onload = resolve; })
   ));
+  const multiDisc=new URLSearchParams(location.search).has('multidisc');
   const catalogue = Array.from({length:98}, (_, index) => ({
-    id:index + 1, album:'Fixture album ' + index, artist:'Fixture artist', textkey:'F'
+    id:index + 1, disccount:multiDisc&&index%4===0?2:1, album:'Fixture album ' + index, artist:'Fixture artist', textkey:'F'
   }));
   const rpc = async (_, command) => {
     if (command[0] === 'albums') return {count:catalogue.length, albums_loop:catalogue.slice(command[1], command[1] + command[2])};
@@ -47,12 +48,13 @@ export async function runShelfBrowserTests() {
       },
       open(index,animate=false){openFrontPreview(albums[index],index,animate);draw()},
       close(){return closeFrontPreview(false,true)},
+      widths:value=>applySetting('shelfVariety',value),
       timeout:ms=>applySetting('frontTimeout',ms),
       status(mode='play'){applyStatus({mode,playlist_loop:[{
         album_id:playingAlbumId,album:frontPreviewAlbum[0],artist:frontPreviewAlbum[1]
       }]})},
       source(value){catalogueSource=value;draw()},
-      state:()=>({position,target,dragging,raf,wheelTimer,frontPreviewIndex,
+      state:()=>({position,spacePosition:shelfSpace(position),target,dragging,raf,wheelTimer,frontPreviewIndex,
         bounds:finiteShelfBounds(),pitch:shelfPitch(),width:frontCaseWidth(),
         scrollPitch:finiteShelfLayout().scrollPitch,
         playing,followAnimation:!!followAnimation,opening:!!coverOpening&&!coverOpening.closing,
@@ -93,11 +95,28 @@ export async function runShelfBrowserTests() {
     }), 'The real open case never covers another spine');
   };
   await api.loadInitialCatalogue();
+  if(multiDisc){
+    const rows=[...stage.querySelectorAll('.bf-album')];
+    for(const row of rows){
+      const index=Number(row.dataset.index),width=row.getBoundingClientRect().width;
+      assert(Math.abs(width-api.state().pitch*(index%4===0?1.5:1))<1,'Mixed disc widths follow LMS metadata');
+    }
+  }
+  if(multiDisc){
+    api.widths(false);
+    assert([...stage.querySelectorAll('.bf-album')].every(row=>Math.abs(row.getBoundingClientRect().width-api.state().pitch)<1),
+      'The width setting restores uniform real browser geometry');
+    api.widths(true);
+  }
   await api.setDisplayOrder('recent');
   for (const index of [0,1,49,96,97]) {
     api.set(index,true);
     const closedState = api.state();
     api.open(index);
+    if(multiDisc&&index===49){
+      api.widths(false);coverage();noOverlap();
+      api.widths(true);coverage();noOverlap();
+    }
     preview.dataset.visible = 'false';
     await new Promise(resolve => setTimeout(resolve, 250));
     api.open(index);
@@ -117,7 +136,7 @@ export async function runShelfBrowserTests() {
     await wheel(cover, direction * 1200);
     const after = api.state();
     assert((after.position - before.position) * direction > 0, 'Wheel browses away with playing cover open');
-    assert(Math.abs(cover.getBoundingClientRect().left - coverBefore + (after.position - before.position) * after.scrollPitch) < 1,
+    assert(Math.abs(cover.getBoundingClientRect().left - coverBefore + (after.spacePosition - before.spacePosition) * after.scrollPitch) < 1,
       'Cover travels at exactly the shelf speed');
     await api.ensurePlayingCover();api.status();await settle();
     assert(api.state().position === after.position && api.state().target === after.target, 'Status updates do not reset browsing');
@@ -206,5 +225,5 @@ export async function runShelfBrowserTests() {
   await settle();
   assert(preview.hidden&&!api.state().raf,'Timeout hides only after reverse closing and leaves no animation loop');
   api.timeout(0);api.set(0,true);api.open(0);
-  return {checks,viewport:[innerWidth,innerHeight]};
+  return {checks,multiDisc,viewport:[innerWidth,innerHeight]};
 }
