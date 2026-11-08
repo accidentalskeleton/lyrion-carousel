@@ -1,6 +1,6 @@
 # Windows installation — Lyrion Carousel
 
-[← Project overview](../README.md) · [Common server options and security](getting-started.md)
+[← Project overview](https://github.com/accidentalskeleton/lyrion-carousel#readme) · [Common server options and security](https://github.com/accidentalskeleton/lyrion-carousel/blob/main/docs/getting-started.md)
 
 **Linux/Debian remains the primary supported and tested platform.** This Windows x64
 package is a best-effort alternative for local browsing, development and
@@ -118,5 +118,5 @@ To inspect service state:
   separately for the album browser. No Raspberry Pi LMS installation is
   removed or altered by this Windows package.
 
-WinSW is MIT licensed. Its licence is included as WinSW-LICENSE.txt.
+WinSW is MIT licensed. Its licence is included as `WinSW-LICENSE.txt` in the Windows ZIP.
 See `THIRD_PARTY_NOTICES.md` in the ZIP or the [repository's third-party notices](https://github.com/accidentalskeleton/lyrion-carousel/blob/main/THIRD_PARTY_NOTICES.md) for other dependencies and attribution.
