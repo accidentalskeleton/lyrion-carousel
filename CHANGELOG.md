@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Keep the current playing CD case enlarged and pinned when LMS is paused; retain track details, stop elapsed-time advancement, and close the pinned case only when playback stops. Add play/pause/resume/stop regression coverage.
+
 ## [0.11.7] - 2026-11-08
 
 - Consolidate Windows ZIP, portable, service and source-installation instructions into one dedicated guide; update README and deployment links and package the same guide in Windows release ZIPs.
