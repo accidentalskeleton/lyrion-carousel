@@ -654,6 +654,19 @@ export async function runTests(sources) {
     assert(api.state().paused===(mode==='pause')&&api.state().playing===(mode==='play'),
       'paused and playing modes remain independently tracked');
   }
+  // LMS live updates can omit the playlist and even omit mode. Neither
+  // should unpin a paused album or discard its now-playing metadata.
+  api.applyStatus({mode:'pause',time:20});
+  assert(!preview.hidden&&preview.dataset.pinned==='true'&&api.state().frontPreviewAlbum?.[6]===20,
+    'paused status without playlist metadata retains the pinned album');
+  assert(element('.bf-meta').children[1]?.dataset.prefix==='Track',
+    'paused status without playlist metadata retains the track');
+  api.applyStatus({time:20});
+  assert(api.state().paused&&!api.state().playing&&!preview.hidden,
+    'live status missing mode cannot turn pause into stop');
+  api.applyStatus({mode:'pause',playlist_loop:[{album:'Album 020',title:'Track'}]});
+  assert(api.state().frontPreviewAlbum?.[6]===20&&preview.dataset.pinned==='true',
+    'partial playlist metadata without album ID preserves the current album');
   api.applyStatus({mode:'stop',playlist_loop:[{album_id:20,album:'Album 020'}]});
   assert(preview.hidden&&api.state().frontPreviewAlbum===null,
     'stopping playback closes the previously pinned cover');
