@@ -45,7 +45,7 @@ export async function runShelfBrowserTests() {
       loadInitialCatalogue,setDisplayOrder,draw,applyStatus,ensurePlayingCover,centreAlbumIndex,
       set(index,pinned=false){
         cancelFollowAnimation();clearTimeout(wheelTimer);wheelTimer=0;
-        playing=pinned;playingAlbumId=pinned?albums[index][6]:null;
+        playing=pinned;paused=false;playingAlbumId=pinned?albums[index][6]:null;
         position=target=shelfPosition(index);closeFrontPreview(true);draw();
       },
       open(index,animate=false){openFrontPreview(albums[index],index,animate);draw()},
@@ -227,6 +227,15 @@ export async function runShelfBrowserTests() {
   await settle();
   assert(preview.hidden&&!api.state().raf,'Timeout hides only after reverse closing and leaves no animation loop');
   api.timeout(0);api.set(0,true);api.open(0);
+  const pausedCover=preview.querySelector('.bf-front-case');
+  api.status('pause');
+  assert(!preview.hidden&&preview.dataset.pinned==='true','Pause keeps the current case open and pinned');
+  assert(!await api.close()&&!preview.hidden,'Paused cover ignores dismissal just like the playing cover');
+  await new Promise(resolve=>setTimeout(resolve,60));
+  assert(preview.querySelector('.bf-front-case')===pausedCover&&!preview.hidden,'Paused status retains the existing cover DOM');
+  assert(document.querySelector('.bf-play').getAttribute('aria-label')==='Resume player','Paused player still exposes Resume');
+  api.status('play');
+  assert(!preview.hidden,'Resuming retains the open case');
   await api.menu(0,{clientX:innerWidth-1,clientY:innerHeight-1});
   const menu=document.querySelector('.bf-album-menu'),discSelect=document.querySelector('.bf-album-disc');
   const menuBounds=menu.getBoundingClientRect();

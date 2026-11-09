@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Keep the current album case open and pinned while paused, including reloads and incomplete LMS status notifications. Retain track details, freeze elapsed-time advancement and preserve normal stopped-player behaviour.
+
 - Add a full-album or individual-disc selector to multi-disc library album menus, using LMS disc tags and optional disc titles. Apply the selection to clear-and-play, replace-current, play-after-current and append-to-queue actions; retain full-album defaults and clearer action labels. Allow replace-current playback when the queue is empty.
 
 ## [0.11.7] - 2026-11-08

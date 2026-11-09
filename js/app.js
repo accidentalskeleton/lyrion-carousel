@@ -125,7 +125,7 @@ function shelfIndexAt(space){
     const a=shelfCentres[lo],b=lo+1<albums.length?shelfCentres[lo+1]:shelfCentres[0]+shelfUnits;
     return cycle*albums.length+lo+(local-a)/(b-a);
 }
-let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,randomAnimating=false,discoveryBusy=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
+let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,paused=false,randomAnimating=false,discoveryBusy=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
 const boundedShelf=()=>orderMode==='recent'&&catalogueSource==='library';
 // The finite shelf stops when the OUTER spines reach the viewport edges.
 // Clamping the centre to album 0 / N-1 would leave half the display empty.
@@ -204,7 +204,7 @@ async function setCatalogueSource(source){
         // A source switch replaces the catalogue, so resolve Now Playing again
         // against the newly loaded source. If that album exists here, move
         // straight to it and open/pin its jewel case.
-        if(playing){
+        if(hasPlaybackAlbum()){
             let i=playingCarouselIndex();
             if(i<0&&catalogueSource==='library'&&playingAlbumId)i=await locateAlbum(playingAlbumId,false);
             if(i>=0){
@@ -231,7 +231,7 @@ async function setCatalogueSource(source){
 // LMS player. Follow a source change without relying on cross-tab storage events.
 let sourceFollowPending=false,sourceFollowAttempt='';
 async function followPlayingSource(){
-    if(!playing||!playerId||!['library','spotify'].includes(playingSource))return;
+    if(!hasPlaybackAlbum()||!playerId||!['library','spotify'].includes(playingSource))return;
     if(catalogueSource===playingSource){sourceFollowAttempt='';return}
     if(sourceFollowPending||orderBusy||libraryRefreshing)return;
     const key=playerId+'|'+playingSource+'|'+nowAlbumTitle;
@@ -270,7 +270,7 @@ async function setDisplayOrder(mode){
         orderMode=desiredOrderMode=mode;
         try{localStorage.setItem('albumBrowserOrderMode',mode)}catch(_){}
         updateOrderToggle();
-        const playingIndex=playing?playingCarouselIndex():-1;
+        const playingIndex=hasPlaybackAlbum()?playingCarouselIndex():-1;
         const nextIndex=playingIndex>=0?playingIndex:selected!=null?indexForAlbumId(selected):selectedIndex();
         if(nextIndex>=0)position=target=shelfPosition(nextIndex);
         hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();
@@ -689,8 +689,9 @@ function syncShelfDom(){
 const KEEP_PLAYING_OPEN=true;
 let pinnedRequest=0;
 let frontTimer=0,followingNowPlaying=false,followRequest=0,followAnimation=null;
+function hasPlaybackAlbum(){return playing||paused}
 function playingCarouselIndex(){
-    if(!playing)return -1;
+    if(!hasPlaybackAlbum())return -1;
     if(playingAlbumId){const i=indexForAlbumId(playingAlbumId);if(i>=0)return i}
     if(catalogueSource==='spotify'&&nowAlbumTitle){
         const norm=v=>String(v||'').trim().toLocaleLowerCase();
@@ -699,7 +700,7 @@ function playingCarouselIndex(){
     return -1;
 }
 function isPlayingCoverPinned(){
-    if(!playing||frontPreview.hidden||!frontPreviewAlbum)return false;
+    if(!hasPlaybackAlbum()||frontPreview.hidden||!frontPreviewAlbum)return false;
     const i=playingCarouselIndex(),current=i>=0?albums[i]:null;
     // Catalogue refreshes and reordering replace album-array objects.
     // Matching the stable album ID prevents a temporary disappearance of
@@ -711,11 +712,11 @@ function isPlayingCoverPinned(){
 async function ensurePlayingCover(){
     const request=++pinnedRequest,id=playingAlbumId,generation=catalogueGeneration;
     frontPreview.dataset.pinned=String(isPlayingCoverPinned());
-    if(!KEEP_PLAYING_OPEN||!playing)return;
+    if(!KEEP_PLAYING_OPEN||!hasPlaybackAlbum())return;
     try{
         let index=playingCarouselIndex();
         if(index<0&&id)index=await locateAlbum(id,false);
-        if(request===pinnedRequest&&generation===catalogueGeneration&&KEEP_PLAYING_OPEN&&playing&&index>=0)openFrontPreview(albums[index],index);
+        if(request===pinnedRequest&&generation===catalogueGeneration&&KEEP_PLAYING_OPEN&&hasPlaybackAlbum()&&index>=0)openFrontPreview(albums[index],index);
     }catch(_){/* A later playback update can retry when the catalogue is available. */}
 }
 function completeFrontPreviewClose(suppressReopen){
@@ -723,8 +724,8 @@ function completeFrontPreviewClose(suppressReopen){
     frontPreviewIndex=-1;frontPreviewAlbum=null;frontPreview.hidden=true;
     frontPreview.dataset.visible='false';frontPreview.setAttribute('aria-hidden','true');
     if(boundedShelf())target=shelfPosition(target);
-    if(!playing)updateMeta(true);
-    if(!suppressReopen&&KEEP_PLAYING_OPEN&&playing&&playingCarouselIndex()>=0)
+    if(!hasPlaybackAlbum())updateMeta(true);
+    if(!suppressReopen&&KEEP_PLAYING_OPEN&&hasPlaybackAlbum()&&playingCarouselIndex()>=0)
         Promise.resolve().then(()=>{if(frontPreview.hidden)ensurePlayingCover()});
 }
 function closeFrontPreview(suppressReopen=false,animate=false){
@@ -754,7 +755,7 @@ function openFrontPreview(album,index,animate=false){
     frontPreviewIndex=index;frontPreviewAlbum=album;prefetchCoverWindow(index);
     frontArt.style.background=album[2];frontPreview.hidden=false;frontPreview.dataset.visible='true';
     frontPreview.setAttribute('aria-hidden','false');frontPreview.dataset.pinned=String(isPlayingCoverPinned());
-    syncShelfDom();if(coverOpening)schedule();resumeFrontTimeout();if(!playing)updateMeta(true);
+    syncShelfDom();if(coverOpening)schedule();resumeFrontTimeout();if(!hasPlaybackAlbum())updateMeta(true);
 }
 frontPlay.onclick=async event=>{event.stopPropagation();const album=frontPreviewAlbum;if(!album)return;try{await loadAlbum(album);closeFrontPreview()}catch(_){setConnection('Could not play album',false);scheduleReconnect()}};
 // Dismiss from the exposed shelf without opening or playing the spine underneath.
@@ -777,7 +778,7 @@ function dismissFrontPreview(){
     pinnedRequest++;followingNowPlaying=false;cancelFollowAnimation();
     void closeFrontPreview(false,true);
 }
-function resumeFrontTimeout(){clearTimeout(frontTimer);frontTimer=!frontPreview.hidden&&!(playing&&String(frontPreviewAlbum?.[6])===String(playingAlbumId))&&FRONT_TIMEOUT_MS>0?setTimeout(async()=>{frontTimer=0;if(isPlayingCoverPinned())return;const wasNonPlayingPreview=playing&&playingCarouselIndex()>=0;const closed=await closeFrontPreview(true,true);if(closed&&wasNonPlayingPreview)returnToPlayingAlbum(true)},FRONT_TIMEOUT_MS):0}
+function resumeFrontTimeout(){clearTimeout(frontTimer);frontTimer=!frontPreview.hidden&&!isPlayingCoverPinned()&&FRONT_TIMEOUT_MS>0?setTimeout(async()=>{frontTimer=0;if(isPlayingCoverPinned())return;const wasNonPlayingPreview=hasPlaybackAlbum()&&playingCarouselIndex()>=0;const closed=await closeFrontPreview(true,true);if(closed&&wasNonPlayingPreview)returnToPlayingAlbum(true)},FRONT_TIMEOUT_MS):0}
 frontPreview.addEventListener('pointerdown',event=>{
     if(randomAnimating||frontPress||event.button!==0||!event.target.closest('.bf-front-case')||event.target.closest('button')||!frontPreviewAlbum)return;
     cancelFrontPress();clearTimeout(frontTimer);frontTimer=0;
@@ -893,7 +894,7 @@ window.addEventListener('lyrion-carousel-lms-change',event=>{
     resetRpcSession();connectionGeneration++;catalogueGeneration++;pinnedRequest++;
     artworkNamespace=encodeURIComponent(event.detail?.lmsUrl||'');
     cometd.stop();resetReconnect();clearInterval(progressTimer);clearTimeout(idleTimer);
-    cancelFollowAnimation();playing=false;playingAlbumId=null;closeFrontPreview();
+    cancelFollowAnimation();playing=false;paused=false;playingAlbumId=null;closeFrontPreview();
     closeSearch();closeAlbumMenu();closeTrackList();
     connecting=false;playerId='';liveCatalogue=false;orderBusy=false;randomAnimating=false;randomAnimationDuration=0;randomPlay.classList.remove('is-busy');
     albumPositionById=new Map();positionIndexPromise=null;prefetchedWindowPage=-1;
@@ -954,7 +955,7 @@ function spotifyPlayingIndex(track,result){
 }
 function setPlayerPower(value){playerPower=value===1||value==='1'||value===true?true:value===0||value==='0'||value===false?false:null;powerButton.dataset.power=playerPower===null?'unknown':playerPower?'on':'off';powerButton.setAttribute('aria-pressed',String(playerPower===true));const label=playerPower===null?'Player power unavailable':playerPower?'Turn selected player off':'Turn selected player on';powerButton.setAttribute('aria-label',label);powerButton.title=label;updateBusyState()}
 async function togglePlayerPower(){if(!playerId||powerPending||playerPower===null)return;const selected=playerId,target=playerPower?0:1;powerPending=true;updateBusyState();try{await rpc(selected,['power',target]);if(selected===playerId){setPlayerPower(target);await refreshStatus()}}catch(_){if(selected===playerId){setConnection('Could not change player power',false);await refreshStatus()}}finally{powerPending=false;updateBusyState()}}
-function applyStatus(result){if(!result)return;if(Object.prototype.hasOwnProperty.call(result,'power'))setPlayerPower(result.power);const previousAlbum=playingAlbumId,wasPlaying=playing;playing=result.mode==='play';const currentIndex=Math.max(0,Number(result.playlist_cur_index)||0),track=result.playlist_loop?.find(item=>Number(item['playlist index']??item.playlist_index)===currentIndex)||result.playlist_loop?.[currentIndex]||result.playlist_loop?.[0];if(track){const remote=result.remoteMeta||{};playingSource=(result.remote||remote.id||(/^spotify:/i.test(String(track.url||track.uri||''))))?'spotify':(track.album_id||remote.album_id?'library':'unknown');const spotifyIndex=spotifyPlayingIndex(track,result);playingAlbumId=track.album_id||remote.album_id||(spotifyIndex>=0?albums[spotifyIndex][6]:null);nowAlbumTitle=track.album||remote.album||track.remote_title||result.current_title||track.title||'';nowAlbumArtist=track.albumartist||track.artist||remote.artist||track.remote_artist||'';nowTrackTitle=track.title||remote.title||track.remote_title||result.current_title||'';nowTrackArtist=track.trackartist||track.artist||remote.trackartist||remote.artist||track.remote_artist||'';nowTrackNumber=track.tracknum||'';playbackSeconds=Number(result.time)||0;trackDuration=Number(track.duration||result.duration)||0;statusUpdatedAt=performance.now()}else{playingSource='unknown';playingAlbumId=null;nowAlbumTitle=nowAlbumArtist='';nowTrackTitle=nowTrackArtist=nowTrackNumber='';playbackSeconds=trackDuration=0}setConnection(albumCountLabel(),true);updateMeta(true);if(wasPlaying&&!playing&&frontPreviewAlbum&&String(frontPreviewAlbum[6])===String(previousAlbum)){pinnedRequest++;closeFrontPreview()}if(connecting)return;if(KEEP_PLAYING_OPEN&&(wasPlaying!==playing||String(previousAlbum)!==String(playingAlbumId)||frontPreview.hidden))ensurePlayingCover();else frontPreview.dataset.pinned=String(isPlayingCoverPinned());if(!playing){cancelFollowAnimation();followingNowPlaying=false}if(wasPlaying!==playing||String(previousAlbum)!==String(playingAlbumId))resumeFrontTimeout();const carouselPlayingIndex=playingCarouselIndex(),carouselPlayingId=carouselPlayingIndex>=0?String(albums[carouselPlayingIndex]?.[6]||''):'';if(playing&&carouselPlayingIndex>=0&&String(previousAlbum)!==String(playingAlbumId)&&(followingNowPlaying||KEEP_PLAYING_OPEN)){returnToPlayingAlbum(true);return}if(carouselPlayingIndex>=0&&String(idleReturnAlbumId||'')!==carouselPlayingId&&Date.now()-lastActivityAt>=IDLE_RETURN_MS)armIdleReturn(0);void followPlayingSource()}
+function applyStatus(result){if(!result)return;if(Object.prototype.hasOwnProperty.call(result,'power'))setPlayerPower(result.power);const previousAlbum=playingAlbumId,wasActive=hasPlaybackAlbum();if(result.mode!==undefined){playing=result.mode==='play';paused=result.mode==='pause'}const currentIndex=Math.max(0,Number(result.playlist_cur_index)||0),track=result.playlist_loop?.find(item=>Number(item['playlist index']??item.playlist_index)===currentIndex)||result.playlist_loop?.[currentIndex]||result.playlist_loop?.[0];if(track){const remote=result.remoteMeta||{};playingSource=(result.remote||remote.id||(/^spotify:/i.test(String(track.url||track.uri||''))))?'spotify':(track.album_id||remote.album_id?'library':'unknown');const spotifyIndex=spotifyPlayingIndex(track,result);playingAlbumId=track.album_id||remote.album_id||(spotifyIndex>=0?albums[spotifyIndex][6]:null)||(hasPlaybackAlbum()&&previousAlbum&&(!track.album||track.album===nowAlbumTitle)&&(!track.title||track.title===nowTrackTitle)?previousAlbum:null);nowAlbumTitle=track.album||remote.album||track.remote_title||result.current_title||track.title||'';nowAlbumArtist=track.albumartist||track.artist||remote.artist||track.remote_artist||'';nowTrackTitle=track.title||remote.title||track.remote_title||result.current_title||'';nowTrackArtist=track.trackartist||track.artist||remote.trackartist||remote.artist||track.remote_artist||'';nowTrackNumber=track.tracknum||'';playbackSeconds=Number(result.time)||0;trackDuration=Number(track.duration||result.duration)||0;statusUpdatedAt=performance.now()}else if(!hasPlaybackAlbum()){playingSource='unknown';playingAlbumId=null;nowAlbumTitle=nowAlbumArtist='';nowTrackTitle=nowTrackArtist=nowTrackNumber='';playbackSeconds=trackDuration=0}setConnection(albumCountLabel(),true);updateMeta(true);if(wasActive&&!hasPlaybackAlbum()&&frontPreviewAlbum&&String(frontPreviewAlbum[6])===String(previousAlbum)){pinnedRequest++;closeFrontPreview()}if(connecting)return;if(KEEP_PLAYING_OPEN&&(wasActive!==hasPlaybackAlbum()||String(previousAlbum)!==String(playingAlbumId)||frontPreview.hidden))ensurePlayingCover();else frontPreview.dataset.pinned=String(isPlayingCoverPinned());if(!hasPlaybackAlbum()){cancelFollowAnimation();followingNowPlaying=false}if(wasActive!==hasPlaybackAlbum()||String(previousAlbum)!==String(playingAlbumId))resumeFrontTimeout();const carouselPlayingIndex=playingCarouselIndex(),carouselPlayingId=carouselPlayingIndex>=0?String(albums[carouselPlayingIndex]?.[6]||''):'';if(hasPlaybackAlbum()&&carouselPlayingIndex>=0&&String(previousAlbum)!==String(playingAlbumId)&&(followingNowPlaying||KEEP_PLAYING_OPEN)){returnToPlayingAlbum(true);return}if(carouselPlayingIndex>=0&&String(idleReturnAlbumId||'')!==carouselPlayingId&&Date.now()-lastActivityAt>=IDLE_RETURN_MS)armIdleReturn(0);void followPlayingSource()}
 async function getStatus(trackCount=1){if(!playerId)return null;return rpc(playerId,['status','-',trackCount,'tags:alJenKNRA'])}
 async function refreshStatus(){
     if(!playerId)return;
@@ -965,7 +966,7 @@ async function refreshStatus(){
 async function selectStartupAlbum(status){
     stopFollowing();applyStatus(status);
     clearTimeout(idleTimer);idleTimer=0;
-    if(playing&&playingAlbumId){
+    if(hasPlaybackAlbum()&&playingAlbumId){
         position=target=modulo(Math.round(position),totalAlbums);
         hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();
         root.classList.remove('is-starting');root.dataset.ready='true';
@@ -1058,7 +1059,7 @@ async function returnToPlayingAlbum(immediate=false){
     clearTimeout(idleTimer);idleTimer=0;
     if(!immediate&&Date.now()-lastActivityAt<IDLE_RETURN_MS){armIdleReturn();return}
     if(randomAnimating||discoveryBusy||dragging||orderBusy||libraryRefreshing||root.querySelector('.bf-settings-overlay:not([hidden])')||!searchOverlay.hidden||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden){clearTimeout(idleTimer);idleTimer=setTimeout(()=>returnToPlayingAlbum(immediate),1000);return}
-    if(!playing)return;
+    if(!hasPlaybackAlbum())return;
     // A manual preview owns the visible case until its own timeout or the
     // user selects another spine. The idle return must not preempt it.
     if(!frontPreview.hidden&&!isPlayingCoverPinned())return;
@@ -1070,14 +1071,14 @@ async function returnToPlayingAlbum(immediate=false){
         if(i<0&&expected)i=await locateAlbum(expected);
         if(i<0)return;
         const carouselId=String(albums[i]?.[6]||'');idleReturnAlbumId=carouselId;
-        if(request!==followRequest||lastActivityAt!==snapshot||!playing||(expected&&playingAlbumId!=null&&String(playingAlbumId)!==expected))return;
+        if(request!==followRequest||lastActivityAt!==snapshot||!hasPlaybackAlbum()||(expected&&playingAlbumId!=null&&String(playingAlbumId)!==expected))return;
         closeSearch();
         // Preserve the SAME enlarged playing cover throughout the idle-return
         // animation. Reposition it via syncShelfDom(), never hide then reopen.
         const playingCover=albums[i];
         if(frontPreview.hidden||frontPreviewAlbum!==playingCover)openFrontPreview(playingCover,i);
         const arrived=await scrollToAlbumIndex(i);
-        if(arrived&&request===followRequest&&playing&&(!expected||playingAlbumId==null||String(playingAlbumId)===expected)){
+        if(arrived&&request===followRequest&&hasPlaybackAlbum()&&(!expected||playingAlbumId==null||String(playingAlbumId)===expected)){
             updateMeta(true);
             if(frontPreview.hidden||frontPreviewAlbum!==albums[i])openFrontPreview(albums[i],i);
         }
@@ -1399,14 +1400,14 @@ function formatTime(seconds){const v=Math.max(0,Math.floor(Number(seconds)||0));
 function updateMeta(force=false){
     const selected=selectedIndex();
     if(stage.classList.contains('bf-shelf-active')&&selected!==renderedWindowAnchor)renderAlbums();
-    const playingIndex=playing?playingCarouselIndex():-1;
+    const playingIndex=hasPlaybackAlbum()?playingCarouselIndex():-1;
     const previewIndex=!frontPreview.hidden&&frontPreviewAlbum?indexForAlbumId(frontPreviewAlbum[6]):-1;
     const displayIndex=hoveredAlbumIndex>=0?hoveredAlbumIndex:playingIndex>=0?playingIndex:previewIndex;
     play.setAttribute('aria-label',playing?'Pause player':'Resume player');
     play.innerHTML='<span aria-hidden="true">'+(playing?'❚❚':'▶')+'</span>';
     if(!force&&displayIndex===lastSelected)return;
     lastSelected=displayIndex;
-    const album=albums[displayIndex]||(hoveredAlbumIndex<0&&playing&&nowAlbumTitle?[nowAlbumTitle,nowAlbumArtist||'Unknown artist','','','','',playingAlbumId||'remote-now-playing']:null);
+    const album=albums[displayIndex]||(hoveredAlbumIndex<0&&hasPlaybackAlbum()&&nowAlbumTitle?[nowAlbumTitle,nowAlbumArtist||'Unknown artist','','','','',playingAlbumId||'remote-now-playing']:null);
     nodes.forEach(n=>n.el.setAttribute('aria-selected',n.index===displayIndex?'true':'false'));
     if(!album){meta.replaceChildren();return}
     const title=document.createElement('strong');title.textContent=album[0];
@@ -1414,7 +1415,7 @@ function updateMeta(force=false){
     detail.textContent=' — '+album[1];
     const heading=document.createElement('div');heading.className='bf-album-detail';heading.append(title,detail);
     const content=[heading];
-    const showingNowPlaying=playing&&hoveredAlbumIndex<0&&!!nowAlbumTitle;
+    const showingNowPlaying=hasPlaybackAlbum()&&hoveredAlbumIndex<0&&!!nowAlbumTitle;
     const differentLibrary=showingNowPlaying&&playingSource!=='unknown'&&playingSource!==catalogueSource;
     if(showingNowPlaying&&nowTrackTitle){
         const now=document.createElement('span');now.className='bf-now-track';
@@ -1485,8 +1486,8 @@ stage.addEventListener('pointerdown',event=>{
 });
 stage.addEventListener('pointermove',event=>moveShelfDrag(event));
 stage.addEventListener('pointerup',()=>finishShelfDrag(false));
-stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{cancelFollowAnimation();pinnedRequest++;playing=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
-async function connectLyrion(){if(connecting)return;connecting=true;const connection=connectionGeneration;try{const result=await rpc('0',['players',0,100]),players=(result.players_loop||[]).filter(p=>String(p.connected)!=='0');if(connection!==connectionGeneration)return;playerSelect.replaceChildren();for(const p of players){const o=document.createElement('option');o.value=p.playerid;o.textContent=p.name||p.playerid;playerSelect.append(o)}let remembered='';try{remembered=localStorage.getItem('albumBrowserPlayer')||''}catch(_){}const selected=players.find(p=>p.playerid===remembered)||players.find(p=>String(p.isplaying)==='1')||players[0];playerId=selected?.playerid||'';setPlayerPower(null);if(playerId)playerSelect.value=playerId;playerSelect.disabled=!players.length;updateBusyState();await checkSpottyAvailability();if(connection!==connectionGeneration)return;if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();if(connection!==connectionGeneration)return;const status=await getStatus();if(connection!==connectionGeneration)return;await selectStartupAlbum(status);if(connection!==connectionGeneration)return;await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();armIdleReturn();cometd.start(playerId);clearInterval(progressTimer);progressTimer=setInterval(updateProgressDisplay,500)}catch(error){if(connection!==connectionGeneration)return;console.warn(error);cometd.stop();root.dataset.liveUpdates='false';emitStatus();if(!liveCatalogue){albums=demoAlbums.slice();totalAlbums=libraryAlbumCount=albums.length;position=target=Math.floor(Math.random()*albums.length);renderAlbums();draw();root.classList.remove('is-starting');root.dataset.ready='true';playerSelect.innerHTML='<option>Demo mode</option>'}playing=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);root.classList.remove('is-starting');root.dataset.ready='true';playerId='';playerSelect.disabled=true;updateBusyState();setConnection('Lyrion Music Server unavailable',false);scheduleReconnect()}finally{if(connection===connectionGeneration)connecting=false}}
+stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
+async function connectLyrion(){if(connecting)return;connecting=true;const connection=connectionGeneration;try{const result=await rpc('0',['players',0,100]),players=(result.players_loop||[]).filter(p=>String(p.connected)!=='0');if(connection!==connectionGeneration)return;playerSelect.replaceChildren();for(const p of players){const o=document.createElement('option');o.value=p.playerid;o.textContent=p.name||p.playerid;playerSelect.append(o)}let remembered='';try{remembered=localStorage.getItem('albumBrowserPlayer')||''}catch(_){}const selected=players.find(p=>p.playerid===remembered)||players.find(p=>String(p.isplaying)==='1')||players[0];playerId=selected?.playerid||'';setPlayerPower(null);if(playerId)playerSelect.value=playerId;playerSelect.disabled=!players.length;updateBusyState();await checkSpottyAvailability();if(connection!==connectionGeneration)return;if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();if(connection!==connectionGeneration)return;const status=await getStatus();if(connection!==connectionGeneration)return;await selectStartupAlbum(status);if(connection!==connectionGeneration)return;await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();armIdleReturn();cometd.start(playerId);clearInterval(progressTimer);progressTimer=setInterval(updateProgressDisplay,500)}catch(error){if(connection!==connectionGeneration)return;console.warn(error);cometd.stop();root.dataset.liveUpdates='false';emitStatus();if(!liveCatalogue){albums=demoAlbums.slice();totalAlbums=libraryAlbumCount=albums.length;position=target=Math.floor(Math.random()*albums.length);renderAlbums();draw();root.classList.remove('is-starting');root.dataset.ready='true';playerSelect.innerHTML='<option>Demo mode</option>'}playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);root.classList.remove('is-starting');root.dataset.ready='true';playerId='';playerSelect.disabled=true;updateBusyState();setConnection('Lyrion Music Server unavailable',false);scheduleReconnect()}finally{if(connection===connectionGeneration)connecting=false}}
 orderToggle.onclick=()=>orderMenu.hidden?openOrderMenu():closeOrderMenu();orderMenu.querySelectorAll('[data-order]').forEach(button=>button.onclick=()=>{closeOrderMenu();setDisplayOrder(button.dataset.order).catch(error=>{setConnection(error.message||'Could not change album order',false)}).finally(()=>{if(libraryRefreshPending)handleLibraryEvent()})});updateOrderToggle();
 previousTrack.onclick=()=>skipTrack(-1);nextTrack.onclick=()=>skipTrack(1);
 let focusClickIndex=null,focusClickX=0,focusClickY=0;
