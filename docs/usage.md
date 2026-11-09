@@ -18,9 +18,21 @@ Startup discovers players and loads the catalogue. If an album is playing, the s
 
 After the idle delay, the shelf returns to the playing album and opens its cover. Its preview does not time out. With **Keep playing album open** enabled (the default), it stays open while scrolling and moves with its position on the shelf; it can move offscreen and return as you browse. Clicking another spine temporarily previews that album; closing it or letting its preview time out restores the playing cover. When playback changes to another album, the shelf follows and opens the new cover. Turn the option off to restore click-to-close and scroll-to-dismiss behaviour; idle return will still open the playing cover.
 
-A short click or tap closes a non-playing album preview. The playing cover stays open on taps, clicks and Enter/Space; closing another preview restores the playing cover. Hold a spine or cover for roughly half a second to open album actions. The cover’s play button loads that album. Search, Settings and Album Information appear above the shelf, and their input controls do not navigate the shelf.
+A short click or tap closes a non-playing album preview. The current cover remains open while paused, including after a reload. The playing or paused cover stays open on taps, clicks and Enter/Space; closing another preview restores the playing cover. Hold a spine or cover for roughly half a second to open album actions. The current album’s cover button mirrors the main Play/Pause control and resumes from the paused position. Other covers offer Play album to load that album. Search, Settings and Album Information appear above the shelf, and their input controls do not navigate the shelf.
 
 The detail area shows the album under the pointer; outside the shelf it shows the playing album, or clears when nothing is playing. Track details and progress appear only for the playing album. The heading stays at the same vertical position in both states.
+
+## Album playback menu
+
+Hold or right-click an album to open its actions:
+
+- **Clear queue and play album** starts the album from the beginning and removes the existing queue.
+- **Replace current album and play** removes the current album's contiguous tracks, starts the selected album and keeps the rest of the queue.
+- **Play album after current album** inserts it after the remaining tracks of the current album.
+- **Add album to end of queue** appends it without interrupting playback.
+- **View album information** opens the track list and album details.
+
+For multi-disc library albums, **Play or queue** defaults to **Full album**. Select **Disc 1**, **Disc 2**, etc. to apply any of the four playback/queue actions to that disc alone. Disc choices and any disc titles come from LMS track tags; tracks play in disc/track order. Disc selection resets to the full album each time the menu opens. If disc information cannot be loaded, full-album actions remain available. Spotify retains its existing album playback and information actions.
 
 ## Shelf display and cover resolution
 
