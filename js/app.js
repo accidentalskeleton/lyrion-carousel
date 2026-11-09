@@ -1102,10 +1102,63 @@ document.addEventListener('pointerout',event=>{
     if(!event.relatedTarget){lastPointerClientX=lastPointerClientY=-1;updateHoveredAlbumFromPoint(true)}
 });
 function closeAlbumMenu(){clearTimeout(menuIdleTimer);menuIdleTimer=0;albumMenu.hidden=true;menuAlbum=null}
-function openAlbumMenu(album,event){closeAlbumMenu();closeOrderMenu();menuAlbum=album;const spotify=album?.[13]==='spotify';playNowButton.hidden=spotify;playNextButton.hidden=spotify;addQueueButton.hidden=spotify;trackListOpen.hidden=false;albumMenuTitle.textContent=album[0]+' — '+album[1];albumMenu.hidden=false;const width=220,left=Math.min(event.clientX,window.innerWidth-width-12),top=Math.min(event.clientY,window.innerHeight-130);albumMenu.style.left=Math.max(12,left)+'px';albumMenu.style.top=Math.max(12,top)+'px';if(MENU_TIMEOUT_MS>0)menuIdleTimer=setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS);playNextButton.focus()}
-async function queueAlbum(album,playNext){closeAlbumMenu();if(!playerId||!album?.[6])return;try{let command=['playlistcontrol','cmd:add','album_id:'+album[6]];if(playNext){const status=await getStatus(1000),tracks=status?.playlist_loop||[],currentIndex=Number(status?.playlist_cur_index),currentAlbumId=String(tracks[0]?.album_id||'');let albumTrackCount=0;while(albumTrackCount<tracks.length&&String(tracks[albumTrackCount]?.album_id||'')===currentAlbumId)albumTrackCount++;if(Number.isFinite(currentIndex)&&albumTrackCount>0)command=['playlistcontrol','cmd:insert','index:'+(currentIndex+albumTrackCount),'album_id:'+album[6]]}await rpc(playerId,command);setConnection(playNext?'Album added after the current album':'Album added to queue',true);setTimeout(refreshStatus,350)}catch(_){setConnection('Could not update the playlist',false);scheduleReconnect()}}
-async function playAlbumNow(album){closeAlbumMenu();if(!playerId||!album?.[6])return;try{const status=await rpc(playerId,['status',0,1000,'tags:alJen']),tracks=status?.playlist_loop||[],currentIndex=Number(status?.playlist_cur_index),currentTrack=tracks[currentIndex];if(!Number.isFinite(currentIndex)||!currentTrack?.album_id)throw Error('Current album unavailable');const currentAlbumId=String(currentTrack.album_id);let start=currentIndex,end=currentIndex;while(start>0&&String(tracks[start-1]?.album_id||'')===currentAlbumId)start--;while(end+1<tracks.length&&String(tracks[end+1]?.album_id||'')===currentAlbumId)end++;for(let index=end;index>=start;index--)await rpc(playerId,['playlistcontrol','cmd:delete','index:'+index]);await rpc(playerId,['playlistcontrol','cmd:insert','index:0','album_id:'+album[6]]);await rpc(playerId,['playlist','index',0]);await refreshStatus();setTimeout(refreshStatus,350)}catch(_){setConnection('Could not play album now',false);scheduleReconnect()}}
-async function clearPlaylistAndPlay(album){closeAlbumMenu();if(!playerId||!album?.[6])return;try{await loadAlbum(album);setConnection('Playlist cleared; playing '+album[0]+' from track 1',true)}catch(_){setConnection('Could not clear playlist and play album',false);scheduleReconnect()}}
+const albumDiscLabel=root.querySelector('.bf-album-disc-label'),albumDiscSelect=root.querySelector('.bf-album-disc');
+let menuRequest=0,menuTracks=[];
+function updateAlbumActionLabels(){
+    const scope=albumDiscSelect.value?'disc '+albumDiscSelect.value:(Number(menuAlbum?.[17])>1?'full album':'album');
+    clearPlayButton.textContent='Clear queue and play '+scope;
+    playNowButton.textContent='Replace current album and play '+scope;
+    playNextButton.textContent='Play '+scope+' after current album';
+    addQueueButton.textContent='Add '+scope+' to end of queue';
+}
+function positionAlbumMenu(event){
+    albumMenu.style.left=Math.max(12,Math.min(event.clientX,window.innerWidth-albumMenu.offsetWidth-12))+'px';
+    albumMenu.style.top=Math.max(12,Math.min(event.clientY,window.innerHeight-albumMenu.getBoundingClientRect().height-12))+'px';
+}
+async function albumTracks(album){
+    const tracks=[];
+    for(let offset=0;;){
+        const result=await rpc('0',['tracks',offset,500,'album_id:'+album[6],'sort:tracknum','tags:ti']);
+        const page=result.titles_loop||[];tracks.push(...page);offset+=page.length;
+        if(!page.length||offset>=(Number(result.count)||page.length))break;
+    }
+    return sortAlbumTracks(tracks);
+}
+async function openAlbumMenu(album,event){
+    closeAlbumMenu();closeOrderMenu();menuAlbum=album;menuTracks=[];const request=++menuRequest;
+    const spotify=album?.[13]==='spotify';playNowButton.hidden=spotify;playNextButton.hidden=spotify;addQueueButton.hidden=spotify;trackListOpen.hidden=false;
+    albumDiscLabel.hidden=true;albumDiscSelect.replaceChildren();albumDiscSelect.value='';updateAlbumActionLabels();
+    albumMenuTitle.textContent=album[0]+' — '+album[1];albumMenu.hidden=false;positionAlbumMenu(event);
+    if(MENU_TIMEOUT_MS>0)menuIdleTimer=setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS);
+    clearPlayButton.focus();
+    if(spotify||!(Number(album[17])>1))return;
+    albumDiscLabel.hidden=false;albumDiscSelect.disabled=true;
+    const full=document.createElement('option');full.value='';full.textContent='Full album';albumDiscSelect.append(full);positionAlbumMenu(event);
+    try{
+        const tracks=await albumTracks(album);
+        if(request!==menuRequest||menuAlbum!==album||albumMenu.hidden)return;
+        menuTracks=tracks;
+        const discs=new Map();
+        for(const track of tracks){const disc=albumTrackNumber(track.disc)??1;if(!discs.get(disc))discs.set(disc,track.discsubtitle||'')}
+        for(const [disc,title] of discs){const option=document.createElement('option');option.value=String(disc);option.textContent='Disc '+disc+(title?' — '+title:'');albumDiscSelect.append(option)}
+        albumDiscSelect.disabled=discs.size<2;positionAlbumMenu(event);
+    }catch(_){if(request===menuRequest&&menuAlbum===album&&!albumMenu.hidden){full.textContent='Full album (disc list unavailable)'}}
+}
+function selectedAlbumFilter(){
+    const disc=albumTrackNumber(albumDiscSelect.value);
+    if(disc===null)return null;
+    const tracks=menuTracks.filter(track=>(albumTrackNumber(track.disc)??1)===disc);
+    if(!tracks.length||tracks.some(track=>!/^\d+$/.test(String(track.id))))throw Error('Disc tracks unavailable');
+    return 'track_id:'+tracks.map(track=>track.id).join(',');
+}
+function runAlbumMenuAction(action){
+    try{return action(menuAlbum,selectedAlbumFilter())}
+    catch(_){setConnection('Disc tracks unavailable; reopen the album menu and try again',false)}
+}
+albumDiscSelect.onchange=()=>{noteUserActivity();updateAlbumActionLabels();if(MENU_TIMEOUT_MS>0){clearTimeout(menuIdleTimer);menuIdleTimer=setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS)}};
+async function queueAlbum(album,playNext,filter=null){closeAlbumMenu();if(!playerId||!album?.[6])return;try{let command=['playlistcontrol','cmd:add',filter||'album_id:'+album[6]];if(playNext){const status=await getStatus(1000),tracks=status?.playlist_loop||[],currentIndex=Number(status?.playlist_cur_index),currentAlbumId=String(tracks[0]?.album_id||'');let albumTrackCount=0;while(albumTrackCount<tracks.length&&String(tracks[albumTrackCount]?.album_id||'')===currentAlbumId)albumTrackCount++;if(Number.isFinite(currentIndex)&&albumTrackCount>0)command=['playlistcontrol','cmd:insert','index:'+(currentIndex+albumTrackCount),filter||'album_id:'+album[6]]}await rpc(playerId,command);setConnection(playNext?'Selection added after the current album':'Selection added to end of queue',true);setTimeout(refreshStatus,350)}catch(_){setConnection('Could not update the playlist',false);scheduleReconnect()}}
+async function playAlbumNow(album,filter=null){closeAlbumMenu();if(!playerId||!album?.[6])return;try{const status=await rpc(playerId,['status',0,1000,'tags:alJen']),tracks=status?.playlist_loop||[],currentIndex=Number(status?.playlist_cur_index),currentTrack=tracks[currentIndex];if(!tracks.length){await rpc(playerId,['playlistcontrol','cmd:load',filter||'album_id:'+album[6]]);await refreshStatus();return}if(!Number.isFinite(currentIndex)||!currentTrack?.album_id)throw Error('Current album unavailable');const currentAlbumId=String(currentTrack.album_id);let start=currentIndex,end=currentIndex;while(start>0&&String(tracks[start-1]?.album_id||'')===currentAlbumId)start--;while(end+1<tracks.length&&String(tracks[end+1]?.album_id||'')===currentAlbumId)end++;for(let index=end;index>=start;index--)await rpc(playerId,['playlistcontrol','cmd:delete','index:'+index]);await rpc(playerId,['playlistcontrol','cmd:insert','index:0',filter||'album_id:'+album[6]]);await rpc(playerId,['playlist','index',0]);await refreshStatus();setTimeout(refreshStatus,350)}catch(_){setConnection('Could not play album now',false);scheduleReconnect()}}
+async function clearPlaylistAndPlay(album,filter=null){closeAlbumMenu();if(!playerId||!album?.[6])return;try{if(filter){await rpc(playerId,['playlistcontrol','cmd:load',filter]);await refreshStatus()}else await loadAlbum(album);setConnection('Queue cleared; playing '+album[0]+(filter?' — selected disc':' from the beginning'),true)}catch(_){setConnection('Could not clear playlist and play album',false);scheduleReconnect()}}
 let trackRequest=0,trackAlbum=null;
 function closeTrackList(){trackRequest++;trackAlbum=null;trackOverlay.hidden=true;trackSpotifyLink.hidden=true;trackSpotifyLink.removeAttribute('href');trackList.replaceChildren()}
 // The LMS track query defaults to title order. Keep disc order, then track
@@ -1194,7 +1247,7 @@ async function openQueue(){if(!playerId)return;const request=++queueRequest;queu
 function beginQueueGesture(event){if(event.button!==0)return;queueGesture={id:event.pointerId,y:event.clientY};event.currentTarget.setPointerCapture?.(event.pointerId)}
 function finishQueueGesture(event,opening){if(!queueGesture||event.pointerId!==queueGesture.id)return;const distance=queueGesture.y-event.clientY;queueGesture=null;if((opening&&distance>35)||(!opening&&distance<-35))opening?openQueue():closeQueue()}
 queueOpen.addEventListener('pointerdown',beginQueueGesture);queueOpen.addEventListener('pointerup',event=>finishQueueGesture(event,true));queueOpen.onclick=openQueue;queueGrip.addEventListener('pointerdown',beginQueueGesture);queueGrip.addEventListener('pointerup',event=>finishQueueGesture(event,false));queueGrip.onclick=closeQueue;queueClose.onclick=closeQueue;queueScrim.onclick=closeQueue;playerSelect.addEventListener('change',closeQueue);document.addEventListener('keydown',event=>{if(event.key==='Escape'&&queueDrawer.classList.contains('is-open')){event.stopImmediatePropagation();closeQueue();queueOpen.focus()}},true);
-clearPlayButton.onclick=()=>clearPlaylistAndPlay(menuAlbum);playNowButton.onclick=()=>playAlbumNow(menuAlbum);playNextButton.onclick=()=>queueAlbum(menuAlbum,true);addQueueButton.onclick=()=>queueAlbum(menuAlbum,false);trackListOpen.onclick=()=>showTrackList(menuAlbum);trackPlayNow.onclick=async()=>{const album=trackAlbum;if(!album||!playerId||trackPlayNow.disabled)return;trackPlayNow.disabled=true;try{if(album[13]==='spotify')await loadAlbum(album);else await playAlbumNow(album);if(trackAlbum===album)closeTrackList()}catch(_){if(trackAlbum===album){trackStatus.textContent='Could not play album. Please try again.';trackPlayNow.disabled=false}}};trackClose.onclick=closeTrackList;trackOverlay.onclick=event=>{if(event.target===trackOverlay)closeTrackList()};
+clearPlayButton.onclick=()=>runAlbumMenuAction(clearPlaylistAndPlay);playNowButton.onclick=()=>runAlbumMenuAction(playAlbumNow);playNextButton.onclick=()=>runAlbumMenuAction((album,filter)=>queueAlbum(album,true,filter));addQueueButton.onclick=()=>runAlbumMenuAction((album,filter)=>queueAlbum(album,false,filter));trackListOpen.onclick=()=>showTrackList(menuAlbum);trackPlayNow.onclick=async()=>{const album=trackAlbum;if(!album||!playerId||trackPlayNow.disabled)return;trackPlayNow.disabled=true;try{if(album[13]==='spotify')await loadAlbum(album);else await playAlbumNow(album);if(trackAlbum===album)closeTrackList()}catch(_){if(trackAlbum===album){trackStatus.textContent='Could not play album. Please try again.';trackPlayNow.disabled=false}}};trackClose.onclick=closeTrackList;trackOverlay.onclick=event=>{if(event.target===trackOverlay)closeTrackList()};
 function cancelLongPress(){clearTimeout(longPressTimer);longPressTimer=0;longPressAlbum=null}
 document.addEventListener('pointerdown',event=>{if(randomAnimating)return;const element=event.target.closest('.bf-album');if(!element)return;const index=Number(element.dataset.index);longPressAlbum=albums[index];longPressX=event.clientX;longPressY=event.clientY;longPressTimer=setTimeout(()=>{if(!longPressAlbum)return;dragging=false;moved=true;stage.classList.remove('is-dragging');openAlbumMenu(longPressAlbum,event);cancelLongPress()},550)},true);
 document.addEventListener('pointermove',event=>{if(longPressTimer&&Math.hypot(event.clientX-longPressX,event.clientY-longPressY)>10)cancelLongPress()},true);

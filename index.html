@@ -10,7 +10,7 @@
   <title>Lyrion Carousel</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/lyrion-carousel-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/album-browser.css?v=recently-added-1">
+  <link rel="stylesheet" href="css/album-browser.css?v=disc-playback-1">
   <link rel="stylesheet" href="css/shelf.css?v=shelf-variety-catalogue-1">
   <link rel="stylesheet" href="css/realistic-case.css?v=shelf-only-1">
   <link rel="stylesheet" href="css/settings.css?v=forum-project-link-2">
@@ -84,7 +84,7 @@
       </div>
     </div>
     <div class="bf-search-overlay" hidden><div class="bf-search-panel"><div class="bf-search-row"><input class="bf-search-input" type="search" placeholder="Search albums or artists" autocomplete="off" aria-label="Search albums or artists"><button class="bf-search-close" type="button" aria-label="Close search">×</button></div><div class="bf-alphabet" aria-label="Jump by artist initial"></div><div class="bf-search-status">Type to search, or choose an artist initial.</div><div class="bf-search-results"></div></div></div>
-    <div class="bf-album-menu" role="menu" aria-label="Album actions" hidden><strong class="bf-album-menu-title"></strong><button class="bf-clear-play" type="button" role="menuitem">Clear playlist and play album</button><button class="bf-play-now" type="button" role="menuitem">Play now</button><button class="bf-play-next" type="button" role="menuitem">Play next</button><button class="bf-add-queue" type="button" role="menuitem">Add to queue</button><button class="bf-track-list-open" type="button" role="menuitem">Album Information</button></div>
+    <div class="bf-album-menu" role="menu" aria-label="Album actions" hidden><strong class="bf-album-menu-title"></strong><label class="bf-album-disc-label" hidden>Play or queue<select class="bf-album-disc" aria-label="Album or disc"></select></label><button class="bf-clear-play" type="button" role="menuitem">Clear queue and play album</button><button class="bf-play-now" type="button" role="menuitem">Replace current album and play</button><button class="bf-play-next" type="button" role="menuitem">Play after current album</button><button class="bf-add-queue" type="button" role="menuitem">Add album to end of queue</button><button class="bf-track-list-open" type="button" role="menuitem">View album information</button></div>
     <div class="bf-track-overlay" role="dialog" aria-modal="true" aria-labelledby="bf-track-title" hidden><div class="bf-track-panel"><div class="bf-track-heading"><div><span class="bf-settings-kicker">Album Information</span><h2 id="bf-track-title"></h2><span class="bf-track-details"></span><a class="bf-track-spotify-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Find album on Spotify ↗</a></div><div class="bf-track-heading-controls"><button class="bf-track-play-now" type="button" aria-label="Play album now" title="Play now">▶</button><button class="bf-track-close" type="button" aria-label="Close album information">×</button></div></div><div class="bf-track-status" role="status" aria-live="polite">Loading tracks…</div><ol class="bf-track-list"></ol></div></div>
     <div class="bf-stage cursor-interaction" role="listbox" aria-label="Albums"></div>
     <div class="bf-front-preview" aria-hidden="true" hidden><div class="bf-front-case" tabindex="0" aria-label="Album cover. Swipe left or right to browse albums; tap to close; long press for album actions" title="Tap to close; drag to browse; long press for album actions"><div class="bf-front-art" aria-hidden="true"></div><button class="bf-front-play" type="button" aria-label="Play album" title="Play album">▶</button></div></div>
@@ -108,6 +108,6 @@
   </section>
 </div>
 <script src="js/resilience.js?v=0.11.0"></script>
-<script type="module" src="js/settings.js?v=shelf-variety-1"></script><script type="module" src="js/app.js?v=shelf-variety-catalogue-1"></script><script type="module" src="js/screen-sleep.js?v=0.11.0"></script><script type="module" src="js/performance.js?v=phase4-profiler-refresh-2"></script>
+<script type="module" src="js/settings.js?v=shelf-variety-1"></script><script type="module" src="js/app.js?v=disc-playback-1"></script><script type="module" src="js/screen-sleep.js?v=0.11.0"></script><script type="module" src="js/performance.js?v=phase4-profiler-refresh-2"></script>
 </body>
 </html>

@@ -22,6 +22,18 @@ A short click or tap closes a non-playing album preview. The playing cover stays
 
 The detail area shows the album under the pointer; outside the shelf it shows the playing album, or clears when nothing is playing. Track details and progress appear only for the playing album. The heading stays at the same vertical position in both states.
 
+## Album playback menu
+
+Hold or right-click an album to open its actions:
+
+- **Clear queue and play album** starts the album from the beginning and removes the existing queue.
+- **Replace current album and play** removes the current album's contiguous tracks, starts the selected album and keeps the rest of the queue.
+- **Play album after current album** inserts it after the remaining tracks of the current album.
+- **Add album to end of queue** appends it without interrupting playback.
+- **View album information** opens the track list and album details.
+
+For multi-disc library albums, **Play or queue** defaults to **Full album**. Select **Disc 1**, **Disc 2**, etc. to apply any of the four playback/queue actions to that disc alone. Disc choices and any disc titles come from LMS track tags; tracks play in disc/track order. Disc selection resets to the full album each time the menu opens. If disc information cannot be loaded, full-album actions remain available. Spotify retains its existing album playback and information actions.
+
 ## Shelf display and cover resolution
 
 Carousel uses a single **Shelf** display. **Settings → Displayed albums** controls shelf density. Existing obsolete browser display-mode preferences are ignored automatically.

@@ -24,6 +24,7 @@ export async function runShelfBrowserTests() {
     id:index + 1, disccount:multiDisc&&index%4===0?2:1, album:'Fixture album ' + index, artist:'Fixture artist', textkey:'F'
   }));
   const rpc = async (_, command) => {
+    if(command[0]==='tracks')return {count:4,titles_loop:[{id:4,disc:2,tracknum:2},{id:1,disc:1,tracknum:1},{id:3,disc:2,tracknum:1,discsubtitle:'Bonus tracks'},{id:2,disc:1,tracknum:2}]};
     if (command[0] === 'albums') return {count:catalogue.length, albums_loop:catalogue.slice(command[1], command[1] + command[2])};
     throw Error('Unexpected LMS command: ' + JSON.stringify(command));
   };
@@ -40,6 +41,7 @@ export async function runShelfBrowserTests() {
   const api = new Function(...Object.keys(env), app + `
     IDLE_RETURN_MS=0; FRONT_TIMEOUT_MS=0;
     return {
+      menu:(index,event)=>openAlbumMenu(albums[index],event),closeMenu:closeAlbumMenu,
       loadInitialCatalogue,setDisplayOrder,draw,applyStatus,ensurePlayingCover,centreAlbumIndex,
       set(index,pinned=false){
         cancelFollowAnimation();clearTimeout(wheelTimer);wheelTimer=0;
@@ -225,5 +227,19 @@ export async function runShelfBrowserTests() {
   await settle();
   assert(preview.hidden&&!api.state().raf,'Timeout hides only after reverse closing and leaves no animation loop');
   api.timeout(0);api.set(0,true);api.open(0);
+  await api.menu(0,{clientX:innerWidth-1,clientY:innerHeight-1});
+  const menu=document.querySelector('.bf-album-menu'),discSelect=document.querySelector('.bf-album-disc');
+  const menuBounds=menu.getBoundingClientRect();
+  assert(menuBounds.left>=11&&menuBounds.right<=innerWidth-11&&menuBounds.top>=11&&menuBounds.bottom<=innerHeight-11,'Album menu stays inside viewport at bottom-right edge');
+  assert(document.activeElement===document.querySelector('.bf-clear-play'),'Menu focuses its visible primary playback action');
+  assert(document.querySelector('.bf-album-disc-label').hidden!==multiDisc,'Disc selector appears only for multi-disc library albums');
+  if(multiDisc){
+    assert(discSelect.options.length===3&&discSelect.value==='','Multi-disc menu defaults to full album with two actual discs');
+    discSelect.value='2';discSelect.dispatchEvent(new Event('change'));
+    assert(document.querySelector('.bf-add-queue').textContent==='Add disc 2 to end of queue','Disc selection updates visible queue label');
+    await api.menu(0,{clientX:0,clientY:0});
+    assert(discSelect.value==='','Reopening menu resets full-album selection');
+  }
+  api.closeMenu();
   return {checks,multiDisc,viewport:[innerWidth,innerHeight]};
 }

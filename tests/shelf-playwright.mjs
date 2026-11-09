@@ -67,6 +67,13 @@ export async function runShelfGestures(page) {
       const afterKey=await page.evaluate(() => shelfBrowser.state());
       assert(Math.abs(Math.abs(afterKey.position-afterWheel.position)-1)<.001,'Trusted keyboard moves one position');
     }
+    if(viewport.multiDisc){
+      await page.evaluate(()=>shelfBrowser.menu(0,{clientX:innerWidth-1,clientY:innerHeight-1}));
+      await page.locator('.bf-album-disc').selectOption('2');
+      assert(await page.locator('.bf-clear-play').textContent()==='Clear queue and play disc 2','Trusted disc selection updates playback action');
+      await page.keyboard.press('Escape');
+      assert(await page.locator('.bf-album-menu').isHidden(),'Escape dismisses the multi-disc menu');
+    }
     reports.push({...report,trustedGestures:true});
   }
   return reports;

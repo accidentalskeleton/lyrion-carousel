@@ -81,9 +81,9 @@ export async function runTests(sources) {
   const rpcCalls=[];
   const catalogueEvents=[];
   let catalogueReconcileChanged=true;
-  let tracksFixture=null,spottyCapability=1;
+  let tracksFixture=null,statusFixture=null,tracksHandler=null,spottyCapability=1;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
-  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='can')return {_can:spottyCapability};if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return {mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return {titles_loop:tracksFixture||[],count:tracksFixture?.length||0};if(cmd[0]==='albums'){
+  const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='can')return {_can:spottyCapability};if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return statusFixture||{mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return tracksHandler?tracksHandler(cmd):{titles_loop:(tracksFixture||[]).slice(cmd[1],cmd[1]+cmd[2]),count:tracksFixture?.length||0};if(cmd[0]==='albums'){
     const sort=cmd.find(arg=>typeof arg==='string'&&arg.startsWith('sort:'));
     const ordered=sort==='sort:recentlyplayed'?library.slice().reverse():library;
     return {count:ordered.length,albums_loop:ordered.slice(cmd[1],cmd[1]+cmd[2])};
@@ -122,7 +122,7 @@ export async function runTests(sources) {
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values)playing=values.playing;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -1356,7 +1356,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=shelf-variety-catalogue-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=disc-playback-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1520,6 +1520,60 @@ export async function runTests(sources) {
     try{browser.start({targetFps:0})}catch(_){invalidFps=true}
     assert(invalidFps&&!browser.active,'profiler rejects invalid refresh targets');
   }
+
+  api.set({playerId:"test-player"});
+  tracksFixture=[{id:4,disc:2,tracknum:2},{id:2,disc:1,tracknum:2},{id:3,disc:2,tracknum:1},{id:1,disc:1,tracknum:1}];
+  const multiAlbum=albumForTrackList.slice();multiAlbum[17]=2;
+  tracksFixture.find(track=>track.id===3).discsubtitle='Bonus tracks';
+  await api.openAlbumMenu(multiAlbum,{clientX:980,clientY:590});
+  const discSelect=element('.bf-album-disc');
+  assert(!element('.bf-album-disc-label').hidden&&!discSelect.disabled,'multi-disc menu offers a disc selector');
+  assert(discSelect.children.map(option=>option.textContent).join('|')==='Full album|Disc 1|Disc 2 — Bonus tracks','disc choices use actual LMS discs and subtitles in order');
+  assert(api.selectedAlbumFilter()===null,'full album remains the default');
+  discSelect.value='2';discSelect.onchange();
+  const discFilter=api.selectedAlbumFilter();
+  assert(discFilter==='track_id:3,4','selected disc contains only its tracks in track order');
+  assert(element('.bf-play-next').textContent==='Play disc 2 after current album','action labels identify selected disc and queue position');
+  statusFixture={mode:'play',playlist_cur_index:1,playlist_loop:[{album_id:20},{album_id:20},{album_id:21}]};
+  let actionStart=rpcCalls.length;
+  await api.queueAlbum(multiAlbum,false,discFilter);
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd.join('|')==='playlistcontrol|cmd:add|track_id:3,4'),'disc append sends only selected track IDs');
+  statusFixture={...statusFixture,playlist_loop:[{album_id:20},{album_id:21}]};
+  actionStart=rpcCalls.length;
+  await api.queueAlbum(multiAlbum,true,discFilter);
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd.join('|')==='playlistcontrol|cmd:insert|index:2|track_id:3,4'),'disc play-next inserts after current album');
+  statusFixture={mode:'play',playlist_cur_index:1,playlist_loop:[{album_id:20},{album_id:20},{album_id:21}]};
+  actionStart=rpcCalls.length;
+  await api.playAlbumNow(multiAlbum,discFilter);
+  const replaceCalls=rpcCalls.slice(actionStart).filter(cmd=>cmd[0]==='playlistcontrol');
+  assert(replaceCalls.map(cmd=>cmd.join('|')).join(';')==='playlistcontrol|cmd:delete|index:1;playlistcontrol|cmd:delete|index:0;playlistcontrol|cmd:insert|index:0|track_id:3,4','replace-current preserves remaining albums and inserts selected disc');
+  actionStart=rpcCalls.length;
+  await api.clearPlaylistAndPlay(multiAlbum,discFilter);
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd.join('|')==='playlistcontrol|cmd:load|track_id:3,4'),'clear-and-play loads selected disc');
+  statusFixture={playlist_loop:[]};actionStart=rpcCalls.length;
+  await api.playAlbumNow(multiAlbum,discFilter);
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd.join('|')==='playlistcontrol|cmd:load|track_id:3,4'),'replace-current starts selected disc when queue is empty');
+  statusFixture=null;
+  await api.openAlbumMenu(albumForTrackList,{clientX:0,clientY:0});
+  assert(element('.bf-album-disc-label').hidden&&api.selectedAlbumFilter()===null,'single-disc menu resets selection and hides disc controls');
+  tracksFixture=Array.from({length:501},(_,i)=>({id:i+1,disc:i<500?1:3,tracknum:i+1}));
+  await api.openAlbumMenu(multiAlbum,{clientX:0,clientY:0});
+  assert(discSelect.children.map(option=>option.textContent).join('|')==='Full album|Disc 1|Disc 3','disc discovery pages tracks and preserves nonconsecutive disc numbers');
+  tracksHandler=async()=>{throw Error('Offline')};
+  await api.openAlbumMenu(multiAlbum,{clientX:0,clientY:0});
+  assert(discSelect.disabled&&api.selectedAlbumFilter()===null&&discSelect.children[0].textContent.includes('unavailable'),'failed disc lookup preserves full-album playback');
+  let resolveTracks;tracksHandler=()=>new Promise(resolve=>{resolveTracks=resolve});
+  const staleMenu=api.openAlbumMenu(multiAlbum,{clientX:0,clientY:0});
+  await api.openAlbumMenu(albumForTrackList,{clientX:0,clientY:0});
+  resolveTracks({count:1,titles_loop:[{id:1,disc:2}]});await staleMenu;
+  assert(element('.bf-album-disc-label').hidden&&discSelect.children.length===0,'stale disc response cannot alter a replacement menu');
+  tracksHandler=null;
+  const spotifyMenuAlbum=multiAlbum.slice();spotifyMenuAlbum[13]='spotify';actionStart=rpcCalls.length;
+  await api.openAlbumMenu(spotifyMenuAlbum,{clientX:0,clientY:0});
+  assert(element('.bf-album-disc-label').hidden&&rpcCalls.length===actionStart,'Spotify does not issue local disc queries');
+  api.closeAlbumMenu();
+
+
 
   return checks;
 }

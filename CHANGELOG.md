@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add a full-album or individual-disc selector to multi-disc library album menus, using LMS disc tags and optional disc titles. Apply the selection to clear-and-play, replace-current, play-after-current and append-to-queue actions; retain full-album defaults and clearer action labels. Allow replace-current playback when the queue is empty.
+
 ## [0.11.7] - 2026-11-08
 
 - Consolidate Windows ZIP, portable, service and source-installation instructions into one dedicated guide; update README and deployment links and package the same guide in Windows release ZIPs.
