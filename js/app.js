@@ -755,9 +755,15 @@ function openFrontPreview(album,index,animate=false){
     frontPreviewIndex=index;frontPreviewAlbum=album;prefetchCoverWindow(index);
     frontArt.style.background=album[2];frontPreview.hidden=false;frontPreview.dataset.visible='true';
     frontPreview.setAttribute('aria-hidden','false');frontPreview.dataset.pinned=String(isPlayingCoverPinned());
-    syncShelfDom();if(coverOpening)schedule();resumeFrontTimeout();if(!hasPlaybackAlbum())updateMeta(true);
+    updateFrontPlaybackButton();syncShelfDom();if(coverOpening)schedule();resumeFrontTimeout();if(!hasPlaybackAlbum())updateMeta(true);
 }
-frontPlay.onclick=async event=>{event.stopPropagation();const album=frontPreviewAlbum;if(!album)return;try{await loadAlbum(album);closeFrontPreview()}catch(_){setConnection('Could not play album',false);scheduleReconnect()}};
+function updateFrontPlaybackButton(){
+    const current=isPlayingCoverPinned(),label=current?(playing?'Pause player':'Resume player'):'Play album';
+    if(frontPlay.getAttribute('aria-label')===label)return;
+    frontPlay.setAttribute('aria-label',label);frontPlay.title=label;
+    frontPlay.innerHTML='<span aria-hidden="true">'+(current&&playing?'❚❚':'▶')+'</span>';
+}
+frontPlay.onclick=async event=>{event.stopPropagation();const album=frontPreviewAlbum;if(!album)return;try{if(isPlayingCoverPinned())await togglePlayback();else{await loadAlbum(album);closeFrontPreview()}}catch(_){setConnection('Could not play album',false);scheduleReconnect()}};
 // Dismiss from the exposed shelf without opening or playing the spine underneath.
 root.addEventListener('pointerdown',event=>{
     if(frontPreview.hidden||isPlayingCoverPinned()||event.button!==0)return;
@@ -1403,6 +1409,7 @@ function updateMeta(force=false){
     const playingIndex=hasPlaybackAlbum()?playingCarouselIndex():-1;
     const previewIndex=!frontPreview.hidden&&frontPreviewAlbum?indexForAlbumId(frontPreviewAlbum[6]):-1;
     const displayIndex=hoveredAlbumIndex>=0?hoveredAlbumIndex:playingIndex>=0?playingIndex:previewIndex;
+    updateFrontPlaybackButton();
     play.setAttribute('aria-label',playing?'Pause player':'Resume player');
     play.innerHTML='<span aria-hidden="true">'+(playing?'❚❚':'▶')+'</span>';
     if(!force&&displayIndex===lastSelected)return;

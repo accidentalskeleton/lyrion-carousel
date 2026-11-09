@@ -234,8 +234,10 @@ export async function runShelfBrowserTests() {
   await new Promise(resolve=>setTimeout(resolve,60));
   assert(preview.querySelector('.bf-front-case')===pausedCover&&!preview.hidden,'Paused status retains the existing cover DOM');
   assert(document.querySelector('.bf-play').getAttribute('aria-label')==='Resume player','Paused player still exposes Resume');
+  assert(document.querySelector('.bf-front-play').innerHTML===document.querySelector('.bf-play').innerHTML&&document.querySelector('.bf-front-play').getAttribute('aria-label')==='Resume player','Paused cover button matches main control');
   api.status('play');
   assert(!preview.hidden,'Resuming retains the open case');
+  assert(document.querySelector('.bf-front-play').innerHTML===document.querySelector('.bf-play').innerHTML&&document.querySelector('.bf-front-play').getAttribute('aria-label')==='Pause player','Playing cover button matches main control');
   await api.menu(0,{clientX:innerWidth-1,clientY:innerHeight-1});
   const menu=document.querySelector('.bf-album-menu'),discSelect=document.querySelector('.bf-album-disc');
   const menuBounds=menu.getBoundingClientRect();

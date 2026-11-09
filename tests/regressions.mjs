@@ -1383,7 +1383,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=disc-playback-pause-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=disc-playback-pause-2')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1602,6 +1602,27 @@ export async function runTests(sources) {
 
 
 
+
+  api.set({playerId:'test-player'});
+  const currentCoverAlbum=api.state().albums.find(a=>String(a?.[6])==='20');
+  const currentCoverIndex=api.state().albums.indexOf(currentCoverAlbum);
+  statusFixture={mode:'play',playlist_loop:[{album_id:20,album:'Album 020'}]};
+  api.applyStatus(statusFixture);api.openFrontPreview(currentCoverAlbum,currentCoverIndex);
+  const coverButton=element('.bf-front-play');
+  assert(coverButton.innerHTML===element('.bf-play').innerHTML&&coverButton.getAttribute('aria-label')==='Pause player','playing cover icon and accessible label match main control');
+  statusFixture={...statusFixture,mode:'pause'};actionStart=rpcCalls.length;
+  await coverButton.onclick({stopPropagation(){}});
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='pause')&&!rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='playlistcontrol'),'current cover pauses without reloading or clearing queue');
+  assert(coverButton.innerHTML===element('.bf-play').innerHTML&&coverButton.getAttribute('aria-label')==='Resume player'&&!preview.hidden,'paused cover shows matching play icon and remains open');
+  statusFixture={...statusFixture,mode:'play'};actionStart=rpcCalls.length;
+  await coverButton.onclick({stopPropagation(){}});
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='pause')&&!rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='playlistcontrol'),'paused cover resumes without restarting album');
+  assert(coverButton.getAttribute('aria-label')==='Pause player','resuming updates cover button back to pause');
+  const otherCoverIndex=api.state().albums.findIndex(a=>String(a?.[6])!=='20');
+  api.openFrontPreview(api.state().albums[otherCoverIndex],otherCoverIndex);
+  assert(coverButton.getAttribute('aria-label')==='Play album'&&coverButton.innerHTML.includes('▶'),'other album previews always offer album playback');
+  actionStart=rpcCalls.length;await coverButton.onclick({stopPropagation(){}});
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='playlistcontrol'&&cmd.includes('cmd:load')),'other album cover still loads chosen album');
 
   return checks;
 }
