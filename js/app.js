@@ -725,7 +725,7 @@ function completeFrontPreviewClose(suppressReopen){
     frontPreview.dataset.visible='false';frontPreview.setAttribute('aria-hidden','true');
     if(boundedShelf())target=shelfPosition(target);
     if(!hasPlaybackAlbum())updateMeta(true);
-    if(!suppressReopen&&KEEP_PLAYING_OPEN&&hasPlaybackAlbum()&&playingCarouselIndex()>=0
+    if(!suppressReopen&&KEEP_PLAYING_OPEN&&hasPlaybackAlbum()&&playingCarouselIndex()>=0)
         Promise.resolve().then(()=>{if(frontPreview.hidden)ensurePlayingCover()});
 }
 function closeFrontPreview(suppressReopen=false,animate=false){
