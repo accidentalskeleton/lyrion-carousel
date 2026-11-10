@@ -8,6 +8,13 @@ Lyrion Carousel is a standalone album-browsing and playback-control interface fo
 
 Current application version: **0.12.0**. The canonical version is stored in [`VERSION`](VERSION). Do not change the application version as part of ordinary development work; it is changed only when explicitly requested.
 
+## Contents
+
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Documentation](#documentation)
+- [License](#license)
+
 ## Features
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
@@ -49,13 +56,6 @@ Current application version: **0.12.0**. The canonical version is stored in [`VE
 https://github.com/user-attachments/assets/26f048b1-0845-4cb1-b619-2fec704d327a
 
 [Download the feature tour](assets/lyrion-carousel-feature-tour.mp4) · 2 min 33 sec · captioned · no soundtrack
-
-## Contents
-
-- [Features](#features)
-- [Quick start](#quick-start)
-- [Documentation](#documentation)
-- [License](#license)
 
 ## Quick start
 
