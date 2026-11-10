@@ -1,9 +1,6 @@
 name: Build Windows server and optional service ZIP
 
 on:
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
   release:
     types: [published]
 
