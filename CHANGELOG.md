@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+## [0.12.0] - 2026-11-10
+
 - Refresh the README shelf screenshot with Shelf variety enabled and replace the short tour with a captioned, chaptered walkthrough of current features, embedded using GitHub’s inline video player with a download fallback.
 
 - Pause a non-playing cover’s remaining preview countdown while menus, Settings, search, album information or the Now Playing queue are open. Resume the remaining time only after the last popup closes.
