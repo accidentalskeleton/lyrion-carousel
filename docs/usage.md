@@ -20,6 +20,8 @@ After the idle delay, the shelf returns to the playing album and opens its cover
 
 A short click or tap closes a non-playing album preview. The current cover remains open while paused, including after a reload. The playing or paused cover stays open on taps, clicks and Enter/Space; closing another preview restores the playing cover. Hold a spine or cover for roughly half a second to open album actions. The current album’s cover button mirrors the main Play/Pause control and resumes from the paused position. Other covers offer Play album to load that album. Search, Settings and Album Information appear above the shelf, and their input controls do not navigate the shelf.
 
+Selecting an LMS search result scrolls to the album and opens its cover. It uses the usual preview timeout; closing it restores the current playing or paused cover. Selecting the current album keeps its cover pinned.
+
 The detail area shows the album under the pointer; outside the shelf it shows the playing album, or clears when nothing is playing. Track details and progress appear only for the playing album. The heading stays at the same vertical position in both states.
 
 ## Album playback menu
