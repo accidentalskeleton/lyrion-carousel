@@ -112,7 +112,7 @@ export async function runTests(sources) {
       return metadataFetch(url,...args);
     },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
-    createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]}),
+    createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
@@ -1383,7 +1383,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=clear-search-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=spotify-search-preview-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1662,6 +1662,19 @@ export async function runTests(sources) {
   api.closeSearch();api.openSearch();
   assert(element('.bf-search-input').value===''&&element('.bf-search-results').children.length===0,'new search clears previous query and results');
   assert(element('.bf-search-status').textContent==='Type at least two characters.'&&!element('.bf-search-overlay').hidden,'new search resets its status and opens normally');
+  api.setSourceForTest('spotify');api.set({playerId:'test-player',playing:false,playingAlbumId:null});api.closeFrontPreview(true);
+  statusFixture={mode:'play',remote:1,playlist_loop:[{album:'The Colour And The Shape',artist:'Foo Fighters',title:'Doll',url:'spotify:track:fixture'}]};
+  const spotifySearchAlbum=['The Colour And The Shape','Foo Fighters','','','','','spotty-item:search-fixture',true,'','','','',undefined,'spotify','search-fixture','search-preview'];
+  actionStart=rpcCalls.length;
+  await settle(api.selectSearchAlbum(spotifySearchAlbum));
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===spotifySearchAlbum,'Spotify search selection opens the found cover');
+  assert(api.state().frontTimer!==0&&element('.bf-front-play').getAttribute('aria-label')==='Play album','Spotify search preview has normal timeout and explicit Play button');
+  assert(!rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')),'Spotify search selection never changes playback');
+  const spotifyPreviewTimeout=timers.get(api.state().frontTimer);await settle(spotifyPreviewTimeout());
+  assert(preview.hidden,'Spotify search preview closes after normal timeout');
+  await settle(api.selectSearchAlbum(spotifySearchAlbum));actionStart=rpcCalls.length;
+  await element('.bf-front-play').onclick({stopPropagation(){}});
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd.join('|')==='spotty|playlist|play|item_id:search-fixture'),'Spotify album plays only when its cover Play button is clicked');
   return checks;
 }
 
