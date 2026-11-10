@@ -1282,8 +1282,24 @@ export async function runTests(sources) {
     assert(saved.length===1&&saved[0].title==='Saved Album'&&spottyCalls.some(c=>c.includes('item_id:7')),'saved Spotify albums use discovered Albums node');
     const searched=await spotty.searchSpotifyAlbums('player','needle');
     assert(searched.length===1&&searched[0].title==='Search Album','Spotify full-catalogue album search');
+    const menuAlbum=spotty.normalizeSpottyAlbum({type:'playlist',text:'Correct Album\nCorrect Artist',params:{item_id:'temporary-position'},presetParams:{favorites_title:'Correct Album by Correct Artist',favorites_url:'spotify:album:'+spotifyId}});
+    assert(menuAlbum.title==='Correct Album'&&menuAlbum.artist==='Correct Artist'&&menuAlbum.spottyItemId==='temporary-position'&&menuAlbum.id==='spotify:album:'+spotifyId,'Spotty rich menu preserves stable album identity separately from navigation position');
+    assert(spottyCalls.some(cmd=>cmd.includes('type:album')&&cmd.includes('menu:1'))&&spottyCalls.some(cmd=>cmd.includes('item_id:7')&&cmd.includes('menu:1')),'search and saved albums request stable URI metadata from rich menus');
+    await spotty.playSpotifyAlbum('player',{spottyItemId:'wrong-position',spotifyUrl});
+    assert(spottyCalls.some(cmd=>cmd.join('|')==='playlist|play|spotify:album:'+spotifyId),'Spotify playback uses stable album URI and ignores stale navigation positions');
     await spotty.playSpotifyAlbum('player','album-1');
     assert(spottyCalls.some(c=>c[0]==='spotty'&&c[1]==='playlist'&&c.includes('item_id:album-1')),'Spotify playback stays in Spotty/LMS');
+    const stableDetailCalls=[];
+    const stableDetail=new Function('rpc',plain(sources.spotify)+';return {saveSpotifyAlbum,spotifyAlbumInformation};')(async(_,cmd)=>{
+      stableDetailCalls.push(cmd);
+      if(cmd.includes('search:spotify:album:'+spotifyId))return {items_loop:[{id:'stable-save',name:'Add Album to Library'},{type:'audio',name:'1 Exact album track'}]};
+      if(cmd.includes('item_id:stable-save'))return {};
+      return {items_loop:[{id:'search-root',name:'Search',type:'search'}]};
+    });
+    await stableDetail.saveSpotifyAlbum('player',{spottyItemId:'wrong-position',spotifyUrl});
+    const stableInfo=await stableDetail.spotifyAlbumInformation('player',{spottyItemId:'wrong-position',spotifyUrl});
+    assert(stableDetailCalls.some(cmd=>cmd.includes('search:spotify:album:'+spotifyId))&&!stableDetailCalls.some(cmd=>cmd.includes('item_id:wrong-position')),'album information and saving resolve the stable URI rather than a reordered menu item');
+    assert(stableInfo.tracks[0]?.title==='Exact album track'&&stableDetailCalls.some(cmd=>cmd.includes('item_id:stable-save')),'stable album lookup retains track details and native library-save action');
     await spotty.saveSpotifyAlbum('player','album-1');
     assert(spottyCalls.some(c=>c.includes('item_id:9')),'Spotify searched album save follows Spotty action');
     const info=await spotty.spotifyAlbumInformation('player','album-1');
@@ -1383,7 +1399,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=spotify-search-preview-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=stable-spotify-album-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
