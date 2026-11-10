@@ -52,6 +52,8 @@ numbers remain available with variety off; catalogue visibility has its own swit
 
 **Settings → Cache → Clear album cache** uses an inline confirmation and removes artwork, resized covers and derived colours, fonts and colour indexes. Metadata rebuilds as needed; colour ordering prepares it for the whole library. The Cache tab starts at a 512 MB soft limit by default; the browser may raise or lower it, but never above the server-only 2 GB hard limit. Set `CACHE_LIMIT_MB` and `CACHE_HARD_LIMIT_MB` in `/etc/default/lyrion-carousel` (or pass the corresponding command-line options) before starting the service to change those defaults.
 
+Album ordering is saved separately for Library and Spotify. Switching sources or reloading restores the selected source’s last order; Recently Added remains a Library-only option.
+
 ## Colour ordering
 
 Choose **Colour** in the album-order menu to arrange spines from red through yellow, green, blue and violet. Nearly neutral colours follow, dark to light; albums with unavailable artwork sort last. Equal colours are ordered by artist and title. The choice persists across reloads and catalogue refreshes.
