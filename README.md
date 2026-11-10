@@ -1,6 +1,8 @@
 ![Lyrion Carousel shelf with varied spine lettering, catalogue codes and wider multi-disc cases](assets/lyrion-carousel-banner.jpg)
 
-[Watch the feature tour](assets/lyrion-carousel-feature-tour.mp4) · 2 min 34 sec · captioned · no soundtrack
+https://github.com/user-attachments/assets/9ad12ed4-dc04-4155-9ef6-a6e04adc32bc
+
+[Download the feature tour](assets/lyrion-carousel-feature-tour.mp4) · 2 min 34 sec · captioned · no soundtrack
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/stuliet)
 

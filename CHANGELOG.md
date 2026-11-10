@@ -4,7 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
-- Refresh the README shelf screenshot with Shelf variety enabled and replace the short tour with a captioned, chaptered walkthrough of current features.
+- Refresh the README shelf screenshot with Shelf variety enabled and replace the short tour with a captioned, chaptered walkthrough of current features, embedded using GitHub’s inline video player with a download fallback.
 
 - Resolve Spotify albums missing from a browser’s loaded shelf when LMS reports external playback, so independent Carousel instances open and follow the playing cover without sending playback commands.
 
