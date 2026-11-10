@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Show In Absentia open in the README banner with Shelf variety and Artist/Album ordering, and move the embedded feature tour below the feature list.
+
 ## [0.12.0] - 2026-11-10
 
 - Refresh the README shelf screenshot with Shelf variety enabled and replace the short tour with a captioned, chaptered walkthrough of current features, embedded using GitHub’s inline video player with a download fallback.
