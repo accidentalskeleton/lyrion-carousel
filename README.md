@@ -1,8 +1,4 @@
-![Lyrion Carousel shelf with varied spine lettering, catalogue codes and wider multi-disc cases](assets/lyrion-carousel-banner.jpg)
-
-https://github.com/user-attachments/assets/26f048b1-0845-4cb1-b619-2fec704d327a
-
-[Download the feature tour](assets/lyrion-carousel-feature-tour.mp4) · 2 min 33 sec · captioned · no soundtrack
+![Lyrion Carousel with an open In Absentia jewel case, varied spine lettering, catalogue codes and wider multi-disc cases](assets/lyrion-carousel-banner.jpg)
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/stuliet)
 
@@ -47,6 +43,12 @@ Current application version: **0.12.0**. The canonical version is stored in [`VE
 - Album Information for local and Spotify albums, including genre when the upstream metadata provides it;
 - installable/fullscreen-friendly web-app metadata and application icon;
 - zero-idle-loop long-task performance diagnostics.
+
+## Feature tour
+
+https://github.com/user-attachments/assets/26f048b1-0845-4cb1-b619-2fec704d327a
+
+[Download the feature tour](assets/lyrion-carousel-feature-tour.mp4) · 2 min 33 sec · captioned · no soundtrack
 
 ## Contents
 
