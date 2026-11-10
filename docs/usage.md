@@ -20,9 +20,11 @@ After the idle delay, the shelf returns to the playing album and opens its cover
 
 A short click or tap closes a non-playing album preview. The current cover remains open while paused, including after a reload. The playing or paused cover stays open on taps, clicks and Enter/Space; closing another preview restores the playing cover. Hold a spine or cover for roughly half a second to open album actions. The current album’s cover button mirrors the main Play/Pause control and resumes from the paused position. Other covers offer Play album to load that album. Search, Settings and Album Information appear above the shelf, and their input controls do not navigate the shelf.
 
-Each new search opens with a blank query and cleared results. Selecting an LMS search result scrolls to the album and opens its cover. It uses the usual preview timeout; closing it restores the current playing or paused cover. Selecting the current album keeps its cover pinned. Selecting a Spotify search result also opens a timed preview without changing playback. Use the cover’s Play button to start the album through Spotty. Album playback uses its stable Spotify URI so changing search rankings cannot select a different album.
+Each new search opens with a blank query and cleared results. Selecting an LMS search result scrolls to the album and opens its cover. The preview countdown pauses while a popup or dialog is open and resumes its remaining time after the last popup closes. It uses the usual preview timeout; closing it restores the current playing or paused cover. Selecting the current album keeps its cover pinned. Selecting a Spotify search result also opens a timed preview without changing playback. Use the cover’s Play button to start the album through Spotty. Album playback uses its stable Spotify URI so changing search rankings cannot select a different album.
 
 The detail area shows the album under the pointer; outside the shelf it shows the playing album, or clears when nothing is playing. Track details and progress appear only for the playing album. The heading stays at the same vertical position in both states.
+
+The Now Playing queue stays open when you select a track. Its highlight moves to the selected track without rebuilding the list or resetting your scroll position.
 
 ## Album playback menu
 
@@ -51,6 +53,8 @@ numbers remain available with variety off; catalogue visibility has its own swit
 **Settings → Album cover size** selects 128, 256, 384, 512 (default), 768 or 1024 pixels. This controls image resolution, not the displayed case size. Server-generated JPEG variants preserve aspect ratio and never upscale. Originals remain available for spine-colour calculation.
 
 **Settings → Cache → Clear album cache** uses an inline confirmation and removes artwork, resized covers and derived colours, fonts and colour indexes. Metadata rebuilds as needed; colour ordering prepares it for the whole library. The Cache tab starts at a 512 MB soft limit by default; the browser may raise or lower it, but never above the server-only 2 GB hard limit. Set `CACHE_LIMIT_MB` and `CACHE_HARD_LIMIT_MB` in `/etc/default/lyrion-carousel` (or pass the corresponding command-line options) before starting the service to change those defaults.
+
+Album ordering is saved separately for Library and Spotify. Switching sources or reloading restores the selected source’s last order; Recently Added remains a Library-only option.
 
 ## Colour ordering
 
