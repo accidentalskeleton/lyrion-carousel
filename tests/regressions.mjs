@@ -112,19 +112,19 @@ export async function runTests(sources) {
       return metadataFetch(url,...args);
     },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
-    createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
+    createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,resolveSpotifyPlayingAlbum,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,syncFrontTimeoutPause,openQueue,closeQueue,restoreSourceOrders,resolveSpotifyPlayingAlbum,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
-      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,frontTimeoutRemaining,frontTimeoutDeadline,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
   async function settle(promise) {
@@ -1399,7 +1399,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=spotify-follow-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=popup-preview-timeout-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1711,6 +1711,55 @@ export async function runTests(sources) {
   finishStaleLookup({albums:[staleRemote]});for(let step=0;step<100;step++)await Promise.resolve();
   assert(!api.state().albums.some(album=>album[6]===staleRemote[6]),'late Spotify lookup cannot add or reopen an album after playback stops');
   spotifyFollowSearch=null;
+  api.applyStatus({mode:'stop',playlist_loop:[]});api.set({playing:false,playingAlbumId:null});api.setSourceForTest('library');
+  await api.setDisplayOrder('recent');
+  spotifyFollowAlbums=[['Z album','A artist','','','','','spotify:order-z',true,'','','','',undefined,'spotify','order-z'],['A album','Z artist','','','','','spotify:order-a',true,'','','','',undefined,'spotify','order-a']];
+  await settle(api.setCatalogueSource('spotify'));await api.setDisplayOrder('album');
+  assert(api.state().albums[0][0]==='A album','Spotify album order is applied to its catalogue');
+  assert(storage.get('albumBrowserOrderMode:spotify')==='album'&&storage.get('albumBrowserOrderMode:library')==='recent','source order preferences are saved independently');
+  await settle(api.setCatalogueSource('library'));
+  assert(api.state().orderMode==='recent','returning to Library restores its saved Recently Added order');
+  await settle(api.setCatalogueSource('spotify'));
+  assert(api.state().orderMode==='album'&&api.state().albums[0][0]==='A album','returning to Spotify restores its saved album order and sorting');
+  storage.set('albumBrowserOrderMode:library','random');storage.set('albumBrowserOrderMode:spotify','artistAlbum');api.restoreSourceOrders();
+  assert(api.sourceOrdersForTest().library==='random'&&api.sourceOrdersForTest().spotify==='artistAlbum','saved per-source preferences restore after reload');
+  storage.delete('albumBrowserOrderMode:library');storage.delete('albumBrowserOrderMode:spotify');storage.set('albumBrowserOrderMode','colour');api.restoreSourceOrders();
+  assert(api.sourceOrdersForTest().library==='colour'&&api.sourceOrdersForTest().spotify==='artistAlbum','legacy shared ordering migrates to Library without overwriting Spotify default');
+  storage.set('albumBrowserOrderMode:spotify','recent');api.restoreSourceOrders();
+  assert(api.sourceOrdersForTest().spotify==='artistAlbum','unsupported Spotify Recently Added preference falls back safely');
+  api.set({playerId:'test-player',playing:false,playingAlbumId:null});api.setSourceForTest('library');
+  statusFixture={mode:'play',playlist_cur_index:0,playlist_loop:[{album_id:20,title:'First track'},{album_id:20,title:'Second track'}]};
+  await api.openQueue();
+  const queueRows=element('.bf-queue-list').children.slice(),queueButton=queueRows[1].children[0];
+  const queueMutations=[];const replaceQueueRows=element('.bf-queue-list').replaceChildren.bind(element('.bf-queue-list'));
+  element('.bf-queue-list').replaceChildren=(...rows)=>{queueMutations.push(rows);replaceQueueRows(...rows)};
+  element('.bf-queue-list').scrollTop=75;
+  statusFixture={...statusFixture,playlist_cur_index:1};actionStart=rpcCalls.length;
+  await queueButton.onclick();
+  assert(element('.bf-queue-drawer').classList.contains('is-open'),'selecting a queue track keeps the popup displayed');
+  assert(queueMutations.length===0&&element('.bf-queue-list').children[1]===queueRows[1],'track selection preserves existing queue rows without clearing or rebuilding');
+  assert(queueRows[1].classList.contains('is-current')&&!queueRows[0].classList.contains('is-current')&&queueButton.getAttribute('aria-current')==='true','queue highlight moves to selected track in place');
+  assert(element('.bf-queue-list').scrollTop===75,'track selection preserves queue scroll position');
+  assert(rpcCalls.slice(actionStart).filter(cmd=>cmd[0]==='status'&&cmd[2]===1000).length===0,'track selection does not reopen and reload the full queue');
+  api.applyStatus({...statusFixture,playlist_cur_index:0});
+  assert(queueRows[0].classList.contains('is-current')&&queueButton.getAttribute('aria-current')===undefined,'external track changes update queue highlight without replacing rows');
+  api.closeQueue();statusFixture=null;
+  api.closeQueue();api.closeAlbumMenu();api.closeTrackList();api.closeSearch();
+  api.set({playing:false,playingAlbumId:null});api.applySetting('frontTimeout',100);
+  const timedAlbum=api.state().albums[0];api.openFrontPreview(timedAlbum,0);
+  time+=30;await api.openAlbumMenu(timedAlbum,{clientX:100,clientY:100});api.syncFrontTimeoutPause();
+  assert(api.state().frontTimer===0&&api.state().frontTimeoutRemaining===70,'opening an album menu pauses the remaining cover countdown');
+  time+=500;element('.bf-settings-overlay').hidden=false;api.closeAlbumMenu();api.syncFrontTimeoutPause();
+  assert(api.state().frontTimer===0&&api.state().frontTimeoutRemaining===70&&!preview.hidden,'a second popup keeps countdown paused without spending or resetting its remaining time');
+  element('.bf-settings-overlay').hidden=true;api.syncFrontTimeoutPause();
+  assert(api.state().frontTimer!==0&&api.state().frontTimeoutDeadline-time===70,'closing the last popup resumes exactly the remaining countdown');
+  await settle(timers.get(api.state().frontTimer)());
+  assert(preview.hidden,'resumed preview countdown still closes normally');
+  for(const selector of ['.bf-settings-overlay','.bf-search-overlay','.bf-track-overlay','.bf-order-menu','.bf-discovery-menu']){
+    api.openFrontPreview(timedAlbum,0);element(selector).hidden=false;api.syncFrontTimeoutPause();
+    assert(api.state().frontTimer===0&&!preview.hidden,selector+' pauses preview timeout');
+    element(selector).hidden=true;api.syncFrontTimeoutPause();assert(api.state().frontTimer!==0,selector+' resumes preview timeout');
+  }
   return checks;
 }
 
