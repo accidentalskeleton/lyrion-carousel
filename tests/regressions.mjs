@@ -122,7 +122,7 @@ export async function runTests(sources) {
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -1383,7 +1383,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=search-preview-2')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=clear-search-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1656,6 +1656,12 @@ export async function runTests(sources) {
   const interruptedSearch=api.selectSearchAlbum(searchAlbum);await Promise.resolve();
   api.browseWithArrow(1);await settle(interruptedSearch);
   assert(preview.hidden,'explicit keyboard navigation can still interrupt search without opening a stale preview');
+  element('.bf-search-input').value='previous query';
+  element('.bf-search-results').append(new Element('old result'));
+  element('.bf-search-status').textContent='Previous results';
+  api.closeSearch();api.openSearch();
+  assert(element('.bf-search-input').value===''&&element('.bf-search-results').children.length===0,'new search clears previous query and results');
+  assert(element('.bf-search-status').textContent==='Type at least two characters.'&&!element('.bf-search-overlay').hidden,'new search resets its status and opens normally');
   return checks;
 }
 

@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Clear the previous query, results and status whenever a new album search opens; invalidate older pending responses.
+
 - Open LMS search results as album previews after scrolling to them; prevent pointer motion and repeated stopped-player status from cancelling that scroll, using the normal closing timeout and restoring the current playing or paused cover afterwards.
 
 - Match the current album cover button to the main Play/Pause control, including paused playback. Toggle pause/resume without restarting the album or replacing its queue; other album previews retain Play album.
