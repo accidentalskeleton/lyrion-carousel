@@ -1399,7 +1399,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=popup-preview-timeout-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=queue-position-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1728,8 +1728,9 @@ export async function runTests(sources) {
   storage.set('albumBrowserOrderMode:spotify','recent');api.restoreSourceOrders();
   assert(api.sourceOrdersForTest().spotify==='artistAlbum','unsupported Spotify Recently Added preference falls back safely');
   api.set({playerId:'test-player',playing:false,playingAlbumId:null});api.setSourceForTest('library');
-  statusFixture={mode:'play',playlist_cur_index:0,playlist_loop:[{album_id:20,title:'First track'},{album_id:20,title:'Second track'}]};
+  statusFixture={mode:'play',playlist_tracks:24,playlist_cur_index:0,playlist_loop:[{album_id:20,title:'First track'},{album_id:20,title:'Second track'}]};
   await api.openQueue();
+  assert(element('.bf-queue-position').textContent==='1 / 24'&&element('.bf-queue-progress').textContent==='Track 1 of 24','queue indicators use the total queue rather than the fetched track count');
   const queueRows=element('.bf-queue-list').children.slice(),queueButton=queueRows[1].children[0];
   const queueMutations=[];const replaceQueueRows=element('.bf-queue-list').replaceChildren.bind(element('.bf-queue-list'));
   element('.bf-queue-list').replaceChildren=(...rows)=>{queueMutations.push(rows);replaceQueueRows(...rows)};
@@ -1743,6 +1744,15 @@ export async function runTests(sources) {
   assert(rpcCalls.slice(actionStart).filter(cmd=>cmd[0]==='status'&&cmd[2]===1000).length===0,'track selection does not reopen and reload the full queue');
   api.applyStatus({...statusFixture,playlist_cur_index:0});
   assert(queueRows[0].classList.contains('is-current')&&queueButton.getAttribute('aria-current')===undefined,'external track changes update queue highlight without replacing rows');
+  assert(element('.bf-queue-position').textContent==='1 / 24','external status updates queue position');
+  api.applyStatus({mode:'pause',playlist_cur_index:13});
+  assert(element('.bf-queue-position').textContent==='14 / 24'&&element('.bf-queue-progress').textContent==='Track 14 of 24','paused partial status retains the queue total and uses queue position');
+  api.applyStatus({mode:'pause'});
+  assert(element('.bf-queue-position').textContent==='14 / 24','status without queue fields preserves the indicator');
+  api.applyStatus({mode:'stop',playlist_tracks:0,playlist_loop:[]});
+  assert(element('.bf-queue-position').hidden&&element('.bf-queue-progress').hidden,'empty queue hides both indicators');
+  api.applyStatus({mode:'play',playlist_tracks:2,playlist_cur_index:9});
+  assert(element('.bf-queue-position').hidden,'inconsistent queue position is not displayed');
   api.closeQueue();statusFixture=null;
   api.closeQueue();api.closeAlbumMenu();api.closeTrackList();api.closeSearch();
   api.set({playing:false,playingAlbumId:null});api.applySetting('frontTimeout',100);
