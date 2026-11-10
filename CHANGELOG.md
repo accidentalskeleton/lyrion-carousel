@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Show the current queue position and total beside playback controls and in the Now Playing header, updating in place for local and Spotify playback and hiding when the queue is empty.
+
 - Show In Absentia open in the README banner with Shelf variety and Artist/Album ordering, and move the embedded feature tour below the feature list.
 
 ## [0.12.0] - 2026-11-10

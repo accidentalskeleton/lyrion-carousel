@@ -10,7 +10,7 @@
   <title>Lyrion Carousel</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/lyrion-carousel-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/album-browser.css?v=disc-playback-1">
+  <link rel="stylesheet" href="css/album-browser.css?v=queue-position-1">
   <link rel="stylesheet" href="css/shelf.css?v=shelf-variety-catalogue-1">
   <link rel="stylesheet" href="css/realistic-case.css?v=shelf-only-1">
   <link rel="stylesheet" href="css/settings.css?v=forum-project-link-2">
@@ -92,6 +92,7 @@
     <button class="bf-random cursor-interaction" type="button" aria-label="Play a random album; hold to discover albums" title="Play a random album · hold to discover"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4" fill="currentColor"/><circle cx="7.8" cy="12" r="4" fill="currentColor"/><circle cx="16.2" cy="12" r="4" fill="currentColor"/><circle cx="12" cy="11.5" r="2.5" fill="currentColor"/><path d="M12 13.5c.1 3.1-0.9 5.1-3 7.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button><div class="bf-discovery-menu" role="menu" aria-label="Discover an album" hidden><strong>Discover an album</strong><button type="button" role="menuitem" data-discover="forgotten">Long Forgotten<span>Not played for the longest time</span></button><button type="button" role="menuitem" data-discover="rarely">Rarely Played<span>Albums with low play counts</span></button><button type="button" role="menuitem" data-discover="surprise">Rediscover Something<span>Surprise me with an overlooked album</span></button></div><button class="bf-order-toggle cursor-interaction" type="button" aria-label="Album order: Artist / Album" title="Album order: Artist / Album"><svg class="bf-order-icon artist-album" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="2" fill="currentColor"/><path d="M10 7h9M10 12h9M10 17h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="12" r="2" fill="currentColor"/><circle cx="6" cy="17" r="2" fill="currentColor"/></svg><svg class="bf-order-icon album" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 9h8M8 13h8M8 17h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><svg class="bf-order-icon recent" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM8 3v5M16 3v5M5 10h14M9 14h6M9 17h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><svg class="bf-order-icon random" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h2c4 0 5 10 9 10h5M4 17h2c4 0 5-10 9-10h5M17 4l3 3-3 3M17 14l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <div class="bf-order-menu" role="menu" aria-label="Album order options" hidden><button type="button" data-order="artistAlbum" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="2" fill="currentColor"/><path d="M10 7h9M10 12h9M10 17h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="12" r="2" fill="currentColor"/><circle cx="6" cy="17" r="2" fill="currentColor"/></svg>Artist / Album</button><button type="button" data-order="album" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 9h8M8 13h8M8 17h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Album</button><button type="button" data-order="colour" role="menuitem">Colour</button><button type="button" data-order="recent" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5zM8 3v5M16 3v5M5 10h14M9 14h6M9 17h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Recently Added</button><button type="button" data-order="random" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h2c4 0 5 10 9 10h5M4 17h2c4 0 5-10 9-10h5M17 4l3 3-3 3M17 14l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Random</button></div>
     <div class="bf-transport" role="group" aria-label="Playback controls">
+      <span class="bf-queue-position" hidden></span>
       <button class="bf-previous cursor-interaction" type="button" aria-label="Previous track" title="Previous track" disabled><span aria-hidden="true">❮</span></button>
       <button class="bf-play cursor-interaction" type="button" aria-label="Resume player" title="Play or pause" disabled><span aria-hidden="true">▶</span></button>
       <button class="bf-next cursor-interaction" type="button" aria-label="Next track" title="Next track" disabled><span aria-hidden="true">❯</span></button>
@@ -100,7 +101,7 @@
     <div class="bf-queue-scrim" aria-hidden="true"></div>
     <section class="bf-queue-drawer" role="dialog" aria-modal="true" aria-labelledby="bf-queue-title" aria-hidden="true">
       <button class="bf-queue-grip" type="button" aria-label="Close play queue"><span aria-hidden="true"></span></button>
-      <div class="bf-queue-heading"><div><span class="bf-settings-kicker">Now playing</span><h2 id="bf-queue-title">Play queue</h2></div><button class="bf-queue-close" type="button" aria-label="Close play queue">×</button></div>
+      <div class="bf-queue-heading"><div><span class="bf-settings-kicker">Now playing</span><h2 id="bf-queue-title">Play queue</h2><span class="bf-queue-progress" hidden></span></div><button class="bf-queue-close" type="button" aria-label="Close play queue">×</button></div>
       <div class="bf-queue-status" role="status" aria-live="polite"></div>
       <ol class="bf-queue-list"></ol>
     </section>
@@ -108,6 +109,6 @@
   </section>
 </div>
 <script src="js/resilience.js?v=0.11.0"></script>
-<script type="module" src="js/settings.js?v=popup-preview-timeout-1"></script><script type="module" src="js/app.js?v=popup-preview-timeout-1"></script><script type="module" src="js/screen-sleep.js?v=0.11.0"></script><script type="module" src="js/performance.js?v=phase4-profiler-refresh-2"></script>
+<script type="module" src="js/settings.js?v=popup-preview-timeout-1"></script><script type="module" src="js/app.js?v=queue-position-1"></script><script type="module" src="js/screen-sleep.js?v=0.11.0"></script><script type="module" src="js/performance.js?v=phase4-profiler-refresh-2"></script>
 </body>
 </html>

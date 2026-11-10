@@ -911,3 +911,8 @@ body {
 .bf-album-disc-label { display:block; padding:5px 8px 10px; font-size:12px; color:#aaa69f; }
 .bf-album-disc-label[hidden] { display:none; }
 .bf-album-disc { display:block; width:100%; margin-top:6px; padding:8px; font:inherit; color:#f1eee8; background:#23272a; border:1px solid #555; border-radius:5px; }
+
+.bf-queue-position, .bf-queue-progress { color:var(--bf-muted); font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.bf-queue-position { margin-right:4px; }
+.bf-queue-progress { display:block; margin-top:4px; }
+.bf-queue-position[hidden], .bf-queue-progress[hidden] { display:none; }
