@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Refresh the README shelf screenshot with Shelf variety enabled and replace the short tour with a captioned, chaptered walkthrough of current features.
+
 - Resolve Spotify albums missing from a browser’s loaded shelf when LMS reports external playback, so independent Carousel instances open and follow the playing cover without sending playback commands.
 
 - Use stable Spotify album URIs from Spotty menu metadata for cover playback, album information and library saving, preventing reordered search positions from selecting a different album.

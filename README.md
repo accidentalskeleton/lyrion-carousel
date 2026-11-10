@@ -1,6 +1,6 @@
-![Lyrion Carousel album shelf](assets/lyrion-carousel-banner.jpg)
+![Lyrion Carousel shelf with varied spine lettering, catalogue codes and wider multi-disc cases](assets/lyrion-carousel-banner.jpg)
 
-[Watch the short feature tour](assets/lyrion-carousel-feature-tour.mp4)
+[Watch the feature tour](assets/lyrion-carousel-feature-tour.mp4) · 2 min 34 sec · captioned · no soundtrack
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/stuliet)
 
