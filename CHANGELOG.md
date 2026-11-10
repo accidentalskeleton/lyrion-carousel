@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Pause a non-playing cover’s remaining preview countdown while menus, Settings, search, album information or the Now Playing queue are open. Resume the remaining time only after the last popup closes.
+
 - Keep the Now Playing queue popup and its track rows displayed when selecting a track. Update the current-track highlight in place and preserve scroll position and focus.
 
 - Remember album ordering independently for Library and Spotify, restoring each source’s choice on switching and reloads. Migrate the existing ordering preference to Library.
