@@ -122,7 +122,7 @@ export async function runTests(sources) {
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -1383,7 +1383,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=disc-playback-pause-2')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=search-preview-2')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1624,6 +1624,38 @@ export async function runTests(sources) {
   actionStart=rpcCalls.length;await coverButton.onclick({stopPropagation(){}});
   assert(rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='playlistcontrol'&&cmd.includes('cmd:load')),'other album cover still loads chosen album');
 
+  api.setSourceForTest('library');api.set({playerId:'test-player',playing:false,playingAlbumId:null});
+  api.closeFrontPreview(true);api.applySetting('frontTimeout',100);
+  const searchAlbum=api.state().albums[1];
+  actionStart=rpcCalls.length;
+  await settle(api.selectSearchAlbum(searchAlbum));
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===searchAlbum,'LMS search selection opens the found album after scrolling');
+  assert(api.state().frontTimer!==0&&preview.dataset.pinned==='false','found non-playing album uses normal preview timeout');
+  const timeout=timers.get(api.state().frontTimer);await settle(timeout());
+  assert(preview.hidden,'found album closes after normal preview timeout without playback');
+  assert(!rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='playlistcontrol'||cmd[0]==='pause'),'selecting search results never changes playback');
+  api.set({playing:true,playingAlbumId:20});
+  api.openFrontPreview(currentCoverAlbum,currentCoverIndex);
+  await settle(api.selectSearchAlbum(searchAlbum));
+  assert(api.state().frontPreviewAlbum===searchAlbum&&api.state().frontTimer!==0,'search result replaces playing cover with a timed preview');
+  const returnTimeout=timers.get(api.state().frontTimer);await settle(returnTimeout());
+  await Promise.resolve();
+  assert(!preview.hidden&&String(api.state().frontPreviewAlbum?.[6])==='20','search preview timeout restores current playing cover');
+  await settle(api.selectSearchAlbum(currentCoverAlbum));
+  assert(api.state().frontTimer===0&&preview.dataset.pinned==='true','searching for current album keeps it pinned without timeout');
+  api.applyStatus({mode:'stop',playlist_loop:[]});api.set({position:0});
+  const pointerSearch=api.selectSearchAlbum(searchAlbum);
+  await Promise.resolve();
+  api.noteUserActivity({type:'pointermove'});
+  assert(!!api.state().followAnimation,'pointer motion does not cancel search scrolling');
+  api.applyStatus({mode:'stop',playlist_loop:[]});
+  assert(!!api.state().followAnimation,'repeated stopped status does not cancel search scrolling');
+  await settle(pointerSearch);
+  assert(api.state().frontPreviewAlbum===searchAlbum&&!preview.hidden,'search still opens its album after pointer motion and stopped status');
+  api.set({position:0});api.closeFrontPreview(true);
+  const interruptedSearch=api.selectSearchAlbum(searchAlbum);await Promise.resolve();
+  api.browseWithArrow(1);await settle(interruptedSearch);
+  assert(preview.hidden,'explicit keyboard navigation can still interrupt search without opening a stale preview');
   return checks;
 }
 
