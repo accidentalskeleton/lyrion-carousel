@@ -229,15 +229,33 @@ async function setCatalogueSource(source){
 
 // Each browser has its own catalogue view, but playback belongs to the shared
 // LMS player. Follow a source change without relying on cross-tab storage events.
-let sourceFollowPending=false,sourceFollowAttempt='';
+let sourceFollowPending=false,sourceFollowAttempt='',spotifyFollowAttempt='',spotifyFollowStartedAt=-Infinity;
+async function resolveSpotifyPlayingAlbum(){
+    if(catalogueSource!=='spotify'||playingSource!=='spotify'||!hasPlaybackAlbum()||!nowAlbumTitle||playingCarouselIndex()>=0)return;
+    const title=nowAlbumTitle,artist=nowAlbumArtist,expectedPlayer=playerId,connection=connectionGeneration,generation=catalogueGeneration;
+    const key=expectedPlayer+'|'+title+'|'+artist;
+    if(spotifyFollowAttempt===key&&performance.now()-spotifyFollowStartedAt<30000)return;
+    spotifyFollowAttempt=key;spotifyFollowStartedAt=performance.now();
+    try{
+        const result=await spotifyProvider.search(title+' '+artist);
+        if(connection!==connectionGeneration||generation!==catalogueGeneration||playerId!==expectedPlayer||catalogueSource!=='spotify'||playingSource!=='spotify'||!hasPlaybackAlbum()||nowAlbumTitle!==title||nowAlbumArtist!==artist)return;
+        const norm=value=>String(value||'').trim().toLocaleLowerCase();
+        const match=result.albums.find(album=>norm(album[0])===norm(title)&&(!artist||norm(album[1])===norm(artist)));
+        if(!match)return;
+        let index=indexForAlbumId(match[6]);
+        if(index<0){match[15]='now-playing';albums.push(match);totalAlbums=albums.length;catalogueGeneration++;rebuildAlbumIndex();index=albums.length-1;renderAlbums();draw()}
+        playingAlbumId=albums[index][6];await ensurePlayingCover();await returnToPlayingAlbum(true);
+    }catch(_){/* Keep playback independent of a temporary Spotty lookup failure. */}
+}
+
 async function followPlayingSource(){
     if(!hasPlaybackAlbum()||!playerId||!['library','spotify'].includes(playingSource))return;
-    if(catalogueSource===playingSource){sourceFollowAttempt='';return}
+    if(catalogueSource===playingSource){sourceFollowAttempt='';await resolveSpotifyPlayingAlbum();return}
     if(sourceFollowPending||orderBusy||libraryRefreshing)return;
     const key=playerId+'|'+playingSource+'|'+nowAlbumTitle;
     if(sourceFollowAttempt===key)return;
     sourceFollowAttempt=key;sourceFollowPending=true;
-    try{await setCatalogueSource(playingSource)}
+    try{await setCatalogueSource(playingSource);await resolveSpotifyPlayingAlbum()}
     finally{sourceFollowPending=false}
 }
 
