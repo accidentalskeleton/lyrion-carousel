@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Keep the Now Playing queue popup and its track rows displayed when selecting a track. Update the current-track highlight in place and preserve scroll position and focus.
+
 - Remember album ordering independently for Library and Spotify, restoring each source’s choice on switching and reloads. Migrate the existing ordering preference to Library.
 
 - Resolve Spotify albums missing from a browser’s loaded shelf when LMS reports external playback, so independent Carousel instances open and follow the playing cover without sending playback commands.

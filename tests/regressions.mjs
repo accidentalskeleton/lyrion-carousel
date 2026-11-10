@@ -122,7 +122,7 @@ export async function runTests(sources) {
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,restoreSourceOrders,resolveSpotifyPlayingAlbum,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,openQueue,closeQueue,restoreSourceOrders,resolveSpotifyPlayingAlbum,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -1399,7 +1399,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=source-order-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=queue-track-selection-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1727,6 +1727,23 @@ export async function runTests(sources) {
   assert(api.sourceOrdersForTest().library==='colour'&&api.sourceOrdersForTest().spotify==='artistAlbum','legacy shared ordering migrates to Library without overwriting Spotify default');
   storage.set('albumBrowserOrderMode:spotify','recent');api.restoreSourceOrders();
   assert(api.sourceOrdersForTest().spotify==='artistAlbum','unsupported Spotify Recently Added preference falls back safely');
+  api.set({playerId:'test-player',playing:false,playingAlbumId:null});api.setSourceForTest('library');
+  statusFixture={mode:'play',playlist_cur_index:0,playlist_loop:[{album_id:20,title:'First track'},{album_id:20,title:'Second track'}]};
+  await api.openQueue();
+  const queueRows=element('.bf-queue-list').children.slice(),queueButton=queueRows[1].children[0];
+  const queueMutations=[];const replaceQueueRows=element('.bf-queue-list').replaceChildren.bind(element('.bf-queue-list'));
+  element('.bf-queue-list').replaceChildren=(...rows)=>{queueMutations.push(rows);replaceQueueRows(...rows)};
+  element('.bf-queue-list').scrollTop=75;
+  statusFixture={...statusFixture,playlist_cur_index:1};actionStart=rpcCalls.length;
+  await queueButton.onclick();
+  assert(element('.bf-queue-drawer').classList.contains('is-open'),'selecting a queue track keeps the popup displayed');
+  assert(queueMutations.length===0&&element('.bf-queue-list').children[1]===queueRows[1],'track selection preserves existing queue rows without clearing or rebuilding');
+  assert(queueRows[1].classList.contains('is-current')&&!queueRows[0].classList.contains('is-current')&&queueButton.getAttribute('aria-current')==='true','queue highlight moves to selected track in place');
+  assert(element('.bf-queue-list').scrollTop===75,'track selection preserves queue scroll position');
+  assert(rpcCalls.slice(actionStart).filter(cmd=>cmd[0]==='status'&&cmd[2]===1000).length===0,'track selection does not reopen and reload the full queue');
+  api.applyStatus({...statusFixture,playlist_cur_index:0});
+  assert(queueRows[0].classList.contains('is-current')&&queueButton.getAttribute('aria-current')===undefined,'external track changes update queue highlight without replacing rows');
+  api.closeQueue();statusFixture=null;
   return checks;
 }
 

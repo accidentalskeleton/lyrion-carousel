@@ -24,6 +24,8 @@ Each new search opens with a blank query and cleared results. Selecting an LMS s
 
 The detail area shows the album under the pointer; outside the shelf it shows the playing album, or clears when nothing is playing. Track details and progress appear only for the playing album. The heading stays at the same vertical position in both states.
 
+The Now Playing queue stays open when you select a track. Its highlight moves to the selected track without rebuilding the list or resetting your scroll position.
+
 ## Album playback menu
 
 Hold or right-click an album to open its actions:
