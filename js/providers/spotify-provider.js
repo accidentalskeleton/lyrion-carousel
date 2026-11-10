@@ -1,4 +1,4 @@
-import { savedSpotifyAlbums, searchSpotifyAlbums, saveSpotifyAlbum, playSpotifyAlbum } from '../spotify.js?v=spotify-album-link-1';
+import { savedSpotifyAlbums, searchSpotifyAlbums, saveSpotifyAlbum, playSpotifyAlbum } from '../spotify.js?v=stable-spotify-album-1';
 
 export function createSpotifyProvider({mapAlbum,getPlayerId}){
   const norm=value=>String(value||'').trim().toLocaleLowerCase();
@@ -26,11 +26,12 @@ export function createSpotifyProvider({mapAlbum,getPlayerId}){
 
     async play(album){
       const playerId=getPlayerId();
-      if(!playerId||!album?.[14])return {saved:false};
-      await playSpotifyAlbum(playerId,album[14]);
+      if(!playerId||(!album?.[14]&&!album?.[16]))return {saved:false};
+      const identity={spottyItemId:album[14],spotifyUrl:album[16]};
+      await playSpotifyAlbum(playerId,identity);
       if(album[15]!=='search-preview')return {saved:false};
       try{
-        await saveSpotifyAlbum(playerId,album[14]);
+        await saveSpotifyAlbum(playerId,identity);
         album[15]='saved';
         return {saved:true};
       }catch(error){

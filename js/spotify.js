@@ -8,7 +8,7 @@ export const spottyLoop=result=>result?.loop_loop||result?.item_loop||result?.it
 export function spotifyUri(item){
   const fixed=item?.actions?.go?.params||item?.actions?.play?.params||{};
   const pass=asArray(item?.passthrough)[0]||{};
-  return item?.favorites_url||pass.uri||fixed.uri||item?.playlist||item?.play||'';
+  return item?.presetParams?.favorites_url||item?.favorites_url||pass.uri||fixed.uri||item?.playlist||item?.play||'';
 }
 
 // Only turn a real Spotify album URI or permalink into an external link.
@@ -39,16 +39,17 @@ function splitAlbumName(name=''){
 }
 
 export function normalizeSpottyAlbum(item){
-  const named=splitAlbumName(item?.name||item?.text||'');
+  const lines=String(item?.text||'').split('\n');
+  const named=splitAlbumName(item?.presetParams?.favorites_title||item?.name||lines[0]||'');
   const uri=spotifyUri(item);
   return {
     source:'spotify',
     id:uri||('spotty-item:'+String(item?.id??'')),
     playableId:uri,
     spotifyUrl:spotifyAlbumUrl(uri)||spotifyAlbumUrl(item?.external_urls?.spotify)||spotifyAlbumUrl(item?.url),
-    spottyItemId:String(item?.id??''),
+    spottyItemId:String(item?.params?.item_id??item?.id??''),
     title:item?.line1||named.title,
-    artist:item?.line2||item?.artist||named.artist,
+    artist:item?.line2||item?.artist||named.artist||lines[1]||'',
     artwork:item?.image||item?.icon||'',
     year:item?.year||'',
     raw:item
@@ -67,11 +68,11 @@ export async function savedSpotifyAlbums(playerId){
   const root=await spottyRoot(playerId);
   const section=root.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='albums');
   if(!section)throw new Error('Spotty Albums section not available');
-  const result=await browseSpotty(playerId,['spotty','items',0,200,'item_id:'+section.id]);
+  const result=await browseSpotty(playerId,['spotty','items',0,200,'item_id:'+section.id,'menu:1']);
   return spottyLoop(result).map(normalizeSpottyAlbum);
 }
 
-export async function searchSpotifyAlbums(playerId,query){
+async function spottySearchNode(playerId){
   const root=await spottyRoot(playerId);
   let searchNode=root.find(item=>String(item?.name||item?.text||'').toLocaleLowerCase()==='search');
   if(!searchNode)throw new Error('Spotty Search section not available');
@@ -83,6 +84,11 @@ export async function searchSpotifyAlbums(playerId,query){
     if(!newSearch?.id)throw new Error('Spotty New Search action not available');
     searchNode=newSearch;
   }
+  return searchNode;
+}
+
+export async function searchSpotifyAlbums(playerId,query){
+  const searchNode=await spottySearchNode(playerId);
 
   // First submit the user's free-form query. It may be an artist, album or
   // track name. Spotty responds with typed result-category actions whose
@@ -106,7 +112,7 @@ export async function searchSpotifyAlbums(playerId,query){
   const albumQuery=pass.query||fixed.query||query;
   const command=['spotty','items',0,50];
   if(albumsAction.id!=null&&albumsAction.id!=='')command.push('item_id:'+albumsAction.id);
-  command.push('search:'+albumQuery,'query:'+albumQuery,'type:album');
+  command.push('search:'+albumQuery,'query:'+albumQuery,'type:album','menu:1');
   const result=await browseSpotty(playerId,command);
 
   // At this point Spotty's albumList() rows are type=playlist. Do not require
@@ -120,10 +126,23 @@ export async function searchSpotifyAlbums(playerId,query){
     })
     .map(normalizeSpottyAlbum);
 }
-export async function spotifyAlbumInformation(playerId,album){
+function spotifyAlbumUri(value){
+  const url=spotifyAlbumUrl(value);
+  return url?'spotify:album:'+url.split('/').pop():'';
+}
+async function browseSpotifyAlbum(playerId,album){
+  const uri=spotifyAlbumUri(typeof album==='string'?album:album?.spotifyUrl||album?.uri);
+  if(uri){
+    const search=await spottySearchNode(playerId);
+    return spottyLoop(await browseSpotty(playerId,['spotty','items',0,500,'item_id:'+search.id,'search:'+uri]));
+  }
   const itemId=typeof album==='string'?album:album?.spottyItemId;
-  if(!itemId)throw new Error('Spotify album has no Spotty item id');
-  const detail=spottyLoop(await browseSpotty(playerId,['spotty','items',0,500,'item_id:'+itemId]));
+  if(!itemId)throw new Error('Spotify album has no album identity');
+  return spottyLoop(await browseSpotty(playerId,['spotty','items',0,500,'item_id:'+itemId]));
+}
+
+export async function spotifyAlbumInformation(playerId,album){
+  const detail=await browseSpotifyAlbum(playerId,album);
   const rows=detail.filter(item=>!/^add\s+album\s+to\s+library$/i.test(String(item?.name||item?.text||'')));
   const tracks=rows.filter(item=>{
     const type=String(item?.type||'').toLocaleLowerCase();
@@ -141,11 +160,8 @@ export async function spotifyAlbumInformation(playerId,album){
 }
 
 export async function saveSpotifyAlbum(playerId,album){
-  const itemId=typeof album==='string'?album:album?.spottyItemId;
-  if(!itemId)throw new Error('Spotify album has no Spotty item id');
-  // Opening an album through Spotty exposes its native "Add Album to Library"
-  // action. Invoke that action rather than maintaining separate Spotify OAuth.
-  const detail=spottyLoop(await browseSpotty(playerId,['spotty','items',0,200,'item_id:'+itemId]));
+  // Resolve by stable URI so saving cannot use a reordered search position.
+  const detail=await browseSpotifyAlbum(playerId,album);
   const save=detail.find(item=>/add\s+album\s+to\s+library/i.test(String(item?.name||item?.text||'')));
   if(!save?.id)throw new Error('Spotty did not expose Add Album to Library for this album');
   await browseSpotty(playerId,['spotty','items',0,20,'item_id:'+save.id]);
@@ -153,11 +169,10 @@ export async function saveSpotifyAlbum(playerId,album){
 }
 
 export async function playSpotifyAlbum(playerId,album){
-  // Compact XMLBrowser album rows do not expose spotify:album URIs. LMS does,
-  // however, expose each as a playable XMLBrowser node, so use Spotty's playlist
-  // command with its item_id.
+  const uri=spotifyAlbumUri(typeof album==='string'?album:album?.spotifyUrl||album?.uri);
+  if(uri)return rpc(playerId,['playlist','play',uri]);
   const itemId=typeof album==='string'?album:album?.spottyItemId;
-  if(!itemId)throw new Error('Spotify album has no Spotty item id');
+  if(!itemId)throw new Error('Spotify album has no album identity');
   return rpc(playerId,['spotty','playlist','play','item_id:'+itemId]);
 }
 

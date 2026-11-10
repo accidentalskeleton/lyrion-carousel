@@ -81,7 +81,7 @@ export async function runTests(sources) {
   const rpcCalls=[];
   const catalogueEvents=[];
   let catalogueReconcileChanged=true;
-  let tracksFixture=null,statusFixture=null,tracksHandler=null,spottyCapability=1;
+  let tracksFixture=null,statusFixture=null,tracksHandler=null,spottyCapability=1,spotifyFollowAlbums=[],spotifyFollowSearch=null;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
   const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='can')return {_can:spottyCapability};if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return statusFixture||{mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return tracksHandler?tracksHandler(cmd):{titles_loop:(tracksFixture||[]).slice(cmd[1],cmd[1]+cmd[2]),count:tracksFixture?.length||0};if(cmd[0]==='albums'){
     const sort=cmd.find(arg=>typeof arg==='string'&&arg.startsWith('sort:'));
@@ -112,7 +112,7 @@ export async function runTests(sources) {
       return metadataFetch(url,...args);
     },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
-    createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({play:async()=>({})}),spotifyAlbumInformation:async()=>({tracks:[]}),
+    createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
@@ -122,7 +122,7 @@ export async function runTests(sources) {
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,resolveSpotifyPlayingAlbum,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -1282,8 +1282,24 @@ export async function runTests(sources) {
     assert(saved.length===1&&saved[0].title==='Saved Album'&&spottyCalls.some(c=>c.includes('item_id:7')),'saved Spotify albums use discovered Albums node');
     const searched=await spotty.searchSpotifyAlbums('player','needle');
     assert(searched.length===1&&searched[0].title==='Search Album','Spotify full-catalogue album search');
+    const menuAlbum=spotty.normalizeSpottyAlbum({type:'playlist',text:'Correct Album\nCorrect Artist',params:{item_id:'temporary-position'},presetParams:{favorites_title:'Correct Album by Correct Artist',favorites_url:'spotify:album:'+spotifyId}});
+    assert(menuAlbum.title==='Correct Album'&&menuAlbum.artist==='Correct Artist'&&menuAlbum.spottyItemId==='temporary-position'&&menuAlbum.id==='spotify:album:'+spotifyId,'Spotty rich menu preserves stable album identity separately from navigation position');
+    assert(spottyCalls.some(cmd=>cmd.includes('type:album')&&cmd.includes('menu:1'))&&spottyCalls.some(cmd=>cmd.includes('item_id:7')&&cmd.includes('menu:1')),'search and saved albums request stable URI metadata from rich menus');
+    await spotty.playSpotifyAlbum('player',{spottyItemId:'wrong-position',spotifyUrl});
+    assert(spottyCalls.some(cmd=>cmd.join('|')==='playlist|play|spotify:album:'+spotifyId),'Spotify playback uses stable album URI and ignores stale navigation positions');
     await spotty.playSpotifyAlbum('player','album-1');
     assert(spottyCalls.some(c=>c[0]==='spotty'&&c[1]==='playlist'&&c.includes('item_id:album-1')),'Spotify playback stays in Spotty/LMS');
+    const stableDetailCalls=[];
+    const stableDetail=new Function('rpc',plain(sources.spotify)+';return {saveSpotifyAlbum,spotifyAlbumInformation};')(async(_,cmd)=>{
+      stableDetailCalls.push(cmd);
+      if(cmd.includes('search:spotify:album:'+spotifyId))return {items_loop:[{id:'stable-save',name:'Add Album to Library'},{type:'audio',name:'1 Exact album track'}]};
+      if(cmd.includes('item_id:stable-save'))return {};
+      return {items_loop:[{id:'search-root',name:'Search',type:'search'}]};
+    });
+    await stableDetail.saveSpotifyAlbum('player',{spottyItemId:'wrong-position',spotifyUrl});
+    const stableInfo=await stableDetail.spotifyAlbumInformation('player',{spottyItemId:'wrong-position',spotifyUrl});
+    assert(stableDetailCalls.some(cmd=>cmd.includes('search:spotify:album:'+spotifyId))&&!stableDetailCalls.some(cmd=>cmd.includes('item_id:wrong-position')),'album information and saving resolve the stable URI rather than a reordered menu item');
+    assert(stableInfo.tracks[0]?.title==='Exact album track'&&stableDetailCalls.some(cmd=>cmd.includes('item_id:stable-save')),'stable album lookup retains track details and native library-save action');
     await spotty.saveSpotifyAlbum('player','album-1');
     assert(spottyCalls.some(c=>c.includes('item_id:9')),'Spotify searched album save follows Spotty action');
     const info=await spotty.spotifyAlbumInformation('player','album-1');
@@ -1383,7 +1399,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=search-preview-2')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=spotify-follow-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1656,6 +1672,45 @@ export async function runTests(sources) {
   const interruptedSearch=api.selectSearchAlbum(searchAlbum);await Promise.resolve();
   api.browseWithArrow(1);await settle(interruptedSearch);
   assert(preview.hidden,'explicit keyboard navigation can still interrupt search without opening a stale preview');
+  element('.bf-search-input').value='previous query';
+  element('.bf-search-results').append(new Element('old result'));
+  element('.bf-search-status').textContent='Previous results';
+  api.closeSearch();api.openSearch();
+  assert(element('.bf-search-input').value===''&&element('.bf-search-results').children.length===0,'new search clears previous query and results');
+  assert(element('.bf-search-status').textContent==='Type at least two characters.'&&!element('.bf-search-overlay').hidden,'new search resets its status and opens normally');
+  api.setSourceForTest('spotify');api.set({playerId:'test-player',playing:false,playingAlbumId:null});api.closeFrontPreview(true);
+  statusFixture={mode:'play',remote:1,playlist_loop:[{album:'The Colour And The Shape',artist:'Foo Fighters',title:'Doll',url:'spotify:track:fixture'}]};
+  const spotifySearchAlbum=['The Colour And The Shape','Foo Fighters','','','','','spotty-item:search-fixture',true,'','','','',undefined,'spotify','search-fixture','search-preview'];
+  actionStart=rpcCalls.length;
+  await settle(api.selectSearchAlbum(spotifySearchAlbum));
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===spotifySearchAlbum,'Spotify search selection opens the found cover');
+  assert(api.state().frontTimer!==0&&element('.bf-front-play').getAttribute('aria-label')==='Play album','Spotify search preview has normal timeout and explicit Play button');
+  assert(!rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')),'Spotify search selection never changes playback');
+  const spotifyPreviewTimeout=timers.get(api.state().frontTimer);await settle(spotifyPreviewTimeout());
+  assert(preview.hidden,'Spotify search preview closes after normal timeout');
+  await settle(api.selectSearchAlbum(spotifySearchAlbum));actionStart=rpcCalls.length;
+  await element('.bf-front-play').onclick({stopPropagation(){}});
+  assert(rpcCalls.slice(actionStart).some(cmd=>cmd.join('|')==='spotty|playlist|play|item_id:search-fixture'),'Spotify album plays only when its cover Play button is clicked');
+  api.setSourceForTest('spotify');api.set({playerId:'test-player',playing:false,playingAlbumId:null});api.closeFrontPreview(true);
+  const externalSpotifyAlbum=['External Spotify Album','External Artist','','','','','spotify:album:external',true,'','','','',undefined,'spotify','external-node',undefined,'https://open.spotify.com/album/4aawyAB9vmqN3uQ7FjRGTy'];
+  spotifyFollowAlbums=[externalSpotifyAlbum];actionStart=rpcCalls.length;
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{album:'External Spotify Album',artist:'External Artist',title:'External track',url:'spotify:track:external'}]});
+  await settle(api.resolveSpotifyPlayingAlbum());
+  for(let step=0;step<100;step++){await Promise.resolve();if(api.state().frontPreviewAlbum===externalSpotifyAlbum)break;}
+  assert(api.state().albums.some(album=>album[6]===externalSpotifyAlbum[6]),'external Spotify playback resolves an album absent from this browser shelf');
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===externalSpotifyAlbum,'resolved external Spotify album opens its playing cover');
+  assert(!rpcCalls.slice(actionStart).some(cmd=>cmd[0]==='playlistcontrol'||cmd[0]==='playlist'||(cmd[0]==='spotty'&&cmd[1]==='playlist')),'following external Spotify playback never sends a playback command');
+  const pausedRemote=externalSpotifyAlbum.slice();pausedRemote[0]='Paused external album';pausedRemote[6]='spotify:album:paused-external';spotifyFollowAlbums=[pausedRemote];
+  api.applyStatus({mode:'pause',remote:1,playlist_loop:[{album:pausedRemote[0],artist:'External Artist',title:'Paused remote track',url:'spotify:track:paused-remote'}]});
+  await settle(api.resolveSpotifyPlayingAlbum());for(let step=0;step<100;step++)await Promise.resolve();
+  assert(!preview.hidden&&api.state().frontPreviewAlbum===pausedRemote&&preview.dataset.pinned==='true'&&!api.state().playing,'external paused Spotify album is also resolved and pinned without resuming');
+  let finishStaleLookup;spotifyFollowSearch=()=>new Promise(resolve=>{finishStaleLookup=resolve});
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{album:'Stale external album',artist:'External Artist',title:'Stale track',url:'spotify:track:stale'}]});
+  await Promise.resolve();api.applyStatus({mode:'stop',playlist_loop:[]});
+  const staleRemote=externalSpotifyAlbum.slice();staleRemote[0]='Stale external album';staleRemote[6]='spotify:album:stale-external';
+  finishStaleLookup({albums:[staleRemote]});for(let step=0;step<100;step++)await Promise.resolve();
+  assert(!api.state().albums.some(album=>album[6]===staleRemote[6]),'late Spotify lookup cannot add or reopen an album after playback stops');
+  spotifyFollowSearch=null;
   return checks;
 }
 

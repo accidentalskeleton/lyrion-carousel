@@ -2,8 +2,8 @@ import { rpc, CometDClient, resetRpcSession } from './lms.js?v=track-artist-role
 import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from './catalogue.js?v=display-choice-1';
 import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPosition } from './browser.js?v=display-choice-1';
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
-import { createSpotifyProvider } from './providers/spotify-provider.js?v=providers-1';
-import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=spotify-album-link-2';
+import { createSpotifyProvider } from './providers/spotify-provider.js?v=stable-spotify-album-1';
+import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=stable-spotify-album-1';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
@@ -154,7 +154,7 @@ const shelfDelta=(index,centre)=>boundedShelf()?shelfSpace(index)-shelfSpace(cen
 const selectedIndex=()=>boundedShelf()?Math.round(shelfPosition(position)):modulo(Math.round(position),totalAlbums),nearestPositionForIndex=index=>boundedShelf()?finitePositionForIndex(index):nearestPosition(index,position,totalAlbums);
 function emitStatus(){window.dispatchEvent(new Event('lyrion-carousel-status'))}function setConnection(label,connected){connectionLabel.textContent=label;root.dataset.connected=connected?'true':'false';emitStatus()}function albumCountLabel(){return totalAlbums<libraryAlbumCount?totalAlbums+' / '+libraryAlbumCount+' albums':totalAlbums+' albums'}function updateBusyState(){const unavailable=!playerId;powerButton.disabled=unavailable||powerPending||playerPower===null;randomPlay.disabled=randomAnimating||discoveryBusy||orderBusy||libraryRefreshing||unavailable||!totalAlbums;orderToggle.disabled=orderBusy||randomAnimating||libraryRefreshing;play.disabled=previousTrack.disabled=nextTrack.disabled=queueOpen.disabled=unavailable}function batchCount(){return Math.max(1,Math.ceil(totalAlbums/PAGE_SIZE))}
 function mapLyrionAlbum(album){const artworkId=album.artwork_track_id,artworkUrl=artworkId?'/api/art/'+encodeURIComponent(artworkId)+'?size='+COVER_SIZE+'&case=realistic-v1&server='+artworkNamespace:'',artworkMetaUrl=artworkId?'/api/art-meta/'+encodeURIComponent(artworkId)+'?v=5&server='+artworkNamespace:'';if(album.spine_metadata?.text_style_version===3)rememberSpineMeta(artworkMetaUrl,album.spine_metadata);return[album.album||album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id,true,artworkUrl,album.textkey||'',album.year||'',artworkMetaUrl,album.spine_metadata?.colour_index,undefined,undefined,undefined,undefined,Math.max(Number(album.disccount)||Number(album.discc)||1,Number(album.disc)||1)]}
-function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?version=3&path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg','spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId,undefined,spotifyAlbumUrl(album.spotifyUrl)]}
+function mapSpotifyAlbum(album){const artworkUrl=album.artwork?'/api/spotty-art?path='+encodeURIComponent(album.artwork)+'&size='+COVER_SIZE+'&case=realistic-v1':'',artworkMetaUrl=album.artwork?'/api/spotty-art-meta?version=3&path='+encodeURIComponent(album.artwork):'';return[album.title||'Untitled',album.artist||'Unknown artist',artworkUrl?`url("${artworkUrl}") center / contain no-repeat`:'linear-gradient(145deg,#303030,#111)','transparent','0','0deg',album.id||'spotify:'+album.spottyItemId,true,artworkUrl,'',album.year||'',artworkMetaUrl,undefined,'spotify',album.spottyItemId,undefined,spotifyAlbumUrl(album.spotifyUrl)]}
 const lmsProvider=createLmsProvider({
     mapAlbum:mapLyrionAlbum,getPlayerId:()=>playerId,getPageSize:()=>PAGE_SIZE,getSearchLimit:()=>SEARCH_LIMIT,
     getDisabledGenres:()=>disabledGenres,getOrderMode:()=>orderMode,getLibraryCount:()=>libraryAlbumCount,
@@ -229,15 +229,33 @@ async function setCatalogueSource(source){
 
 // Each browser has its own catalogue view, but playback belongs to the shared
 // LMS player. Follow a source change without relying on cross-tab storage events.
-let sourceFollowPending=false,sourceFollowAttempt='';
+let sourceFollowPending=false,sourceFollowAttempt='',spotifyFollowAttempt='',spotifyFollowStartedAt=-Infinity;
+async function resolveSpotifyPlayingAlbum(){
+    if(catalogueSource!=='spotify'||playingSource!=='spotify'||!hasPlaybackAlbum()||!nowAlbumTitle||playingCarouselIndex()>=0)return;
+    const title=nowAlbumTitle,artist=nowAlbumArtist,expectedPlayer=playerId,connection=connectionGeneration,generation=catalogueGeneration;
+    const key=expectedPlayer+'|'+title+'|'+artist;
+    if(spotifyFollowAttempt===key&&performance.now()-spotifyFollowStartedAt<30000)return;
+    spotifyFollowAttempt=key;spotifyFollowStartedAt=performance.now();
+    try{
+        const result=await spotifyProvider.search(title+' '+artist);
+        if(connection!==connectionGeneration||generation!==catalogueGeneration||playerId!==expectedPlayer||catalogueSource!=='spotify'||playingSource!=='spotify'||!hasPlaybackAlbum()||nowAlbumTitle!==title||nowAlbumArtist!==artist)return;
+        const norm=value=>String(value||'').trim().toLocaleLowerCase();
+        const match=result.albums.find(album=>norm(album[0])===norm(title)&&(!artist||norm(album[1])===norm(artist)));
+        if(!match)return;
+        let index=indexForAlbumId(match[6]);
+        if(index<0){match[15]='now-playing';albums.push(match);totalAlbums=albums.length;catalogueGeneration++;rebuildAlbumIndex();index=albums.length-1;renderAlbums();draw()}
+        playingAlbumId=albums[index][6];await ensurePlayingCover();await returnToPlayingAlbum(true);
+    }catch(_){/* Keep playback independent of a temporary Spotty lookup failure. */}
+}
+
 async function followPlayingSource(){
     if(!hasPlaybackAlbum()||!playerId||!['library','spotify'].includes(playingSource))return;
-    if(catalogueSource===playingSource){sourceFollowAttempt='';return}
+    if(catalogueSource===playingSource){sourceFollowAttempt='';await resolveSpotifyPlayingAlbum();return}
     if(sourceFollowPending||orderBusy||libraryRefreshing)return;
     const key=playerId+'|'+playingSource+'|'+nowAlbumTitle;
     if(sourceFollowAttempt===key)return;
     sourceFollowAttempt=key;sourceFollowPending=true;
-    try{await setCatalogueSource(playingSource)}
+    try{await setCatalogueSource(playingSource);await resolveSpotifyPlayingAlbum()}
     finally{sourceFollowPending=false}
 }
 
@@ -1012,10 +1030,10 @@ async function handleLibraryEvent(){
     finally{libraryRefreshing=false;updateBusyState()}
 }
 const cometd=new CometDClient(applyStatus,state=>{root.dataset.liveUpdates=state==='live'?'true':state==='connecting'?'connecting':'false';emitStatus();if(state==='connecting')setConnection('Connecting to live updates…',false);else if(state==='live')setConnection(albumCountLabel()+' · live',true);else setConnection('Live updates lost · reconnecting',false)},handleLibraryEvent);
-function openSearch(){searchOverlay.hidden=false;searchInput.focus();searchInput.select()}function closeSearch(){searchOverlay.hidden=true;searchToken++;clearTimeout(searchTimer)}function centreAlbumIndex(index,animate=true){if(randomAnimating||!Number.isFinite(index)||index<0)return;stopFollowing();const destination=nearestPositionForIndex(index);if(animate){target=destination;schedule()}else{position=target=destination;draw()}}
+function openSearch(){searchToken++;clearTimeout(searchTimer);searchInput.value='';searchResults.replaceChildren();searchStatus.textContent='Type at least two characters.';searchOverlay.hidden=false;searchInput.focus()}function closeSearch(){searchOverlay.hidden=true;searchToken++;clearTimeout(searchTimer)}function centreAlbumIndex(index,animate=true){if(randomAnimating||!Number.isFinite(index)||index<0)return;stopFollowing();const destination=nearestPositionForIndex(index);if(animate){target=destination;schedule()}else{position=target=destination;draw()}}
 async function navigateToAlbum(id){searchStatus.textContent='Locating album…';try{let i=albums.findIndex(album=>album&&String(album[6])===String(id));if(i<0&&catalogueSource!=='spotify')i=await locateAlbum(id);if(i<0)throw 0;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const arrived=await scrollToAlbumIndex(i);if(arrived){position=target=nearestPositionForIndex(i);renderAlbums();draw()}}catch(_){searchStatus.textContent='That album could not be located.'}}
 function renderSearchResults(results){searchResults.replaceChildren();for(const album of results){const b=document.createElement('button');b.className='bf-search-result';b.type='button';const img=document.createElement('img');img.alt='';if(album[8])img.src=album[8];const c=document.createElement('span'),t=document.createElement('strong'),a=document.createElement('span');t.textContent=album[0];a.textContent=album[1];c.append(t,a);b.append(img,c);b.onclick=()=>selectSearchAlbum(album);searchResults.append(b)}}
-async function selectSearchAlbum(album){let existing=albums.find(a=>a&&String(a[6])===String(album[6]));if(!existing&&catalogueSource==='spotify'){album[15]='search-preview';albums.push(album);totalAlbums=albums.length;existing=album;catalogueGeneration++;rebuildAlbumIndex();renderAlbums();draw()}const i=albums.indexOf(existing);if(i<0)return;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const destination=nearestPositionForIndex(i);const arrived=await scrollToAlbumIndex(i,true);if(!arrived)return;position=target=destination;hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();if(catalogueSource==='library'){openFrontPreview(existing,i,true);target=nearestPositionForIndex(i);schedule()}}
+async function selectSearchAlbum(album){let existing=albums.find(a=>a&&String(a[6])===String(album[6]));if(!existing&&catalogueSource==='spotify'){album[15]='search-preview';albums.push(album);totalAlbums=albums.length;existing=album;catalogueGeneration++;rebuildAlbumIndex();renderAlbums();draw()}const i=albums.indexOf(existing);if(i<0)return;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const destination=nearestPositionForIndex(i);const arrived=await scrollToAlbumIndex(i,true);if(!arrived)return;position=target=destination;hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();openFrontPreview(existing,i,true);target=nearestPositionForIndex(i);schedule();}
 async function runSearch(query){const value=query.trim(),token=++searchToken;if(value.length<2){searchResults.replaceChildren();searchStatus.textContent='Type at least two characters.';return}searchStatus.textContent=catalogueSource==='spotify'?'Searching Spotify albums…':'Searching LMS…';try{if(catalogueSource==='spotify'){const result=await spotifyProvider.search(value);if(token!==searchToken)return;const matches=result.albums;renderSearchResults(matches);searchStatus.textContent=matches.length?matches.length+' Spotify album'+(matches.length===1?'':'s'):'No matching Spotify albums.';return}const result=await lmsProvider.search(value);if(token!==searchToken)return;const matches=result.albums;renderSearchResults(matches);searchStatus.textContent=matches.length?matches.length+' matches':'No matching albums.'}catch(error){if(token!==searchToken)return;console.error('Carousel album search failed:',error);const message=String(error?.message||error||'Unknown error');searchStatus.textContent=/LMS server changed during request/.test(message)?'LMS settings changed. Please retry search.':/HTTP 50[234]|Failed to fetch|NetworkError|Load failed/i.test(message)?'Cannot reach LMS search. Check the server connection.':'Album search failed: '+message.slice(0,140);}}
 async function jumpToLetter(letter){
     searchStatus.textContent='Finding '+letter+'…';
@@ -1201,7 +1219,7 @@ async function showTrackList(album){
     try{
         let tracks=[],genre='',year=album[10]||'';
         if(spotify){
-            const info=await spotifyAlbumInformation(playerId,{spottyItemId:album[14]});
+            const info=await spotifyAlbumInformation(playerId,{spottyItemId:album[14],spotifyUrl:album[16]});
             tracks=info.tracks||[];genre=info.genre||'';year=info.year||year;
             if(request===trackRequest&&!trackOverlay.hidden){
                 const exact=initialSpotifyUrl||spotifyAlbumUrl(info.spotifyUrl);
