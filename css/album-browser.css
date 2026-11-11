@@ -924,3 +924,5 @@ body {
 @media (prefers-reduced-motion:reduce) {
     .bf-stage, .bf-front-preview { transition:none; }
 }
+
+#book-fan-browser[data-external-playback="true"] .bf-front-preview[data-pinned="true"] { opacity:1; }
