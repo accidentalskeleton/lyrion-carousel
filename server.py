@@ -2,6 +2,7 @@
 """Serve Lyrion Carousel and proxy its requests to Lyrion Music Server."""
 from __future__ import annotations
 import time, io, random, argparse, colorsys, hashlib, ipaddress, json, os, re, shutil, socket, sqlite3, sys, threading
+from indexed_order import indexed_album_order
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
@@ -803,6 +804,10 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         namespace=hashlib.sha256((lms_url or self.lms_url).encode()).hexdigest()[:24]
         return self.cache_dir/f'catalogue-v{CATALOGUE_SNAPSHOT_VERSION}-{namespace}.json'
 
+    def _indexed_order_path(self)->Path:
+        namespace=hashlib.sha256(self.lms_url.encode()).hexdigest()[:24]
+        return self.cache_dir/f'indexed-order-v1-{namespace}.sqlite3'
+
     def _catalogue_snapshot_key(self,lms_url:str|None=None):
         return (str(self.cache_dir.resolve()),lms_url or self.lms_url)
 
@@ -1068,7 +1073,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         mode=query.get('order',['artistAlbum'])[0]
         excluded_genre_ids={int(genre_id) for genre_id in query.get('exclude_genre_id',[])
                             if genre_id.isdecimal() and int(genre_id)>0}
-        if mode not in ('artistAlbum','album','colour','random','recent'):
+        if mode not in ('artistAlbum','album','colour','random','recent','indexed'):
             self.send_error(400,'Invalid album order');return
         try:
             with _CATALOGUE_LOCK:
@@ -1091,6 +1096,14 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                                     for item in page if item.get('id') is not None]
                         rank={album_id:i for i,album_id in enumerate(ranked_ids)}
                         albums.sort(key=lambda item:(rank.get(str(item.get('id')),len(rank)),str(item.get('id',''))))
+                    if mode=='indexed':
+                        # Use current LMS library indexing, not persistent
+                        # recording history shared by other releases.
+                        ranked_ids=indexed_album_order(snapshot['albums'],self._lms_rpc,
+                                                      self._indexed_order_path())
+                        rank={album_id:i for i,album_id in enumerate(ranked_ids)}
+                        albums.sort(key=lambda item:(rank.get(str(item.get('id')),len(rank)),
+                                                     str(item.get('id',''))))
                     if mode=='colour':
                         ids=list(dict.fromkeys(str(a['artwork_track_id']) for a in albums
                                                if a.get('artwork_track_id')))
@@ -1117,7 +1130,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                             return ((album.get('spine_metadata') or {}).get('colour_index',float('inf')),*tie)
                         return tie if mode=='artistAlbum' else (title,artist,tie[2])
                     if mode=='random':random.shuffle(albums)
-                    elif mode!='recent':albums.sort(key=key)
+                    elif mode not in ('recent','indexed'):albums.sort(key=key)
                     payload=json.dumps({'count':len(albums),'library_count':library_count,
                                         'albums_loop':albums},ensure_ascii=False).encode('utf-8')
                     if mode!='random':
