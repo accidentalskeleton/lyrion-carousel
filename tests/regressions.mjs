@@ -895,8 +895,16 @@ export async function runTests(sources) {
     assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden,'sort '+mode+' opens playing album');
     api.set({position:3});
   }
-  // Recently Added is the one finite shelf: no wrapping by arrows, wheel,
-  // drag or geometry; all other ordering modes remain circular.
+  // Both chronological shelves are finite: no wrapping by arrows, wheel,
+  // drag or geometry; other modes remain circular.
+  await api.setDisplayOrder('indexed');
+  assert(api.state().orderMode==='indexed'&&storage.get('albumBrowserOrderMode')==='indexed',
+    'Recently Indexed order is selectable and persisted independently');
+  api.closeFrontPreview();
+  const [indexedFirst]=api.finiteShelfBounds();
+  api.set({playing:false,position:0});api.draw();api.browseWithArrow(-1);
+  assert(api.state().target===indexedFirst,
+    'Recently Indexed uses the same bounded shelf as Recently Added');
   api.set({playing:false,position:0});
   await api.setDisplayOrder('recent');
   assert(api.state().orderMode==='recent'&&storage.get('albumBrowserOrderMode')==='recent',
@@ -1399,7 +1407,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=external-middle-slot-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=radio-indexed-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1727,6 +1735,8 @@ export async function runTests(sources) {
   assert(api.sourceOrdersForTest().library==='colour'&&api.sourceOrdersForTest().spotify==='artistAlbum','legacy shared ordering migrates to Library without overwriting Spotify default');
   storage.set('albumBrowserOrderMode:spotify','recent');api.restoreSourceOrders();
   assert(api.sourceOrdersForTest().spotify==='artistAlbum','unsupported Spotify Recently Added preference falls back safely');
+  storage.set('albumBrowserOrderMode:spotify','indexed');api.restoreSourceOrders();
+  assert(api.sourceOrdersForTest().spotify==='artistAlbum','Spotify cannot restore Library-only Recently Indexed');
   api.set({playerId:'test-player',playing:false,playingAlbumId:null});api.setSourceForTest('library');
   statusFixture={mode:'play',playlist_tracks:24,playlist_cur_index:0,playlist_loop:[{album_id:20,title:'First track'},{album_id:20,title:'Second track'}]};
   await api.openQueue();
