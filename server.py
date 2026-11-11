@@ -650,7 +650,9 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             raw=query.get('path',[''])[0]
             size_raw=query.get('size',[''])[0]
             case=query.get('case',[''])[0]=='realistic-v1'
-            key,payload,content_type=self._spotty_artwork(raw)
+            revision=query.get('revision',[''])[0]
+            if len(revision)>256: raise ValueError('Invalid artwork revision')
+            key,payload,content_type=self._spotty_artwork(raw,revision)
             if size_raw or case:
                 size=int(size_raw or 512)
                 if size not in (128,256,384,512,768,1024): raise ValueError('Invalid cover size')
@@ -681,10 +683,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         except HTTPError as error: self._send_http_error(error)
         except (URLError,TimeoutError,OSError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
 
-    def _spotty_artwork(self,raw:str):
+    def _spotty_artwork(self,raw:str,revision:str=""):
         """Return cached Spotty artwork bytes and content type, fetching through LMS if needed."""
         if not raw.startswith('/imageproxy/') or len(raw)>4096: raise ValueError('Invalid Spotty artwork path')
         key=hashlib.sha256(f'{self.lms_url}\\0spotty\\0{raw}'.encode()).hexdigest()
+        if revision: key=hashlib.sha256(f'{key}|{revision}'.encode()).hexdigest()
         cache_path=self.cache_dir/f'{key}.img'; type_path=self.cache_dir/f'{key}.type'
         try: return key,cache_path.read_bytes(),type_path.read_text(encoding='ascii').strip() or 'image/png'
         except (FileNotFoundError,OSError,UnicodeError): pass

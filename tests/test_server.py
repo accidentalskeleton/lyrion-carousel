@@ -1091,6 +1091,17 @@ class ServerTests(unittest.TestCase):
         self.assertIn(['spotty','items',0,200,'item_id:42'],calls)
         self.assertNotIn(['spotty','items',0,200,'item_id:7'],calls)
 
+    def test_radio_artwork_revision_refreshes_reused_url(self):
+        with patch('server.urlopen') as upstream, patch.object(self.handler,'_read_limited',side_effect=[b'old artwork',b'new artwork']):
+            upstream.return_value.__enter__.return_value.headers.get_content_type.return_value='image/png'
+            first=self.handler._spotty_artwork('/imageproxy/same-cover','song-one')
+            cached=self.handler._spotty_artwork('/imageproxy/same-cover','song-one')
+            updated=self.handler._spotty_artwork('/imageproxy/same-cover','song-two')
+        self.assertEqual(first,cached)
+        self.assertEqual(upstream.call_count,2)
+        self.assertNotEqual(first[0],updated[0])
+        self.assertEqual(updated[1],b'new artwork')
+
     def test_spotty_artwork_metadata_is_cached_from_remote_cover(self):
         image=io.BytesIO()
         Image.new('RGB',(8,8),'red').save(image,format='PNG')

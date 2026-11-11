@@ -122,7 +122,7 @@ export async function runTests(sources) {
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,syncFrontTimeoutPause,openQueue,closeQueue,restoreSourceOrders,resolveSpotifyPlayingAlbum,followPlayingSource,playbackSourceForTrack,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,syncFrontTimeoutPause,openQueue,closeQueue,storeBatch,restoreSourceOrders,resolveSpotifyPlayingAlbum,followPlayingSource,playbackSourceForTrack,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,frontTimeoutRemaining,frontTimeoutDeadline,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -1399,7 +1399,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=external-playback-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=external-middle-slot-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1770,6 +1770,7 @@ export async function runTests(sources) {
     assert(api.state().frontTimer===0&&!preview.hidden,selector+' pauses preview timeout');
     element(selector).hidden=true;api.syncFrontTimeoutPause();assert(api.state().frontTimer!==0,selector+' resumes preview timeout');
   }
+  api.set({playerId:''});
   const sourceBeforeRadio=api.sourceOrdersForTest(),shelfBeforeRadio=api.sourceForTest();
   api.applyStatus({mode:'play',remote:1,playlist_cur_index:0,playlist_tracks:1,playlist_loop:[{title:'Radio programme',album:'Radio station',url:'https://radio.example/live'}]});
   assert(root.dataset.externalPlayback==='true','radio playback dims the shelf');
@@ -1782,6 +1783,45 @@ export async function runTests(sources) {
   api.applyStatus({mode:'play',remote:1,playlist_loop:[{title:'Spotify track',album:'Spotify album',url:'spotify:track:fixture'}]});
   assert(root.dataset.externalPlayback==='false','Spotify playback is not dimmed despite remote flag');
   api.applyStatus({mode:'stop',playlist_loop:[]});
+  const beforeRadioCount=api.state().albums.length;
+  const radioStatus={mode:'play',remote:1,playlist_loop:[{title:'Radio song',artist:'Radio artist',remote_title:'Station',artwork_url:'/imageproxy/song/image.jpg',icon:'/imageproxy/station/image.jpg'}]};
+  api.applyStatus(radioStatus);
+  const radioAlbum=api.state().albums.find(a=>a?.[13]==='external'),radioArt=element('.bf-external-art');
+  assert(api.state().albums.length===beforeRadioCount+1&&radioAlbum,'radio adds one temporary shelf CD');
+  assert(api.state().albums.indexOf(radioAlbum)===Math.floor(beforeRadioCount/2),'temporary radio CD is inserted in the middle of the shelf');
+  const realRadioNeighbours=api.state().albums.filter(a=>a?.[13]!=='external').slice(0,api.state().PAGE_SIZE);
+  api.storeBatch(0,{albums_loop:realRadioNeighbours.map(a=>({id:a[6],album:a[0],artist:a[1]}))},false);
+  assert(api.state().albums.includes(radioAlbum)&&realRadioNeighbours.every((a,i)=>api.state().albums.filter(b=>b?.[13]!=='external')[i][6]===a[6]),'catalogue page loading preserves the middle radio slot and real album positions');
+
+  await settle(api.ensurePlayingCover());
+  assert(api.state().frontPreviewAlbum===radioAlbum&&!preview.hidden&&preview.dataset.pinned==='true','radio uses the normal pinned shelf cover');
+  api.applyStatus(radioStatus);
+  assert(api.state().albums.filter(a=>a?.[13]==='external').length===1,'repeated radio status does not duplicate its CD');
+  radioArt.onerror();
+  assert(radioAlbum[8].includes(encodeURIComponent('/imageproxy/station/image.jpg')),'radio shelf CD falls back to station artwork');
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{title:'Next radio song',remote_title:'Station',artwork_url:''}]});
+  assert(api.state().albums.includes(radioAlbum)&&radioAlbum[8].includes(encodeURIComponent('/imageproxy/station/image.jpg')),'missing song artwork retains the same CD with remembered station artwork');
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{title:'Next radio song',remote_title:'Station',artwork_url:'/imageproxy/delayed/image.jpg'}]});
+  assert(radioAlbum[8].includes(encodeURIComponent('/imageproxy/station/image.jpg')),'station artwork remains visible while delayed song artwork loads');
+  radioArt.onload();
+  assert(radioAlbum[8].includes(encodeURIComponent('/imageproxy/delayed/image.jpg')),'loaded song artwork replaces station artwork in place');
+  const previousRadioArt=radioAlbum[8];
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{title:'New radio song',remote_title:'Station',artwork_url:'/imageproxy/delayed/image.jpg',modificationTime:'new artwork revision'}]});
+  assert(radioAlbum[8]===previousRadioArt&&radioArt.src!==previousRadioArt,'updated artwork is preloaded while current artwork stays visible');
+  radioArt.onload();
+  assert(radioAlbum[8]!==previousRadioArt&&radioAlbum[8].includes('revision='),'same artwork URL with new metadata refreshes the existing radio CD');
+
+  radioArt.onerror();radioArt.onerror();
+  assert(api.state().albums.includes(radioAlbum),'artwork failures never remove the temporary radio CD');
+
+  api.applyStatus({mode:'pause',playlist_loop:[{title:'Radio song'}]});
+  assert(api.state().albums.includes(radioAlbum)&&element('.bf-front-play').getAttribute('aria-label')==='Resume player','paused radio retains its shelf CD and matching button');
+  api.applyStatus({mode:'play',playlist_loop:[{album_id:20,album:'Library album',title:'Local track'}]});
+  assert(!api.state().albums.some(a=>a?.[13]==='external')&&api.state().albums.length===beforeRadioCount,'library playback removes the temporary radio CD');
+  api.set({playing:false,hover:0});const headingAlbum=api.state().albums[0],oldHeading=headingAlbum.slice(0,2);
+  headingAlbum[0]=' ';headingAlbum[1]='The Dead Daisies';api.updateMeta(true);
+  assert(element('.bf-meta').children[0].children[1].textContent==='The Dead Daisies','missing album title omits the artist separator');
+  [headingAlbum[0],headingAlbum[1]]=oldHeading;
   return checks;
 }
 
