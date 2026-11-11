@@ -121,7 +121,7 @@ jobs:
           }
 
       - name: Upload Windows ZIP and SHA-256
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lyrion-carousel-windows-x64
           path: |
