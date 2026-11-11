@@ -538,6 +538,35 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(calls,[(None,'artflow'),(None,'new')],
                          'cached recently-added order must not repeatedly query LMS')
 
+    def test_recently_indexed_is_distinct_from_native_recent_and_respects_genres(self):
+        base=[{'id':1,'artist':'A','album':'Old'},
+              {'id':2,'artist':'B','album':'New compilation'},
+              {'id':3,'artist':'C','album':'New greatest hits'}]
+        calls=[]
+        def pages(genre_id=None,sort='artflow'):
+            if sort=='new':
+                return iter([[{'id':1},{'id':2},{'id':3}]])
+            return iter([base])
+        def lms_rpc(player,command):
+            calls.append(command)
+            ident=command[-1].split(':',1)[1]
+            return {'count':1,'titles_loop':[
+                {'album_id':int(ident),'addedTime':{1:100,2:300,3:400}[int(ident)]}]}
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            with patch.object(self.handler,'_catalogue_genre_ids',return_value={'3'}):
+                with patch.object(self.handler,'_lms_rpc',side_effect=lms_rpc):
+                    self.handler.path='/api/catalogue?order=indexed&exclude_genre_id=7'
+                    self.handler._serve_catalogue()
+                    self.handler._serve_catalogue()
+                    self.assertEqual(len(calls),3,'prepared order must reuse cache')
+                    self.handler.path='/api/catalogue?order=recent&exclude_genre_id=7'
+                    self.handler._serve_catalogue()
+        indexed=json.loads(self.responses[0][1])
+        native=json.loads(self.responses[2][1])
+        self.assertEqual([a['id'] for a in indexed['albums_loop']],[2,1])
+        self.assertEqual([a['id'] for a in native['albums_loop']],[1,2])
+        self.assertEqual(indexed['library_count'],3)
+
     def test_snapshot_survives_memory_reset_and_recovers_when_invalidated(self):
         pages=[[{'id':1,'artist':'Z','album':'First'}]]
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)) as upstream:
