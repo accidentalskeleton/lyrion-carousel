@@ -1407,7 +1407,30 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=radio-indexed-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+
+  // Labels and icons must be visibly different, but the sort IDs stay stable
+  // so previously saved preferences continue to select the same algorithm.
+  const orderLabels=sources.app.match(/const orderLabels=\\{[^;]+;/)?.[0]||'';
+  assert(orderLabels.includes("recent:'New Music (LMS)'")&&orderLabels.includes("indexed:'Recently Added'"),
+    'native and Carousel album date orders have distinct, truthful labels');
+  assert(orderLabels.includes("artistAlbum:'Artist → Album'")&&
+    orderLabels.includes("album:'Album → Artist'")&&orderLabels.includes("colour:'Spine Colour'"),
+    'alphabetical and spine colour labels are descriptive');
+  const menu=sources.index.match(/<div class="bf-order-menu"[^>]*>[\\s\\S]*?<\\/div>/)?.[0]||'';
+  const modeOrder=[...menu.matchAll(/data-order="([^"]+)"/g)].map(match=>match[1]);
+  assert(modeOrder.join(',')==='artistAlbum,album,indexed,recent,colour,random',
+    'order menu groups alphabetical, chronological and visual sorting');
+  assert(menu.includes('role="separator"')&&menu.includes('Sort albums by'),
+    'sort menu contains a heading and group dividers');
+  const clockButton=menu.match(/data-order="recent"[^>]*>[\\s\\S]*?<\\/button>/)?.[0]||'';
+  const calendarButton=menu.match(/data-order="indexed"[^>]*>[\\s\\S]*?<\\/button>/)?.[0]||'';
+  assert(clockButton.includes('M3.5 4.5v4.5H8')&&
+    calendarButton.includes('M5 5h14v14H5z')&&
+    sources.index.includes('class="bf-order-icon lms-history"')&&
+    sources.albumBrowserCss.includes('[data-mode="recent"] .bf-order-icon.lms-history'),
+    'LMS New Music uses a distinct history clock while Recently Added keeps the calendar');
+
+  assert(sources.index.includes('js/app.js?v=sort-labels-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
