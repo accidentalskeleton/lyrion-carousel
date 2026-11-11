@@ -818,6 +818,12 @@ root.addEventListener('pointerdown',event=>{
 },true);
 // Tap to close, drag to browse, or hold for the album menu.
 const frontCaseElement=frontPreview.querySelector('.bf-front-case');
+/* Browser text selection is never an intended gesture on an album spine or
+   open jewel case. Keep this scoped to the CD surfaces, not form controls or
+   information popups; leave pointer/click events to Carousel's handlers. */
+for(const surface of [stage,frontCaseElement])
+    surface.addEventListener('selectstart',event=>event.preventDefault());
+
 let frontPress=null,frontPressTimer=0;
 function cancelFrontPress(){clearTimeout(frontPressTimer);frontPressTimer=0;frontPress=null}
 function dismissFrontPreview(){
