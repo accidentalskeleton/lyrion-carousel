@@ -97,6 +97,23 @@ export async function runShelfBrowserTests() {
     }), 'The real open case never covers another spine');
   };
   await api.loadInitialCatalogue();
+  // Browser-level checks: native blue text selection/tap highlight should
+  // never appear on either a spine or an opened jewel case.
+  const firstSpine=stage.querySelector('.bf-album');
+  assert(!!firstSpine,'touch selection test has a rendered album spine');
+  for(const [surface,name] of [[firstSpine,'album spine'],[cover,'open jewel case']]){
+    const style=getComputedStyle(surface);
+    assert(style.userSelect==='none',name+' disallows native text selection');
+    assert(style.webkitTapHighlightColor==='rgba(0, 0, 0, 0)',
+      name+' has no Chromium/WebKit tap highlight');
+    const selection=new Event('selectstart',{bubbles:true,cancelable:true});
+    surface.dispatchEvent(selection);
+    assert(selection.defaultPrevented,name+' cancels native selectstart');
+  }
+  const inputSelection=new Event('selectstart',{bubbles:true,cancelable:true});
+  document.querySelector('.bf-search-input').dispatchEvent(inputSelection);
+  assert(!inputSelection.defaultPrevented,'search input selection is not intercepted by shelf handlers');
+
   if(multiDisc){
     const rows=[...stage.querySelectorAll('.bf-album')];
     for(const row of rows){

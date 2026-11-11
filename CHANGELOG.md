@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Prevent native touchscreen blue text-selection highlights, tap flash and long-press callouts on CD spines and open jewel cases. Scope the suppression to album surfaces so search inputs and popups retain their normal behaviour, without changing Carousel's tap, swipe, drag or long-press actions.
+
 - Clarify the order menu with **Artist → Album**, **Album → Artist**, **Recently Added** (Carousel’s indexed dates), **New Music (LMS)** (LMS persistent recording dates), **Spine Colour**, and **Random**. Keep the existing icons for other options, use a distinct history-clock icon for LMS New Music, and group choices with subtle dividers. Internal sort IDs and saved preferences remain unchanged.
 
 - Add **Recently Indexed** as a second Library-only album sort alongside the unchanged LMS **Recently Added** view. Use current-track indexing dates through the standard LMS API rather than recording history, with per-server SQLite caching, bounded pagination, genre exclusions, and regression tests. No LMS patch or Pi ripper dependency.
