@@ -63,6 +63,18 @@ export async function runTests(sources) {
   const element=selector=>{if(!elements.has(selector))elements.set(selector,new Element(selector));return elements.get(selector);};
   root.querySelector=selector=>selector.includes(':not(')?null:element(selector);
   const stage=element('.bf-stage'),preview=element('.bf-front-preview'),frontCase=new Element('case');
+  // Touch gestures on spines and open cases should not select browser text.
+  // Search fields and other panels must retain their native behaviour.
+  const selectEvent=()=>({type:'selectstart',prevented:false,preventDefault(){this.prevented=true;}});
+  const spineSelect=selectEvent(),openCaseSelect=selectEvent(),searchSelect=selectEvent();
+  stage.dispatchEvent(spineSelect);
+  frontCase.dispatchEvent(openCaseSelect);
+  assert(spineSelect.prevented&&openCaseSelect.prevented,
+    'spines and open jewel cases prevent native browser text selection');
+  element('.bf-search-input').dispatchEvent(searchSelect);
+  assert(!searchSelect.prevented&&!document.listeners.selectstart,
+    'touch selection protection remains scoped to CD surfaces');
+
   // Track hidden transitions as well as final state; a close/reopen flicker
   // can otherwise pass assertions that inspect only the final DOM.
   const previewHideWrites=[];
@@ -1340,6 +1352,15 @@ export async function runTests(sources) {
       'separate Play button remains on the closed photographic case');
     assert(sources.index.includes('settings-panel-coffee')&&sources.index.includes('https://buymeacoffee.com/stuliet'),'Coffee settings panel present');
   }
+  if(sources.shelfCss) {
+    assert(sources.shelfCss.includes('#book-fan-browser .bf-stage *')&&
+      sources.shelfCss.includes('#book-fan-browser .bf-front-case *'),
+      'spine descendants and open covers explicitly suppress native selection');
+    assert(sources.shelfCss.includes('-webkit-user-select:none')&&
+      sources.shelfCss.includes('-webkit-touch-callout:none')&&
+      sources.shelfCss.includes('-webkit-tap-highlight-color:transparent'),
+      'Safari and Chromium touchscreen highlight suppression is configured');
+  }
   if (sources.albumBrowserCss) {
     for(const selector of ['.bf-source-switch','.bf-previous','.bf-next','.bf-queue-open'])
       assert(sources.albumBrowserCss.includes('#book-fan-browser.is-starting '+selector),'startup hides '+selector);
@@ -1437,7 +1458,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=sort-labels-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=sort-labels-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=touch-selection-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1871,6 +1892,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.lmsProvider=await readFile(new URL('../js/providers/lms-provider.js',import.meta.url),'utf8');
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
+  sources.shelfCss=await readFile(new URL('../css/shelf.css',import.meta.url),'utf8');
   sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
   sources.debianBuild=await readFile(new URL('../packaging/debian/build-deb.sh',import.meta.url),'utf8');
   sources.performance=await readFile(new URL('../js/performance.js',import.meta.url),'utf8');
