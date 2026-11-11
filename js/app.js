@@ -129,7 +129,7 @@ function shelfIndexAt(space){
     return cycle*albums.length+lo+(local-a)/(b-a);
 }
 let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,paused=false,randomAnimating=false,discoveryBusy=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
-const boundedShelf=()=>orderMode==='recent'&&catalogueSource==='library';
+const boundedShelf=()=>(orderMode==='recent'||orderMode==='indexed')&&catalogueSource==='library';
 // The finite shelf stops when the OUTER spines reach the viewport edges.
 // Clamping the centre to album 0 / N-1 would leave half the display empty.
 const finiteShelfBounds=()=>{
@@ -180,7 +180,7 @@ function restoreSourceOrders(){
         const legacy=localStorage.getItem('albumBrowserOrderMode')||(localStorage.getItem('albumBrowserRandomOrder')==='true'?'random':'artistAlbum');
         for(const source of ['library','spotify']){
             const saved=localStorage.getItem('albumBrowserOrderMode:'+source)||(source==='library'?legacy:'artistAlbum');
-            sourceOrderModes[source]=['artistAlbum','album','random','colour','recent'].includes(saved)&&!(source==='spotify'&&saved==='recent')?saved:'artistAlbum';
+            sourceOrderModes[source]=['artistAlbum','album','random','colour','recent','indexed'].includes(saved)&&!(source==='spotify'&&(saved==='recent'||saved==='indexed'))?saved:'artistAlbum';
         }
     }catch(_){}
     desiredOrderMode=sourceOrderModes[catalogueSource];
@@ -281,13 +281,13 @@ async function followPlayingSource(){
     finally{sourceFollowPending=false}
 }
 
-const orderLabels={artistAlbum:'Artist / Album',album:'Album',random:'Random',colour:'Colour',recent:'Recently Added'};
-function updateOrderToggle(){const label=orderLabels[orderMode];orderToggle.dataset.mode=orderMode;orderToggle.title='Album order: '+label;orderToggle.setAttribute('aria-label','Album order: '+label+'. Open order options');orderToggle.setAttribute('aria-expanded',String(!orderMenu.hidden));orderToggle.setAttribute('aria-pressed',String(orderMode==='random'));orderMenu.querySelectorAll('[data-order]').forEach(button=>{button.setAttribute('aria-checked',String(button.dataset.order===orderMode));button.disabled=catalogueSource==='spotify'&&button.dataset.order==='recent'})}
+const orderLabels={artistAlbum:'Artist → Album',album:'Album → Artist',random:'Random',colour:'Spine Colour',recent:'New Music (LMS)',indexed:'Recently Added'};
+function updateOrderToggle(){const label=orderLabels[orderMode];orderToggle.dataset.mode=orderMode;orderToggle.title='Album order: '+label;orderToggle.setAttribute('aria-label','Album order: '+label+'. Open order options');orderToggle.setAttribute('aria-expanded',String(!orderMenu.hidden));orderToggle.setAttribute('aria-pressed',String(orderMode==='random'));orderMenu.querySelectorAll('[data-order]').forEach(button=>{button.setAttribute('aria-checked',String(button.dataset.order===orderMode));button.disabled=catalogueSource==='spotify'&&['recent','indexed'].includes(button.dataset.order)})}
 function closeOrderMenu(){orderMenu.hidden=true;updateOrderToggle()}
-function openOrderMenu(){closeAlbumMenu();const rect=orderToggle.getBoundingClientRect();orderMenu.hidden=false;orderMenu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-190))+'px';orderMenu.style.bottom=Math.max(12,window.innerHeight-rect.top+8)+'px';updateOrderToggle();orderMenu.querySelector(`[data-order="${orderMode}"]`)?.focus()}
+function openOrderMenu(){closeAlbumMenu();const rect=orderToggle.getBoundingClientRect();orderMenu.hidden=false;orderMenu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-orderMenu.offsetWidth-12))+'px';orderMenu.style.bottom=Math.max(12,window.innerHeight-rect.top+8)+'px';updateOrderToggle();orderMenu.querySelector(`[data-order="${orderMode}"]`)?.focus()}
 async function setDisplayOrder(mode){
     if(catalogueSource==='spotify'){
-        if(!Object.prototype.hasOwnProperty.call(orderLabels,mode)||mode==='recent')return;
+        if(!Object.prototype.hasOwnProperty.call(orderLabels,mode)||mode==='recent'||mode==='indexed')return;
         const selected=albums[selectedIndex()]?.[6]; orderMode=desiredOrderMode=mode;
         if(mode==='random')albums.sort(()=>Math.random()-.5);
         else if(mode==='colour')mode='artistAlbum';

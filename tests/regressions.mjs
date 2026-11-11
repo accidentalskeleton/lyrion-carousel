@@ -895,8 +895,16 @@ export async function runTests(sources) {
     assert(api.state().frontPreviewAlbum[6]===20&&!preview.hidden,'sort '+mode+' opens playing album');
     api.set({position:3});
   }
-  // Recently Added is the one finite shelf: no wrapping by arrows, wheel,
-  // drag or geometry; all other ordering modes remain circular.
+  // Both chronological shelves are finite: no wrapping by arrows, wheel,
+  // drag or geometry; other modes remain circular.
+  await api.setDisplayOrder('indexed');
+  assert(api.state().orderMode==='indexed'&&storage.get('albumBrowserOrderMode')==='indexed',
+    'Recently Indexed order is selectable and persisted independently');
+  api.closeFrontPreview();
+  const [indexedFirst]=api.finiteShelfBounds();
+  api.set({playing:false,position:0});api.draw();api.browseWithArrow(-1);
+  assert(api.state().target===indexedFirst,
+    'Recently Indexed uses the same bounded shelf as Recently Added');
   api.set({playing:false,position:0});
   await api.setDisplayOrder('recent');
   assert(api.state().orderMode==='recent'&&storage.get('albumBrowserOrderMode')==='recent',
@@ -1399,7 +1407,37 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=external-middle-slot-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+
+  // All original sort IDs remain stable, keeping saved preferences intact.
+  const labelStart=sources.app.indexOf('const orderLabels=');
+  const orderLabels=sources.app.slice(labelStart,sources.app.indexOf(';',labelStart));
+  assert(orderLabels.includes("recent:'New Music (LMS)'")&&orderLabels.includes("indexed:'Recently Added'"),
+    'LMS-native and Carousel album date orders have distinct visible names');
+  assert(orderLabels.includes("artistAlbum:'Artist → Album'")&&
+    orderLabels.includes("album:'Album → Artist'")&&orderLabels.includes("colour:'Spine Colour'"),
+    'alphabetical and spine colour labels are descriptive');
+  const menuStart=sources.index.indexOf('<div class="bf-order-menu"');
+  const menu=sources.index.slice(menuStart,sources.index.indexOf('<div class="bf-transport"',menuStart));
+  const modeOrder=[...menu.matchAll(/data-order="([^"]+)"/g)].map(match=>match[1]);
+  assert(modeOrder.join(',')==='artistAlbum,album,indexed,recent,colour,random',
+    'order menu groups alphabetical, chronological and visual sorting');
+  assert(menu.includes('role="separator"')&&menu.includes('Sort albums by'),
+    'sort menu contains a heading and group dividers');
+  const buttonContent=id=>{
+    const from=menu.indexOf('data-order="'+id+'"');
+    return from<0?'':menu.slice(from,menu.indexOf('</button>',from));
+  };
+  const clockButton=buttonContent('recent');
+  const calendarButton=buttonContent('indexed');
+  assert(clockButton.includes('M3.5 4.5v4.5H8')&&
+    calendarButton.includes('M5 5h14v14H5z')&&
+    sources.index.includes('class="bf-order-icon lms-history"')&&
+    sources.albumBrowserCss.includes('[data-mode="recent"] .bf-order-icon.lms-history'),
+    'LMS New Music uses a distinct history clock while Recently Added keeps the calendar');
+
+  assert(sources.index.includes('css/album-browser.css?v=sort-labels-1'),
+    'sort menu icon CSS cache version is updated');
+  assert(sources.index.includes('js/app.js?v=sort-labels-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1727,6 +1765,8 @@ export async function runTests(sources) {
   assert(api.sourceOrdersForTest().library==='colour'&&api.sourceOrdersForTest().spotify==='artistAlbum','legacy shared ordering migrates to Library without overwriting Spotify default');
   storage.set('albumBrowserOrderMode:spotify','recent');api.restoreSourceOrders();
   assert(api.sourceOrdersForTest().spotify==='artistAlbum','unsupported Spotify Recently Added preference falls back safely');
+  storage.set('albumBrowserOrderMode:spotify','indexed');api.restoreSourceOrders();
+  assert(api.sourceOrdersForTest().spotify==='artistAlbum','Spotify cannot restore Library-only Recently Indexed');
   api.set({playerId:'test-player',playing:false,playingAlbumId:null});api.setSourceForTest('library');
   statusFixture={mode:'play',playlist_tracks:24,playlist_cur_index:0,playlist_loop:[{album_id:20,title:'First track'},{album_id:20,title:'Second track'}]};
   await api.openQueue();

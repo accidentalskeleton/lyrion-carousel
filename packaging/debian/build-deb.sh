@@ -20,6 +20,7 @@ install -Dm0644 "$PROJECT_DIR/spotty-diagnostic.html" "$STAGE/opt/$PACKAGE/spott
 install -Dm0644 "$PROJECT_DIR/VERSION" "$STAGE/opt/$PACKAGE/VERSION"
 install -Dm0644 "$PROJECT_DIR/manifest.webmanifest" "$STAGE/opt/$PACKAGE/manifest.webmanifest"
 install -Dm0755 "$PROJECT_DIR/server.py" "$STAGE/opt/$PACKAGE/server.py"
+install -Dm0644 "$PROJECT_DIR/indexed_order.py" "$STAGE/opt/$PACKAGE/indexed_order.py"
 install -Dm0644 "$PROJECT_DIR/README.md" "$STAGE/usr/share/doc/$PACKAGE/README.md"
 install -Dm0644 "$PROJECT_DIR/LICENSE" "$STAGE/usr/share/doc/$PACKAGE/LICENSE"
 install -Dm0644 "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" "$STAGE/usr/share/doc/$PACKAGE/THIRD_PARTY_NOTICES.md"
