@@ -767,7 +767,8 @@ body {
 .bf-order-toggle[data-mode="artistAlbum"] .bf-order-icon.artist-album,
 .bf-order-toggle[data-mode="album"] .bf-order-icon.album,
 .bf-order-toggle[data-mode="random"] .bf-order-icon.random,
-.bf-order-toggle[data-mode="recent"] .bf-order-icon.recent { display:block; }
+.bf-order-toggle[data-mode="recent"] .bf-order-icon.recent,
+.bf-order-toggle[data-mode="indexed"] .bf-order-icon.recent { display:block; }
 .bf-order-toggle[aria-pressed="true"] {
     border-color:rgba(143,186,145,.55);
     background:rgba(35,58,38,.96);
@@ -776,7 +777,8 @@ body {
 .bf-order-toggle[data-mode="artistAlbum"] { color:#8fb8c8; }
 .bf-order-toggle[data-mode="album"] { color:#d5b86f; }
 .bf-order-toggle[data-mode="random"] { color:#d28d83; }
-.bf-order-toggle[data-mode="recent"] { color:#90bd9a; }
+.bf-order-toggle[data-mode="recent"],
+.bf-order-toggle[data-mode="indexed"] { color:#90bd9a; }
 .bf-order-toggle[data-mode="album"] .bf-order-icon.album { display:none; }
 .bf-order-toggle[data-mode="album"]::before,
 .bf-order-menu button[data-order="album"]::before {
