@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add **Recently Indexed** as a second Library-only album sort alongside the unchanged LMS **Recently Added** view. Use current-track indexing dates through the standard LMS API rather than recording history, with per-server SQLite caching, bounded pagination, genre exclusions, and regression tests. No LMS patch or Pi ripper dependency.
+
 - Show external playback artwork as a temporary CD on the dimmed shelf, using normal spine spacing, scrolling, preview timeouts and idle return. Prefer song artwork with station-artwork fallback from LMS metadata or matching favourites. Keep the CD visible through missing or delayed artwork, preload replacement artwork, refresh reused artwork URLs when radio metadata changes, and remove the temporary CD when album playback resumes. Omit the artist separator when the album title is missing.
 
 - Keep the selected shelf and dim it during radio or other external playback instead of switching to Spotify. Restore normal brightness for Library or Spotify playback while keeping external now-playing details and controls readable.
