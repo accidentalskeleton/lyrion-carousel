@@ -122,7 +122,7 @@ export async function runTests(sources) {
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
-      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,syncFrontTimeoutPause,openQueue,closeQueue,restoreSourceOrders,resolveSpotifyPlayingAlbum,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
+      prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,syncFrontTimeoutPause,openQueue,closeQueue,restoreSourceOrders,resolveSpotifyPlayingAlbum,followPlayingSource,playbackSourceForTrack,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
       state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,frontTimeoutRemaining,frontTimeoutDeadline,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
       geometry:()=>({nodes,frontPreviewIndex})};
@@ -1399,7 +1399,7 @@ export async function runTests(sources) {
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
-  assert(sources.index.includes('js/app.js?v=queue-position-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
+  assert(sources.index.includes('js/app.js?v=external-playback-1')&&sources.index.includes('css/shelf.css?v=shelf-variety-catalogue-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1770,6 +1770,18 @@ export async function runTests(sources) {
     assert(api.state().frontTimer===0&&!preview.hidden,selector+' pauses preview timeout');
     element(selector).hidden=true;api.syncFrontTimeoutPause();assert(api.state().frontTimer!==0,selector+' resumes preview timeout');
   }
+  const sourceBeforeRadio=api.sourceOrdersForTest(),shelfBeforeRadio=api.sourceForTest();
+  api.applyStatus({mode:'play',remote:1,playlist_cur_index:0,playlist_tracks:1,playlist_loop:[{title:'Radio programme',album:'Radio station',url:'https://radio.example/live'}]});
+  assert(root.dataset.externalPlayback==='true','radio playback dims the shelf');
+  await settle(api.followPlayingSource());
+  assert(api.sourceForTest()===shelfBeforeRadio&&api.sourceOrdersForTest().library===sourceBeforeRadio.library&&api.sourceOrdersForTest().spotify===sourceBeforeRadio.spotify,'radio does not change saved shelf ordering');
+  api.applyStatus({mode:'pause',playlist_loop:[{title:'Radio programme'}]});
+  assert(root.dataset.externalPlayback==='true','paused external playback keeps the shelf dimmed');
+  api.applyStatus({mode:'play',playlist_loop:[{album_id:20,album:'Library album',title:'Local track',url:'file:///music/track.flac'}]});
+  assert(root.dataset.externalPlayback==='false','library playback restores normal shelf brightness');
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{title:'Spotify track',album:'Spotify album',url:'spotify:track:fixture'}]});
+  assert(root.dataset.externalPlayback==='false','Spotify playback is not dimmed despite remote flag');
+  api.applyStatus({mode:'stop',playlist_loop:[]});
   return checks;
 }
 

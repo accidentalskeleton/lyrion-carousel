@@ -916,3 +916,11 @@ body {
 .bf-queue-position { margin-right:4px; }
 .bf-queue-progress { display:block; margin-top:4px; }
 .bf-queue-position[hidden], .bf-queue-progress[hidden] { display:none; }
+
+/* Keep external-stream details and transport readable while softening the shelf. */
+.bf-stage, .bf-front-preview { transition:opacity .3s ease; }
+#book-fan-browser[data-external-playback="true"] .bf-stage,
+#book-fan-browser[data-external-playback="true"] .bf-front-preview { opacity:.4; }
+@media (prefers-reduced-motion:reduce) {
+    .bf-stage, .bf-front-preview { transition:none; }
+}
