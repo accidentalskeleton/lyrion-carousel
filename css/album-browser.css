@@ -767,7 +767,7 @@ body {
 .bf-order-toggle[data-mode="artistAlbum"] .bf-order-icon.artist-album,
 .bf-order-toggle[data-mode="album"] .bf-order-icon.album,
 .bf-order-toggle[data-mode="random"] .bf-order-icon.random,
-.bf-order-toggle[data-mode="recent"] .bf-order-icon.recent,
+.bf-order-toggle[data-mode="recent"] .bf-order-icon.lms-history,
 .bf-order-toggle[data-mode="indexed"] .bf-order-icon.recent { display:block; }
 .bf-order-toggle[aria-pressed="true"] {
     border-color:rgba(143,186,145,.55);
@@ -777,7 +777,7 @@ body {
 .bf-order-toggle[data-mode="artistAlbum"] { color:#8fb8c8; }
 .bf-order-toggle[data-mode="album"] { color:#d5b86f; }
 .bf-order-toggle[data-mode="random"] { color:#d28d83; }
-.bf-order-toggle[data-mode="recent"],
+.bf-order-toggle[data-mode="recent"] { color:#a8a6d6; }
 .bf-order-toggle[data-mode="indexed"] { color:#90bd9a; }
 .bf-order-toggle[data-mode="album"] .bf-order-icon.album { display:none; }
 .bf-order-toggle[data-mode="album"]::before,
@@ -798,7 +798,9 @@ body {
 .bf-order-menu {
     position:fixed;
     z-index:200;
-    width:174px;
+    width:218px;
+    max-width:calc(100vw - 24px);
+    box-sizing:border-box;
     padding:6px;
     border:1px solid rgba(255,255,255,.14);
     border-radius:9px;
@@ -807,6 +809,18 @@ body {
     backdrop-filter:blur(12px)
 }
 .bf-order-menu[hidden] { display:none; }
+.bf-order-menu-label {
+    padding:6px 9px 5px;
+    color:rgba(241,238,232,.62);
+    font-size:10px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+}
+.bf-order-menu-separator {
+    height:1px;
+    margin:5px 7px;
+    background:rgba(255,255,255,.13);
+}
 .bf-order-menu button {
     display:flex;
     align-items:center;
@@ -830,7 +844,8 @@ body {
 .bf-order-menu button[data-order="artistAlbum"] svg { color:#8fb8c8; }
 .bf-order-menu button[data-order="album"] svg { color:#d5b86f; }
 .bf-order-menu button[data-order="random"] svg { color:#d28d83; }
-.bf-order-menu button[data-order="recent"] svg { color:#90bd9a; }
+.bf-order-menu button[data-order="indexed"] svg { color:#90bd9a; }
+.bf-order-menu button[data-order="recent"] svg { color:#a8a6d6; }
 .bf-order-menu button[data-order="album"] svg { display:none; }
 @keyframes bf-shamrock-spin {
     to {
