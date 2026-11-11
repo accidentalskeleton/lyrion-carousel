@@ -1,3 +1,16 @@
+/* Touching, dragging or holding a spine/open case is an album gesture,
+   not a request for native text selection, tap flashes or OS callouts.
+   Scope this to the CD surfaces: menus, search and settings remain usable. */
+#book-fan-browser .bf-stage,
+#book-fan-browser .bf-stage *,
+#book-fan-browser .bf-front-case,
+#book-fan-browser .bf-front-case * {
+    -webkit-user-select:none;
+    user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
+}
+
 .bf-stage.bf-shelf-active {
     perspective:none;
 }
