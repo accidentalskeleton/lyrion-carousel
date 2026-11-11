@@ -1408,22 +1408,27 @@ export async function runTests(sources) {
     sources.app.includes("if(sourceFollowAttempt===key)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
 
-  // Labels and icons must be visibly different, but the sort IDs stay stable
-  // so previously saved preferences continue to select the same algorithm.
-  const orderLabels=sources.app.match(/const orderLabels=\\{[^;]+;/)?.[0]||'';
+  // All original sort IDs remain stable, keeping saved preferences intact.
+  const labelStart=sources.app.indexOf('const orderLabels=');
+  const orderLabels=sources.app.slice(labelStart,sources.app.indexOf(';',labelStart));
   assert(orderLabels.includes("recent:'New Music (LMS)'")&&orderLabels.includes("indexed:'Recently Added'"),
-    'native and Carousel album date orders have distinct, truthful labels');
+    'LMS-native and Carousel album date orders have distinct visible names');
   assert(orderLabels.includes("artistAlbum:'Artist → Album'")&&
     orderLabels.includes("album:'Album → Artist'")&&orderLabels.includes("colour:'Spine Colour'"),
     'alphabetical and spine colour labels are descriptive');
-  const menu=sources.index.match(/<div class="bf-order-menu"[^>]*>[\\s\\S]*?<\\/div>/)?.[0]||'';
+  const menuStart=sources.index.indexOf('<div class="bf-order-menu"');
+  const menu=sources.index.slice(menuStart,sources.index.indexOf('<div class="bf-transport"',menuStart));
   const modeOrder=[...menu.matchAll(/data-order="([^"]+)"/g)].map(match=>match[1]);
   assert(modeOrder.join(',')==='artistAlbum,album,indexed,recent,colour,random',
     'order menu groups alphabetical, chronological and visual sorting');
   assert(menu.includes('role="separator"')&&menu.includes('Sort albums by'),
     'sort menu contains a heading and group dividers');
-  const clockButton=menu.match(/data-order="recent"[^>]*>[\\s\\S]*?<\\/button>/)?.[0]||'';
-  const calendarButton=menu.match(/data-order="indexed"[^>]*>[\\s\\S]*?<\\/button>/)?.[0]||'';
+  const buttonContent=id=>{
+    const from=menu.indexOf('data-order="'+id+'"');
+    return from<0?'':menu.slice(from,menu.indexOf('</button>',from));
+  };
+  const clockButton=buttonContent('recent');
+  const calendarButton=buttonContent('indexed');
   assert(clockButton.includes('M3.5 4.5v4.5H8')&&
     calendarButton.includes('M5 5h14v14H5z')&&
     sources.index.includes('class="bf-order-icon lms-history"')&&
