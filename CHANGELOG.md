@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Keep the selected shelf and dim it during radio or other external playback instead of switching to Spotify. Restore normal brightness for Library or Spotify playback while keeping external now-playing details and controls readable.
+
 - Show the current queue position and total beside playback controls and in the Now Playing header, updating in place for local and Spotify playback and hiding when the queue is empty.
 
 ## [0.12.0] - 2026-11-10
