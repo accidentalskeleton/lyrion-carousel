@@ -63,18 +63,6 @@ export async function runTests(sources) {
   const element=selector=>{if(!elements.has(selector))elements.set(selector,new Element(selector));return elements.get(selector);};
   root.querySelector=selector=>selector.includes(':not(')?null:element(selector);
   const stage=element('.bf-stage'),preview=element('.bf-front-preview'),frontCase=new Element('case');
-  // Touch gestures on spines and open cases should not select browser text.
-  // Search fields and other panels must retain their native behaviour.
-  const selectEvent=()=>({type:'selectstart',prevented:false,preventDefault(){this.prevented=true;}});
-  const spineSelect=selectEvent(),openCaseSelect=selectEvent(),searchSelect=selectEvent();
-  stage.dispatchEvent(spineSelect);
-  frontCase.dispatchEvent(openCaseSelect);
-  assert(spineSelect.prevented&&openCaseSelect.prevented,
-    'spines and open jewel cases prevent native browser text selection');
-  element('.bf-search-input').dispatchEvent(searchSelect);
-  assert(!searchSelect.prevented&&!document.listeners.selectstart,
-    'touch selection protection remains scoped to CD surfaces');
-
   // Track hidden transitions as well as final state; a close/reopen flicker
   // can otherwise pass assertions that inspect only the final DOM.
   const previewHideWrites=[];
@@ -892,6 +880,19 @@ export async function runTests(sources) {
     !sources.settings.includes('keepPlayingOpen:'),
     'obsolete setting to close playing cover has been removed');
   await settle(api.connectLyrion());
+  // Touch gestures on spines and open cases should not select browser text.
+  // Search fields and other panels must retain their native behaviour.
+  const selectEvent=()=>({type:'selectstart',prevented:false,preventDefault(){this.prevented=true;}});
+  const spineSelect=selectEvent(),openCaseSelect=selectEvent(),searchSelect=selectEvent();
+  stage.dispatchEvent(spineSelect);
+  frontCase.dispatchEvent(openCaseSelect);
+  assert(spineSelect.prevented&&openCaseSelect.prevented,
+    'spines and open jewel cases prevent native browser text selection');
+  element('.bf-search-input').dispatchEvent(searchSelect);
+  assert(!searchSelect.prevented&&!document.listeners.selectstart,
+    'touch selection protection remains scoped to CD surfaces');
+
+
   assert(root.dataset.ready==='true'&&stage.children.length>0,'complete connection reveals shelf');
   assert(!preview.hidden&&api.state().frontPreviewAlbum[6]===20,'complete connection opens playing album');
   api.set({playing:false});
