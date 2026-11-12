@@ -36,7 +36,12 @@ CONF_DIR="$HOME_DIR/.config/lyrion-carousel"
 CONF="$CONF_DIR/kiosk.conf"
 AUTOSTART="$HOME_DIR/.config/labwc/autostart"
 USER_GROUP="$(id -gn "$USER_NAME")"
-install -d -o "$USER_NAME" -g "$USER_GROUP" "$(dirname "$BIN")" "$CONF_DIR" "$(dirname "$AUTOSTART")"
+# Create and own parent directories explicitly. install -d on a nested path
+# does not repair ownership of an existing or newly-created ancestor.
+install -d -o "$USER_NAME" -g "$USER_GROUP" "$HOME_DIR/.config" "$HOME_DIR/.local"
+install -d -o "$USER_NAME" -g "$USER_GROUP" "$HOME_DIR/.local/bin" "$HOME_DIR/.local/state"
+install -d -o "$USER_NAME" -g "$USER_GROUP" "$HOME_DIR/.local/state/lyrion-carousel-kiosk"
+install -d -o "$USER_NAME" -g "$USER_GROUP" "$CONF_DIR" "$(dirname "$AUTOSTART")"
 # Refuse to overwrite user files unless they are already managed by this installer.
 if [[ -e "$BIN" ]] && ! grep -q 'Lyrion Carousel managed kiosk launcher' "$BIN"; then
   echo "Existing unmanaged $BIN; move it aside manually before installing" >&2
