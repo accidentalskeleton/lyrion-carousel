@@ -105,7 +105,8 @@ The package/service names are consistently `lyrion-carousel`:
 - service: `lyrion-carousel.service`;
 - configuration: `/etc/default/lyrion-carousel`;
 - application: `/opt/lyrion-carousel`;
-- artwork cache: `/var/cache/lyrion-carousel/artwork`.
+- disposable artwork images: `/var/cache/lyrion-carousel/artwork`;
+- persistent unified metadata database: `/var/cache/lyrion-carousel/carousel-metadata.sqlite3` (outside the artwork directory, so clearing images does not remove saved album-added dates).
 
 The package includes `VERSION`, the web-app manifest, assets, CSS and JavaScript.
 

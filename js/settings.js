@@ -184,7 +184,7 @@ function showWarmStatus(state){
     if(usage&&state.cache){
         const mb=bytes=>(bytes/1000000).toFixed(1)+' MB';
         usage.textContent=mb(state.cache.image_bytes)+' / '+mb(state.cache.limit_bytes)+' artwork';
-        usage.title=mb(state.cache.total_bytes)+' total including '+mb(state.cache.metadata_bytes)+' metadata · '+state.cache.files+' files';
+        usage.title=mb(state.cache.total_bytes)+' image-cache files (including '+mb(state.cache.metadata_bytes)+' MIME sidecars) · '+state.cache.files+' files; persistent SQLite metadata is excluded';
     }
     const busy=state.status==='running'||state.status==='cancelling';
     warmStart.disabled=busy;warmCancel.hidden=!busy;warmCancel.disabled=state.status==='cancelling';

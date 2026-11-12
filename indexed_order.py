@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import math
-import sqlite3
+import metadata_db
 from contextlib import closing
 from pathlib import Path
 
@@ -85,7 +85,7 @@ def _fetch_missing(rpc, missing: set[str]) -> dict[str, int]:
     return dates
 
 
-def indexed_album_order(albums: list[dict], rpc, cache_path: Path) -> list[str]:
+def indexed_album_order(albums: list[dict], rpc, cache_path: Path, lms_url: str = '') -> list[str]:
     """Return album IDs newest first, preserving first-observed dates on rescans.
 
     A separately namespaced SQLite index persists across Carousel restarts and
@@ -98,22 +98,30 @@ def indexed_album_order(albums: list[dict], rpc, cache_path: Path) -> list[str]:
     if not identities:
         return []
 
-    with closing(sqlite3.connect(cache_path, timeout=15)) as db:
-        db.execute('CREATE TABLE IF NOT EXISTS album_dates ('
-                   'album_id TEXT PRIMARY KEY, identity TEXT NOT NULL, added INTEGER)')
-        cached = {album_id: (identity, added) for album_id, identity, added
-                  in db.execute('SELECT album_id, identity, added FROM album_dates')}
-        added = {album_id: cached[album_id][1] for album_id, identity
-                 in identities.items()
-                 if album_id in cached and cached[album_id][0] == identity}
+    # One shared database, with LMS URL on every row to isolate servers.
+    with closing(metadata_db.connect(cache_path)) as db:
+        cached = {
+            album_id: (identity, added)
+            for album_id, identity, added in db.execute(
+                'SELECT album_id, identity, added FROM album_dates WHERE lms_url=?',
+                (lms_url,),
+            )
+        }
+        added = {
+            album_id: cached[album_id][1]
+            for album_id, identity in identities.items()
+            if album_id in cached and cached[album_id][0] == identity
+        }
         missing = set(identities) - set(added)
         if missing:
             found = _fetch_missing(rpc, missing)
-            # Do not commit a partial index if an LMS page fails.
+            # A failed LMS scan never writes partial dates.
             with db:
                 db.executemany(
-                    'INSERT OR REPLACE INTO album_dates(album_id,identity,added) VALUES (?,?,?)',
-                    [(album_id, identities[album_id], found.get(album_id))
+                    'INSERT INTO album_dates(lms_url,album_id,identity,added) '
+                    'VALUES (?,?,?,?) ON CONFLICT(lms_url,album_id) '
+                    'DO UPDATE SET identity=excluded.identity,added=excluded.added',
+                    [(lms_url, album_id, identities[album_id], found.get(album_id))
                      for album_id in sorted(missing)]
                 )
             added.update({album_id: found.get(album_id) for album_id in missing})

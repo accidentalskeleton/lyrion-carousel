@@ -39,10 +39,10 @@ All API POST requests require `X-Lyrion-Request: 1`. Browser requests also rejec
 | `--bind` | `127.0.0.1` | Controller listening address |
 | `--port` | `8088` | Controller HTTP port |
 | `--allowed-hosts` | none | Additional comma-separated local browser hostnames beyond those auto-accepted on the local network |
-| `--cache-dir` | `.cache/album-art` | Persistent album cache location |
+| `--cache-dir` | `.cache/album-art` | Disposable artwork image directory; the single SQLite metadata database is created in its parent |
 | `--cache-limit-mb` | `512` | Initial soft artwork-cache limit, adjustable from the browser |
 | `--cache-hard-limit-mb` | `2000` | Server-only ceiling for browser cache-limit changes |
-| `--clear-cache` | off | Delete the current artwork cache, including generated artwork, catalogue snapshots, colour indexes and previously recorded Recently Added dates, before starting |
+| `--clear-cache` | off | Clear cached images, derived spine metadata and catalogue snapshots before starting, **preserving historical Recently Added dates** in the SQLite database |
 | `--batch-size` | `40` | Albums per browser fallback/index request (server ordering uses 200) |
 | `--idle-return-seconds` | `30` | Default inactivity before returning to now playing; `0` disables |
 | `--reconnect-max-seconds` | `30` | Maximum reconnect delay |

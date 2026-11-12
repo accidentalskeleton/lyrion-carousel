@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Consolidate persistent album-added dates, Library/Spotify spine metadata and catalogue snapshots into a single per-installation SQLite database outside the disposable artwork directory. Begin with a fresh empty metadata store; do not migrate legacy `.meta`, `colour-index-v1`, `indexed-order-v1` or catalogue JSON files. Keep images as files, preserve album-added dates when clearing artwork, and update packaging, regressions and documentation.
+
 - Align usage, getting-started, Windows, deployment and development documentation with the current Settings UI: remove the obsolete **Keep playing album open** toggle, correct the Cache tab artwork-preparation location, update control names and explain current cache clearing. No application behaviour changes.
 
 - Document the difference between Carousel's current-library **Recently Added** ordering and native LMS **New Music**, including the persistent-recording timestamp cause, an example of legitimate shared MusicBrainz recording IDs, SQLite caching, database-rebuild limitations, and LMS source references. Correct the outdated README and architecture descriptions.
