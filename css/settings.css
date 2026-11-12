@@ -438,3 +438,27 @@
     text-underline-offset: 3px;
 }
 .bf-track-spotify-link:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+
+/* Subtle, non-modal announcement; never blocks the shelf or transport. */
+.bf-new-album-toast:not([hidden]) {
+    position: absolute;
+    z-index: 92;
+    top: 52px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: min(500px, 85%);
+    padding: 8px 13px;
+    border: 1px solid rgba(143, 186, 145, .38);
+    border-radius: 9px;
+    background: rgba(22, 34, 26, .96);
+    color: #deebdd;
+    font-size: 12px;
+    line-height: 1.35;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, .28);
+}
+.bf-new-album-toast[hidden] { display: none; }
