@@ -811,12 +811,22 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     def _catalogue_snapshot_key(self,lms_url:str|None=None):
         return (str(self.cache_dir.resolve()),lms_url or self.lms_url)
 
+    def _catalogue_revision(self,snapshot)->str:
+        """Stable album-content revision; unlike snapshot age it only changes
+        when the library's album rows actually change."""
+        revision=snapshot.get('revision')
+        if not isinstance(revision,str) or not revision:
+            revision=self._catalogue_fingerprint(snapshot['albums'])
+            snapshot['revision']=revision
+        return revision
+
     def _save_catalogue_snapshot(self,snapshot)->None:
         """Persist the full snapshot in the shared SQLite database."""
         data = {
             'version': CATALOGUE_SNAPSHOT_VERSION,
             'lms_url': self.lms_url,
             'created': snapshot['created'],
+            'revision': self._catalogue_revision(snapshot),
             'albums': snapshot['albums'],
             'genres': snapshot['genres']
         }
@@ -847,6 +857,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 raise ValueError('Snapshot outdated')
             snapshot={'created':data['created'],'albums':data['albums'],
                       'genres':data['genres'],'colours':self._load_colour_index(),
+                      'revision':data.get('revision'),
                       'orders':OrderedDict()}
         except (OSError,ValueError,TypeError,AttributeError,UnicodeError,sqlite3.Error):
             albums=[album for page in self._catalogue_pages() for album in page]
@@ -951,7 +962,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 return None
             return {'albums':saved['albums'],'genres':saved.get('genres',{}),
                     'orders':OrderedDict(),'colours':self._load_colour_index(),
-                    'created':saved.get('created',0)}
+                    'created':saved.get('created',0),'revision':saved.get('revision')}
         except (OSError,ValueError,TypeError,UnicodeError,AttributeError,sqlite3.Error):
             return None
 
@@ -965,9 +976,9 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             with _CATALOGUE_LOCK:
                 previous=self._previous_catalogue_for_reconcile()
                 current=[album for page in self._catalogue_pages() for album in page]
+                current_revision=self._catalogue_fingerprint(current)
                 changed=(previous is None or
-                         self._catalogue_fingerprint(previous['albums'])!=
-                         self._catalogue_fingerprint(current))
+                         self._catalogue_revision(previous)!=current_revision)
                 old_by_id={str(a.get('id')):a for a in previous['albums']} if previous else {}
                 new_artwork_ids=[]
                 already_indexed=self._load_colour_index()
@@ -983,7 +994,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 # refresh independently after observing a scan completion.
                 snapshot={
                     'created':time.time(),'albums':current,'genres':{},
-                    'colours':already_indexed,
+                    'revision':current_revision,'colours':already_indexed,
                     'orders':OrderedDict()
                 } if changed or previous is None else previous
                 snapshot['created']=time.time()
@@ -998,6 +1009,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 try:self._save_catalogue_snapshot(snapshot)
                 except (OSError,sqlite3.Error):pass
                 result={'changed':changed,'count':len(current),
+                        'revision':self._catalogue_revision(snapshot),
                         'new_albums':sum(1 for a in current if str(a.get('id')) not in old_by_id)}
             # Do not hold the catalogue lock while starting background work.
             if new_artwork_ids and self.lms_url==self.runtime_config.get('lms_url',self.lms_url):
@@ -1105,6 +1117,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     elif mode not in ('recent','indexed'):albums.sort(key=key)
                     payload=json.dumps({'count':len(albums),'library_count':library_count,
                                         'snapshot_created':snapshot['created'],
+                                        'catalogue_revision':self._catalogue_revision(snapshot),
                                         'albums_loop':albums},ensure_ascii=False).encode('utf-8')
                     if mode!='random':
                         remember_catalogue_order(snapshot['orders'],order_key,payload)
