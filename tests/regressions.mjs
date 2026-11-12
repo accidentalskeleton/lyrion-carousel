@@ -201,6 +201,7 @@ export async function runTests(sources) {
   const api=new Function(...Object.keys(env), app + `
     return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       preparedStateForTest:()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated,revision:preparedCatalogueRevision,live:libraryAlbumCount}),
+      manualSourceStateForTest:()=>({timeout:MANUAL_SOURCE_IDLE_MS,until:sourceBrowseDeadline,timer:sourceBrowseTimer,held:sourceBrowseHeld()}),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -902,6 +903,14 @@ export async function runTests(sources) {
   const releaseNotice=element('.bf-update-notice');
   assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
   assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
+  const manualTimeoutControl=element('.bf-source-browse-timeout');
+  assert(manualTimeoutControl.value==='300000','manual source browse timeout defaults to five minutes');
+  manualTimeoutControl.value='600000';
+  manualTimeoutControl.listeners.change[0]();
+  assert(storage.get('albumBrowserSourceBrowseTimeoutMs')==='600000',
+    'source browsing timeout choice is persisted per browser');
+  manualTimeoutControl.value='300000';
+  manualTimeoutControl.listeners.change[0]();
   assert(autoRelease.checked&&releaseDelays.get(settingsApi.state().timer)===0,'automatic release checks default on and schedule the first check');
   assert(settingsApi.releaseIsNewer('v0.11.0','0.10.0'),'new minor release is detected');
   assert(settingsApi.releaseIsNewer('v0.11.10','0.11.9'),'release versions are compared numerically, not lexically');
@@ -2067,6 +2076,48 @@ export async function runTests(sources) {
     'radio-to-Library playback restores the Library shelf and removes the fake CD');
   assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length===beforePassiveSwitch,
     'passive source-following on another viewer never issues playback commands');
+
+  // A deliberate selection is a LOCAL browsing decision, not a playback
+  // command. The user may browse Spotify while another viewer plays Library.
+  const playbackWritesBeforeBrowse=rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length;
+  assert(api.manualSourceStateForTest().timeout===300000,
+    'default manual source browsing hold is five minutes');
+  await settle(sourceButtonsForTest[1].onclick());
+  assert(api.sourceForTest()==='spotify'&&api.manualSourceStateForTest().held,
+    'selecting Spotify manually holds this viewer on Spotify');
+  const firstBrowseTimer=api.manualSourceStateForTest().timer;
+  const originalDeadline=api.manualSourceStateForTest().until;
+  api.applyStatus({mode:'play',playlist_loop:[{album_id:20,album:'Album 020',
+    title:'Other viewer playing local track',url:'file:///music/local.flac'}]});
+  await api.followPlayingSource();
+  assert(api.sourceForTest()==='spotify',
+    'local playback updates cannot override a manual Spotify browsing session');
+  time+=60000;api.noteUserActivity({type:'wheel'});
+  const renewed=api.manualSourceStateForTest();
+  assert(renewed.held&&renewed.until>originalDeadline&&renewed.timer!==firstBrowseTimer&&
+    !timers.has(firstBrowseTimer),'touch/wheel/keyboard activity extends the local browse timer');
+  time=originalDeadline+1;
+  await api.followPlayingSource();
+  assert(api.sourceForTest()==='spotify','original timeout no longer interrupts an active browser');
+  time=renewed.until+1;
+  const expire=timers.get(renewed.timer);
+  assert(typeof expire==='function','idle expiry has a scheduled callback');
+  expire();
+  await settleSource('library');
+  assert(!api.manualSourceStateForTest().held&&api.sourceForTest()==='library',
+    'after configured inactivity, manual browsing returns to player source');
+  // Changing the setting is immediate, including the Follow immediately
+  // option; automatic switches must never arm their own grace period.
+  api.applySetting('sourceBrowseTimeout',60000);
+  await settle(sourceButtonsForTest[1].onclick());
+  assert(api.manualSourceStateForTest().timeout===60000&&
+    api.manualSourceStateForTest().held,'new timeout applies to a newly selected source');
+  api.applySetting('sourceBrowseTimeout',0);
+  await settleSource('library');
+  assert(!api.manualSourceStateForTest().held&&api.sourceForTest()==='library',
+    'Follow immediately cancels an active browsing hold and resumes syncing');
+  assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length===playbackWritesBeforeBrowse,
+    'manual browsing and automatic return never issue player commands');
   api.set({playing:false,hover:0});const headingAlbum=api.state().albums[0],oldHeading=headingAlbum.slice(0,2);
   headingAlbum[0]=' ';headingAlbum[1]='The Dead Daisies';api.updateMeta(true);
   assert(element('.bf-meta').children[0].children[1].textContent==='The Dead Daisies','missing album title omits the artist separator');
