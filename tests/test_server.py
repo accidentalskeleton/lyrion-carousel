@@ -308,6 +308,9 @@ class ServerTests(unittest.TestCase):
             self.handler._serve_catalogue()
         key=self.handler._catalogue_snapshot_key()
         snapshot=server._CATALOGUE_MEMORY[key]
+        catalogue_response=json.loads(self.responses[-1][1])
+        self.assertEqual(catalogue_response['library_count'],2)
+        self.assertEqual(catalogue_response['snapshot_created'],snapshot['created'])
         order_key=('artistAlbum',())
         original=snapshot['orders'][order_key]
         snapshot['genres']['7']=['1']
