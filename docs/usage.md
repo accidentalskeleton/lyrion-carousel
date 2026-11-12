@@ -102,6 +102,14 @@ Both date-based choices use a **finite shelf** (no wraparound), respect excluded
 For the LMS query, SQLite cache, paging and edge cases, see the [album-ordering implementation](architecture.md#album-date-ordering-implementation).
 
 
+## Automatic library updates
+
+After LMS indexes new albums or changes an existing release, an open Carousel page normally updates without a manual reload. Carousel monitors LMS scan completion, its `lastscan` timestamp, and library totals. A lightweight read-only status check every **60 seconds** also catches quick scans and missed CometD messages, without rescanning the whole music library each minute.
+
+Once a change is detected, Carousel reconciles its server-side catalogue and refreshes the Library shelf only if needed, preserving the selected album where possible. Spotify browsing can remain selected while the server-side Library snapshot is updated for a later switch back.
+
+**Troubleshooting:** First confirm that LMS has finished scanning and shows the new album. Check **Settings → About** for LMS connection and live-update status. Reloading the browser reconnects and loads the current catalogue; this does not delete your historical Recently Added timestamps.
+
 ## Colour ordering
 
 Choose **Spine Colour** in the album-order menu to arrange spines from red through yellow, green, blue and violet. Nearly neutral colours follow, dark to light; albums with unavailable artwork sort last. Equal colours are ordered by artist and title. The choice persists across reloads and catalogue refreshes.
