@@ -33,6 +33,13 @@ command -v curl >/dev/null || { echo "curl is not installed" >&2; exit 2; }
 
 LOG_DIR="$HOME/.local/state/lyrion-carousel-kiosk"
 mkdir -p "$LOG_DIR"
+# One Chromium supervisor per desktop user/profile. The file descriptor stays
+# open for the whole supervisor lifetime; do not remove the lock file.
+exec 9>"$LOG_DIR/supervisor.lock"
+if ! flock -n 9; then
+  echo "Lyrion Carousel kiosk supervisor is already running for this user" >&2
+  exit 0
+fi
 LOG="$LOG_DIR/chromium.log"
 if [[ -f "$LOG" ]] && (( $(stat -c %s "$LOG") > 5242880 )); then
   mv "$LOG" "$LOG.1"
