@@ -65,6 +65,33 @@ export async function runTests(sources) {
   assert(libraryEvents===8,'lightweight serverstatus polling catches a missed scan');
   await comet.pollServerStatus(20);
   assert(libraryEvents===8,'stale serverstatus polls are ignored');
+  // A browser can already have the NEW live LMS count, yet have an OLD
+  // 15-minute prepared SQLite catalogue. The old comparison with the live
+  // count failed to detect this; compare against the prepared count instead.
+  let preparedSnapshot={albums:95,created:100};
+  let staleDetected=0;
+  const staleComet=new CometDClient(()=>{},()=>{},()=>{staleDetected++;},()=>preparedSnapshot);
+  staleComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===1,'new LMS album detects stale prepared catalogue at initial status');
+  staleComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===2,'stale prepared count remains retryable while catalogue is unchanged');
+  preparedSnapshot={albums:96,created:97};
+  staleComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===2,'reconciliation updates prepared baseline and stops repeated refreshes');
+  const replacedComet=new CometDClient(()=>{},()=>{},()=>{staleDetected++;},
+    ()=>({albums:96,created:90}));
+  replacedComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===3,'same-count library replacements detected after snapshot creation');
+  const freshComet=new CometDClient(()=>{},()=>{},()=>{staleDetected++;},
+    ()=>({albums:96,created:110}));
+  freshComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===3,'fresh snapshot does not cause unnecessary reconciliation');
+  const playerless=new CometDClient(()=>{},()=>{},()=>{},()=>({albums:95,created:100}));
+  // Status polling is allowed to start without an LMS playback player;
+  // avoid real timers/network here by checking the code's contract.
+  assert(sources.lms.includes('if (!playerId) return;') &&
+    sources.lms.indexOf('this.statusTimer = setInterval(') < sources.lms.indexOf('if (!playerId) return;'),
+    'library status polling is independent of playback player selection');
   const oldRpc = realRpc('0', ['players',0,1]); resetRpcSession();
   let rejected = false; try { await oldRpc; } catch (_) { rejected = true; }
   assert(rejected, 'old server RPC rejected');
