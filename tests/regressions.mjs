@@ -145,6 +145,7 @@ export async function runTests(sources) {
   const catalogueEvents=[];
   let catalogueReconcileChanged=true;
   let preparedLibraryOverride=null,preparedCreatedAt=200;
+  const revisionOf=rows=>JSON.stringify(rows.map(x=>[x.id,x.album,x.artist]));
   let tracksFixture=null,statusFixture=null,tracksHandler=null,spottyCapability=1,spotifyFollowAlbums=[],spotifyFollowSearch=null;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
   const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='can')return {_can:spottyCapability};if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return statusFixture||{mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return tracksHandler?tracksHandler(cmd):{titles_loop:(tracksFixture||[]).slice(cmd[1],cmd[1]+cmd[2]),count:tracksFixture?.length||0};if(cmd[0]==='albums'){
@@ -167,14 +168,14 @@ export async function runTests(sources) {
       }
       if(url==='/api/catalogue/reconcile'){
         catalogueEvents.push({action:'reconcile',method:args[0]?.method});
-        return Promise.resolve({ok:true,json:async()=>({changed:catalogueReconcileChanged,count:library.length,new_albums:catalogueReconcileChanged?1:0})});
+        return Promise.resolve({ok:true,json:async()=>({changed:catalogueReconcileChanged,count:library.length,revision:revisionOf(library),new_albums:catalogueReconcileChanged?1:0})});
       }
       if(url.startsWith('/api/catalogue')){
         catalogueEvents.push({action:'read',url});
         const prepared=preparedLibraryOverride||library;
         return Promise.resolve({ok:true,json:async()=>({
           albums_loop:prepared.map(a=>({...a,artwork_track_id:a.id})),
-          count:prepared.length,library_count:prepared.length,snapshot_created:preparedCreatedAt
+          count:prepared.length,library_count:prepared.length,snapshot_created:preparedCreatedAt,catalogue_revision:revisionOf(prepared)
         })});
       }
       return metadataFetch(url,...args);
@@ -186,7 +187,7 @@ export async function runTests(sources) {
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
     return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
-      preparedStateForTest:()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated,live:libraryAlbumCount}),
+      preparedStateForTest:()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated,revision:preparedCatalogueRevision,live:libraryAlbumCount}),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -460,6 +461,30 @@ export async function runTests(sources) {
     !observed.some(e=>e.action==='invalidate')&&
     api.state().albums.some(album=>album?.[0]==='Recently Updated'),
     'changed LMS scan is independently reconciled before Carousel loads its new snapshot');
+  // Another browser can reconcile the shared server before this browser
+  // receives a scan notification. Server then says changed:false, despite
+  // our still-visible shelf having an older content revision.
+  catalogueReconcileChanged=false;
+  library.push({id:97,album:'Another browser added this',artist:'Artist'});
+  const beforeAlreadyReconciled=catalogueEvents.length;
+  await api.handleLibraryEvent();
+  const otherBrowserEvents=catalogueEvents.slice(beforeAlreadyReconciled);
+  assert(otherBrowserEvents[0]?.action==='reconcile'&&
+    otherBrowserEvents.some(e=>e.action==='read')&&
+    api.state().albums.some(a=>a?.[0]==='Another browser added this'),
+    'already-reconciled server revision still refreshes stale browser shelf');
+  // Same count, changed album row: the content revision, not count, must win.
+  library[0]={...library[0],album:'Replaced without changing total'};
+  const beforeSameCount=catalogueEvents.length;
+  await api.handleLibraryEvent();
+  assert(catalogueEvents.slice(beforeSameCount).some(e=>e.action==='read')&&
+    api.state().albums.some(a=>a?.[0]==='Replaced without changing total'),
+    'same-count edits refresh when server revision differs from browser');
+  const afterSync=catalogueEvents.length;
+  await api.handleLibraryEvent();
+  assert(catalogueEvents.length===afterSync+1 &&
+    catalogueEvents[afterSync]?.action==='reconcile',
+    'matching server and browser revisions avoid unnecessary reloads');
   api.applySetting('random',1000);
   // Actual connectLyrion() keeps connecting=true until startup completes;
   // otherwise applyStatus() launches a competing follow animation.
