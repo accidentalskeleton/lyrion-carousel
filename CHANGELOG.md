@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add an explicitly opted-in, reversible passwordless sudo option for the named SSH administrator (for example `stu`) in the dedicated Pi user configuration script. Validate the root-owned sudoers drop-in with `visudo`; never grant sudo to the restricted `carousel` account.
+
 - Document optional Corsair XENEON EDGE touchscreen calibration for Raspberry Pi kiosk clients. Add a separate guarded helper for device/output diagnostics, upstream virtual-environment preparation, configuration backup and explicit restoration; keep third-party calibration out of the default kiosk install and retain the restricted `carousel` account.
 
 - Add a documented and repeatable Raspberry Pi OS Desktop Chromium kiosk installer/uninstaller for local or remote Carousel server use, with preserved labwc autostart, configurable connectivity checks, browser restart, logs and basic CI validation. Keep HDMI modes automatic and defer physical touchscreen/power management settings until the actual display is connected.
