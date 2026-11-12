@@ -31,6 +31,24 @@ Omit `--install-deps` when Chromium, labwc and curl are already installed. No se
 
 To use a local server: `--server http://127.0.0.1:8088/`.
 
+## Optional passwordless sudo for the administrator
+
+To allow the SSH administrator `stu` to run **any** sudo command without a password (including commands that can fully control the Pi), explicitly opt in:
+
+```bash
+sudo bash deploy/raspberry-pi/configure-dedicated-user.sh \
+  --user carousel --passwordless-sudo-user stu
+```
+
+The script writes a validated, root-owned `/etc/sudoers.d/90-lyrion-carousel-admin-stu` rule with mode 0440. This is **not enabled by default** and is not granted to `carousel`. Passwordless sudo reduces protection against someone gaining access to `stu`'s SSH session. Keep SSH keys and the admin account secure.
+
+To undo only this managed rule:
+
+```bash
+sudo bash deploy/raspberry-pi/configure-dedicated-user.sh \
+  --user carousel --revoke-passwordless-sudo-user stu
+```
+
 ## Configure
 
 Edit `~/.config/lyrion-carousel/kiosk.conf` as the desktop user:
