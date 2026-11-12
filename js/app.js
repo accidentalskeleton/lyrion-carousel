@@ -8,6 +8,9 @@ import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
 let connectionGeneration=0,appStarted=false,artworkNamespace='',catalogueSource='library',libraryRefreshPending=false,libraryRefreshing=false,genreRefreshPending=false,disabledGenres=new Set();
+// The prepared catalogue may be older than the live LMS album count. Keep its
+// unfiltered count and creation time separate for scan-revision checks.
+let preparedCatalogueCount=null,preparedCatalogueCreated=null;
 let COVER_SIZE=512;
 let PAGE_SIZE=40,DISPLAY_ALBUM_COUNT=30,IDLE_RETURN_MS=30000,MENU_TIMEOUT_MS=10000,FRONT_TIMEOUT_MS=10000,RECONNECT_MAX_MS=30000,RANDOM_SCROLL_MAX_MS=3000,SEARCH_LIMIT=100;
 const demoAlbums=[['Night Geometry','The Meridian','linear-gradient(145deg,#0f3155,#d14e45)','rgba(244,190,76,.9)','8%','18deg'],['Blue Hours','Harbour Lights','linear-gradient(145deg,#0e223a,#458ca5)','linear-gradient(90deg,#d5eef0 48%,#193a61 48%)','2px','-12deg'],['Still Moving','Northbound','linear-gradient(145deg,#4b1f2c,#de8a55)','rgba(30,16,24,.72)','50%','0deg'],['Parallel Lines','Signal Path','linear-gradient(145deg,#e8dfca,#9c2828)','repeating-linear-gradient(90deg,#181818 0 9px,transparent 9px 18px)','0','24deg'],['After Image','Low Season','linear-gradient(145deg,#192019,#557557)','radial-gradient(circle at 35% 35%,#e0c895 0 12%,transparent 13%),radial-gradient(circle,#182219 0 48%,transparent 49%)','50%','0deg']];
@@ -305,7 +308,11 @@ async function setDisplayOrder(mode){
         if(!response.ok)throw Error('Could not prepare catalogue; restart the updated server');
         const result=await response.json();
         if(generation!==catalogueGeneration)return;
-        albums=(result.albums_loop||[]).map(mapLyrionAlbum);totalAlbums=albums.length;libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
+        albums=(result.albums_loop||[]).map(mapLyrionAlbum);totalAlbums=albums.length;
+        const preparedCount=Number(result.library_count),preparedCreated=Number(result.snapshot_created);
+        preparedCatalogueCount=Number.isSafeInteger(preparedCount)&&preparedCount>=0?preparedCount:null;
+        preparedCatalogueCreated=Number.isFinite(preparedCreated)&&preparedCreated>0?preparedCreated:null;
+        libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
         loadedBatches=new Set(Array.from({length:batchCount()},(_,i)=>i));
         orderMode=desiredOrderMode=mode;
         rememberSourceOrder(mode);
@@ -968,7 +975,7 @@ window.addEventListener('lyrion-carousel-lms-change',event=>{
     spottyAvailable=null;updateSourceButtons();
     resetRpcSession();connectionGeneration++;catalogueGeneration++;pinnedRequest++;
     artworkNamespace=encodeURIComponent(event.detail?.lmsUrl||'');
-    cometd.resetLibraryState();cometd.stop();resetReconnect();clearInterval(progressTimer);clearTimeout(idleTimer);
+    cometd.resetLibraryState();cometd.stop();preparedCatalogueCount=preparedCatalogueCreated=null;resetReconnect();clearInterval(progressTimer);clearTimeout(idleTimer);
     cancelFollowAnimation();playing=false;paused=false;playingAlbumId=null;closeFrontPreview();
     closeSearch();closeAlbumMenu();closeTrackList();
     connecting=false;playerId='';liveCatalogue=false;orderBusy=false;randomAnimating=false;randomAnimationDuration=0;randomPlay.classList.remove('is-busy');
@@ -1171,7 +1178,7 @@ async function handleLibraryEvent(){
     }catch(_){scheduleReconnect()}
     finally{libraryRefreshing=false;updateBusyState()}
 }
-const cometd=new CometDClient(applyStatus,state=>{root.dataset.liveUpdates=state==='live'?'true':state==='connecting'?'connecting':'false';emitStatus();if(state==='connecting')setConnection('Connecting to live updates…',false);else if(state==='live')setConnection(albumCountLabel()+' · live',true);else setConnection('Live updates lost · reconnecting',false)},handleLibraryEvent,()=>libraryAlbumCount);
+const cometd=new CometDClient(applyStatus,state=>{root.dataset.liveUpdates=state==='live'?'true':state==='connecting'?'connecting':'false';emitStatus();if(state==='connecting')setConnection('Connecting to live updates…',false);else if(state==='live')setConnection(albumCountLabel()+' · live',true);else setConnection('Live updates lost · reconnecting',false)},handleLibraryEvent,()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated}));
 function openSearch(){searchToken++;clearTimeout(searchTimer);searchInput.value='';searchResults.replaceChildren();searchStatus.textContent='Type at least two characters.';searchOverlay.hidden=false;searchInput.focus()}function closeSearch(){searchOverlay.hidden=true;searchToken++;clearTimeout(searchTimer)}function centreAlbumIndex(index,animate=true){if(randomAnimating||!Number.isFinite(index)||index<0)return;stopFollowing();const destination=nearestPositionForIndex(index);if(animate){target=destination;schedule()}else{position=target=destination;draw()}}
 async function navigateToAlbum(id){searchStatus.textContent='Locating album…';try{let i=albums.findIndex(album=>album&&String(album[6])===String(id));if(i<0&&catalogueSource!=='spotify')i=await locateAlbum(id);if(i<0)throw 0;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const arrived=await scrollToAlbumIndex(i);if(arrived){position=target=nearestPositionForIndex(i);renderAlbums();draw()}}catch(_){searchStatus.textContent='That album could not be located.'}}
 function renderSearchResults(results){searchResults.replaceChildren();for(const album of results){const b=document.createElement('button');b.className='bf-search-result';b.type='button';const img=document.createElement('img');img.alt='';if(album[8])img.src=album[8];const c=document.createElement('span'),t=document.createElement('strong'),a=document.createElement('span');t.textContent=album[0];a.textContent=album[1];c.append(t,a);b.append(img,c);b.onclick=()=>selectSearchAlbum(album);searchResults.append(b)}}
