@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Restore player-driven Library/Spotify source synchronisation across Carousel viewers, including transitions from the temporary radio jewel case. Request LMS track URL and external ID in CometD status, distinguish Spotify from real radio rather than treating `remote:1` as radio, add a 20-second read-only player-status fallback, retry failed follows, and prevent album-return animation from skipping source changes. Keep radio dimming/fake CD and avoid extra playback commands.
+
 - Fix new albums failing to appear automatically after LMS scans when the `rescan` true-to-false event is missed. Detect changed `lastscan` and album/track totals, use a lightweight 60-second `serverstatus` fallback during CometD interruptions, preserve revisions across same-server reconnects and reset them on LMS changes; retain first-observed album-added dates.
 
 - Consolidate persistent album-added dates, Library/Spotify spine metadata and catalogue snapshots into a single per-installation SQLite database outside the disposable artwork directory. Begin with a fresh empty metadata store; do not migrate legacy `.meta`, `colour-index-v1`, `indexed-order-v1` or catalogue JSON files. Keep images as files, preserve album-added dates when clearing artwork, and update packaging, regressions and documentation.
