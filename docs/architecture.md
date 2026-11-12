@@ -50,7 +50,7 @@ There is no Node/npm runtime dependency and no build step. Python 3.9+ and Pillo
 
 Browser fallback/index requests remain bounded by `--batch-size`. `js/resilience.js` caches successful read-only `players` and `albums` RPC responses in local storage; mutating and player-control calls are never replayed. This cache does not cover `/api/catalogue`, so a fresh load or sort change still requires LMS connectivity. An already loaded catalogue can remain visible during an outage while reconnection is attempted.
 
-CometD subscribes to player status and LMS `serverstatus`. When a library scan completes, Lyrion Carousel refreshes the catalogue, album count and position index once. Status/About reports LMS connectivity and CometD/live-update state separately.
+CometD subscribes to player status and LMS `serverstatus`. Carousel detects completed scans from the `rescan` transition **or a changed `lastscan` timestamp**, and checks album/song totals when a short scan happens entirely between notifications. While the browser is open, it performs a read-only `serverstatus` check every **60 seconds**, independent of temporary CometD outages. This does **not** enumerate the whole album library or reset the SQLite album-date index. On a detected change, `/api/catalogue/reconcile` checks current LMS albums; only a changed catalogue (or active genre filtering) causes a browser shelf refresh. The observed revision is retained across reconnects to the same LMS but reset when switching servers. Status/About reports LMS connectivity and live-update state separately.
 
 ### Reconnect acceptance check
 
