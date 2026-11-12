@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Align usage, getting-started, Windows, deployment and development documentation with the current Settings UI: remove the obsolete **Keep playing album open** toggle, correct the Cache tab artwork-preparation location, update control names and explain current cache clearing. No application behaviour changes.
+
 - Document the difference between Carousel's current-library **Recently Added** ordering and native LMS **New Music**, including the persistent-recording timestamp cause, an example of legitimate shared MusicBrainz recording IDs, SQLite caching, database-rebuild limitations, and LMS source references. Correct the outdated README and architecture descriptions.
 
 - Prevent native touchscreen blue text-selection highlights, tap flash and long-press callouts on CD spines and open jewel cases. Scope the suppression to album surfaces so search inputs and popups retain their normal behaviour, without changing Carousel's tap, swipe, drag or long-press actions.

@@ -37,7 +37,7 @@ Current application version: **0.12.0**. The canonical version is stored in [`VE
 - configurable application screen sleep with touch-to-wake protection against accidental commands;
 - swipe-up play queue with current-track highlighting and direct track selection;
 - configurable idle return that scrolls back to the playing album without closing or reopening its enlarged cover, bounded by the maximum scroll duration;
-- permanently enlarged playing cover that moves with its album during scrolling;
+- permanently enlarged playing or paused cover that moves with its album during scrolling; this is standard behaviour, not a configurable toggle;
 - saved player selection across browser sessions;
 - live configurable display count, preview/menu timeouts, idle return and maximum scroll duration;
 - Settings panel with explicit LMS, CometD/live-update, player, library, cache and application status;

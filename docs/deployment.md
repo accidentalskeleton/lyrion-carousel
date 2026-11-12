@@ -87,7 +87,7 @@ The planned wall-controller/display hardware is documented separately in [`wall-
 
 ## Versioning
 
-`VERSION` is the single canonical application version. Settings → Status/About reads it directly. Debian packaging reads the same file by default, so the UI and generated package do not maintain independent version numbers.
+`VERSION` is the single canonical application version. **Settings → About** reads it directly. Debian packaging reads the same file by default, so the UI and generated package do not maintain independent version numbers.
 
 The version is deliberately **not** auto-incremented by feature work or packaging. It remains at the value in `VERSION` until an explicit version-change request is made.
 

@@ -38,17 +38,17 @@ All API POST requests require `X-Lyrion-Request: 1`. Browser requests also rejec
 | `--lms` | `http://streamer:9000` | Lyrion Music Server base URL |
 | `--bind` | `127.0.0.1` | Controller listening address |
 | `--port` | `8088` | Controller HTTP port |
-| `--allowed-hosts` | appliance hostname | Extra comma-separated local browser hostnames |
+| `--allowed-hosts` | none | Additional comma-separated local browser hostnames beyond those auto-accepted on the local network |
 | `--cache-dir` | `.cache/album-art` | Persistent album cache location |
 | `--cache-limit-mb` | `512` | Initial soft artwork-cache limit, adjustable from the browser |
 | `--cache-hard-limit-mb` | `2000` | Server-only ceiling for browser cache-limit changes |
-| `--clear-cache` | off | Delete cached artwork, resized covers and metadata before starting |
+| `--clear-cache` | off | Delete the current artwork cache, including generated artwork, catalogue snapshots, colour indexes and previously recorded Recently Added dates, before starting |
 | `--batch-size` | `40` | Albums per browser fallback/index request (server ordering uses 200) |
 | `--idle-return-seconds` | `30` | Default inactivity before returning to now playing; `0` disables |
 | `--reconnect-max-seconds` | `30` | Maximum reconnect delay |
 | `--random-scroll-max-seconds` | `3` | Maximum random/startup/idle-return scroll duration |
 | `--search-limit` | `100` | Maximum albums returned by a search |
 
-Settings are grouped into Display, Playback, Connection, Genres, Cache, About and Coffee tabs. Changes apply immediately and are saved in this browser. They include LMS URL, player, idle return, menu/preview timeouts, maximum scroll duration, displayed albums, display style, cover resolution and keeping the playing cover open. The Cache tab can adjust the soft artwork-cache limit up to the server-configured hard limit. The obsolete carousel-density control has been removed; use Displayed albums to set spine width and spacing.
+Settings are grouped into **Display**, **Playback**, **Connection**, **Genres**, **Cache**, **About** and **Coffee** tabs. Display controls the number of visible albums, shelf variety, catalogue codes and artwork resolution. Playback controls idle return, screen sleep, manual cover/menu timeouts and maximum scroll duration. Connection selects the LMS server and player; Genres filters the Library shelf. Cache prepares artwork, sets the soft cache limit (up to the server hard limit) and clears the cache. About shows status and update checking. Most display/playback choices are saved in the current browser; changing the LMS URL also persists that choice on the Carousel server. The playing/paused album's cover **always stays open** while browsing: there is no longer a **Keep playing album open** switch or a display-style selector. See the [current Settings reference](usage.md#settings-reference).
 
-The server URL is shared runtime state on the proxy. Set `LMS_URL` in `/etc/default/lyrion-carousel` for a persistent machine-wide default. Saved browser choices override server defaults; the saved LMS URL is applied before initial discovery.
+The server URL is shared runtime state on the proxy. Set `LMS_URL` in `/etc/default/lyrion-carousel` as the initial machine-wide default. A server selected in **Settings → Connection** is also saved by Carousel on disk and reused after service restarts. A browser with a different previously saved server URL may apply that choice when it connects, updating the shared server. See [LMS URL across service restarts](architecture.md#lms-url-across-service-restarts).

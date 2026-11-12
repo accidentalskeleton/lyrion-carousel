@@ -45,7 +45,7 @@ Replace `http://streamer:9000` with the address of your reachable LMS server. Op
 
 Port `8088` is the default. The example uses `18088` because Windows may reserve or block `8088`, returning `[WinError 10013]`; choose another available port if necessary. To inspect reserved ports, run `netsh interface ipv4 show excludedportrange protocol=tcp`.
 
-On first use, album spines may initially show neutral grey while the Windows server downloads artwork and computes colour metadata. The local cache at `.cache/album-art` makes repeat visits faster; **Settings → About → Prepare all artwork** can populate it in advance. A browser refresh can interrupt an outstanding CometD long-poll request and produce a `[WinError 10053]` aborted-connection message; that does not by itself mean LMS or artwork loading has failed.
+On first use, album spines may initially show neutral grey while the Windows server downloads artwork and computes colour metadata. The local cache at `.cache/album-art` makes repeat visits faster; **Settings → Cache → Prepare all artwork** can populate it in advance. A browser refresh can interrupt an outstanding CometD long-poll request and produce a `[WinError 10053]` aborted-connection message; that does not by itself mean LMS or artwork loading has failed.
 
 Catalogue numbers come through LMS's raw track-tag API; no music-folder mount or access to the ripping engine is required. Windows runs separately from the Debian `.deb` and `systemd` deployment.
 
