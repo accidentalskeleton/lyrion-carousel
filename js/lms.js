@@ -69,18 +69,25 @@ export class CometDClient {
     const lastscanChanged = lastscan !== null && previous.lastscan !== null && lastscan !== previous.lastscan;
     const totalsChanged = (albums !== null && previous.albums !== null && albums !== previous.albums) ||
       (songs !== null && previous.songs !== null && songs !== previous.songs);
-    // Catch a change during initial subscription, when the browser's live
-    // album count may already differ from its persistent server-side snapshot.
-    const displayed = count(this.getLibraryAlbumCount());
-    const initialMismatch = previous.albums === null && albums !== null &&
-      displayed !== null && albums !== displayed;
+    // Compare with the ACTUAL prepared catalogue, not the live LMS count
+    // fetched earlier in loadInitialCatalogue. That live count can already
+    // include new albums while the 15-minute SQLite snapshot is still stale.
+    const prepared = this.getLibraryAlbumCount();
+    const displayed = count(prepared && typeof prepared === 'object' ? prepared.albums : prepared);
+    const created = prepared && typeof prepared === 'object' ? Number(prepared.created) : NaN;
+    const staleByCount = albums !== null && displayed !== null && albums !== displayed;
+    // Handles edits with unchanged album totals and scans that completed
+    // before CometD established a baseline. LMS lastscan is Unix seconds.
+    const scanAt = Number(lastscan);
+    const staleByRevision = lastscan !== null && Number.isFinite(scanAt) &&
+      Number.isFinite(created) && created > 0 && scanAt > created;
     this.serverWasScanning = scanning;
     this.libraryState = {
       lastscan:lastscan ?? previous.lastscan,
       albums:albums ?? previous.albums,
       songs:songs ?? previous.songs
     };
-    if (!scanning && (finished || lastscanChanged || totalsChanged || initialMismatch)) {
+    if (!scanning && (finished || lastscanChanged || totalsChanged || staleByCount || staleByRevision)) {
       this.onLibraryChanged(data);
     }
   }
@@ -124,13 +131,14 @@ export class CometDClient {
 
   async start(playerId) {
     this.stop();
-    if (!playerId) return;
     this.playerId = playerId;
     const generation = ++this.generation;
     // The periodic serverstatus request does not enumerate albums or touch
     // SQLite. It remains active even if CometD has temporarily disconnected.
     this.statusTimer = setInterval(() => { void this.pollServerStatus(generation); }, 60000);
     void this.pollServerStatus(generation);
+    // Library monitoring must not require an available playback device.
+    if (!playerId) return;
     try {
       this.onState('connecting');
       const handshake = await this.post([{
