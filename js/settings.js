@@ -1,4 +1,4 @@
-import { rpc } from './lms.js?v=display-choice-1';
+import { rpc } from './lms.js?v=source-sync-1';
 
 const root=document.getElementById('book-fan-browser');
 const openButton=root?.querySelector('.bf-settings-open'),overlay=root?.querySelector('.bf-settings-overlay'),closeButton=root?.querySelector('.bf-settings-close');
