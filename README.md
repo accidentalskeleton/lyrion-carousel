@@ -79,7 +79,9 @@ For configuration, deployment and security guidance, see the linked documentatio
 
 - [Getting started and common runtime options](docs/getting-started.md)
 - [Windows installation — download, portable use, service and troubleshooting](docs/windows.md)
-- [Debian deployment, Raspberry Pi kiosk and versioning](docs/deployment.md)
+- [Debian deployment and versioning](docs/deployment.md)
+- [Raspberry Pi touchscreen kiosk installer (local or remote server)](docs/raspberry-pi-kiosk.md)
+- [Optional Corsair XENEON EDGE touchscreen calibration](docs/corsair-touch-calibration.md)
 - [Album discovery, browsing and artwork presentation](docs/usage.md)
 - [Architecture, LMS API, catalogue snapshots and server endpoints](docs/architecture.md)
 - [Performance and large-library tuning](docs/performance.md)

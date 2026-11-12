@@ -4,6 +4,12 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add an explicitly opted-in, reversible passwordless sudo option for the named SSH administrator (for example `stu`) in the dedicated Pi user configuration script. Validate the root-owned sudoers drop-in with `visudo`; never grant sudo to the restricted `carousel` account.
+
+- Document optional Corsair XENEON EDGE touchscreen calibration for Raspberry Pi kiosk clients. Add a separate guarded helper for device/output diagnostics, upstream virtual-environment preparation, configuration backup and explicit restoration; keep third-party calibration out of the default kiosk install and retain the restricted `carousel` account.
+
+- Add a documented and repeatable Raspberry Pi OS Desktop Chromium kiosk installer/uninstaller for local or remote Carousel server use, with preserved labwc autostart, configurable connectivity checks, browser restart, logs and basic CI validation. Keep HDMI modes automatic and defer physical touchscreen/power management settings until the actual display is connected.
+
 - Position new-album notifications at the very top, above covers, menus and other active overlays, and let long album names wrap instead of being clipped. Keep the sleeping screen black. Deliver each new-album notification even when the same viewer's shelf was refreshed before its library event was processed.
 
 - Add per-viewer **Settings → Browsing → When new albums arrive** with Update shelf only (default), Show notification, and Scroll to album and open cover. An LMS reconciliation persists up to 25 new album IDs in the catalogue snapshot so multiple browsers can observe an addition independently; older IDs, retags and cover repairs do not trigger previews. Preview one added Library cover using existing scrolling and temporary-cover animations, with no playback commands; skip animation during active browsing, manually selected Spotify, radio, or open dialogs. Show one notification for multi-album scans and do not replay after browser refresh.
