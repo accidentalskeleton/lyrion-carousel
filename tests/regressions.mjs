@@ -21,14 +21,90 @@ export async function runTests(sources) {
   assert(invalid, 'invalid page size rejected');
 
   let libraryEvents = 0;
+  let serverStatusFixture = {rescan:0,lastscan:'100','info total albums':95,'info total songs':900};
+  const lmsPollCommands=[];
   const {CometDClient, rpc:realRpc, resetRpcSession} = new Function('fetch', plain(sources.lms) + ';return {CometDClient,rpc,resetRpcSession};')(
-    async () => ({ok:true,json:async () => ({result:{}})})
+    async (_,request) => {
+      lmsPollCommands.push(JSON.parse(request?.body||'{}')?.params?.[1]);
+      return {ok:true,json:async () => ({result:serverStatusFixture})};
+    }
   );
-  const comet = new CometDClient(() => {}, () => {}, data => { assert(data.rescan === 0 || data.rescan === false, 'scan payload forwarded'); libraryEvents++; });
-  comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:1}); comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:0});
-  assert(libraryEvents === 1, 'one observation per completed scan');
-  comet.handleServerStatus({rescan:true}); comet.handleServerStatus({rescan:false});
-  assert(libraryEvents === 2, 'boolean scan-status changes are also observed once');
+  const statusEvents=[];
+  const comet = new CometDClient(() => {}, () => {}, data => {
+    statusEvents.push(data);
+    libraryEvents++;
+  }, () => 95);
+  comet.handleServerStatus(serverStatusFixture);
+  assert(libraryEvents===0,'first serverstatus observation establishes a baseline');
+  comet.handleServerStatus({...serverStatusFixture,rescan:1});
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'101'});
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'101'});
+  assert(libraryEvents===1,'scan completion and lastscan change trigger one refresh');
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'102'});
+  assert(libraryEvents===2,'lastscan change triggers refresh even when rescan remains 0');
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'102'});
+  assert(libraryEvents===2,'replayed serverstatus is idempotent');
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'102','info total albums':96});
+  assert(libraryEvents===3,'album total detects additions without a rescan transition');
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'102','info total albums':96,'info total songs':902});
+  assert(libraryEvents===4,'song total detects new tracks on an existing album');
+  comet.handleServerStatus({...serverStatusFixture,rescan:true,lastscan:'103'});
+  assert(libraryEvents===4,'never refresh while LMS is still scanning');
+  comet.handleServerStatus({...serverStatusFixture,rescan:false,lastscan:'103'});
+  assert(libraryEvents===5,'scan completion refreshes after deferred revision change');
+  comet.stop();
+  comet.handleServerStatus({...serverStatusFixture,lastscan:'104'});
+  assert(libraryEvents===6,'same-LMS reconnect retains previous lastscan baseline');
+  comet.resetLibraryState();
+  comet.handleServerStatus({...serverStatusFixture,lastscan:'3','info total albums':22});
+  assert(libraryEvents===7,'new-LMS initial mismatch with displayed album count triggers reconciliation');
+  comet.resetLibraryState();
+  comet.handleServerStatus({...serverStatusFixture,lastscan:'3','info total albums':95});
+  assert(libraryEvents===7,'new-LMS initial matching baseline does not trigger false scan');
+  // A status request still works without CometD messages, but stale in-flight
+  // replies from a previous LMS generation must not cause a refresh.
+  comet.generation=21;
+  serverStatusFixture={rescan:0,lastscan:'4','info total albums':95,'info total songs':900};
+  await comet.pollServerStatus(21);
+  assert(libraryEvents===8,'lightweight serverstatus polling catches a missed scan');
+  await comet.pollServerStatus(20);
+  assert(libraryEvents===8,'stale serverstatus polls are ignored');
+  let playerStatusDelivered=0;
+  comet.onStatus=()=>{playerStatusDelivered++;};
+  comet.playerId='test-player';
+  await comet.pollPlayerStatus(21,'test-player');
+  assert(playerStatusDelivered===1 &&
+    lmsPollCommands.some(cmd=>cmd?.[0]==='status'&&cmd.includes('tags:aluJenKNRAxE')),
+    'fallback player-status read includes Spotify URL/extid tags and reaches the viewer');
+  await comet.pollPlayerStatus(20,'test-player');
+  assert(playerStatusDelivered===1,'stale player-status poll does not update another session');
+  // A browser can already have the NEW live LMS count, yet have an OLD
+  // 15-minute prepared SQLite catalogue. The old comparison with the live
+  // count failed to detect this; compare against the prepared count instead.
+  let preparedSnapshot={albums:95,created:100};
+  let staleDetected=0;
+  const staleComet=new CometDClient(()=>{},()=>{},()=>{staleDetected++;},()=>preparedSnapshot);
+  staleComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===1,'new LMS album detects stale prepared catalogue at initial status');
+  staleComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===2,'stale prepared count remains retryable while catalogue is unchanged');
+  preparedSnapshot={albums:96,created:97};
+  staleComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===2,'reconciliation updates prepared baseline and stops repeated refreshes');
+  const replacedComet=new CometDClient(()=>{},()=>{},()=>{staleDetected++;},
+    ()=>({albums:96,created:90}));
+  replacedComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===3,'same-count library replacements detected after snapshot creation');
+  const freshComet=new CometDClient(()=>{},()=>{},()=>{staleDetected++;},
+    ()=>({albums:96,created:110}));
+  freshComet.handleServerStatus({rescan:0,lastscan:'95','info total albums':96,'info total songs':901});
+  assert(staleDetected===3,'fresh snapshot does not cause unnecessary reconciliation');
+  const playerless=new CometDClient(()=>{},()=>{},()=>{},()=>({albums:95,created:100}));
+  // Status polling is allowed to start without an LMS playback player;
+  // avoid real timers/network here by checking the code's contract.
+  assert(sources.lms.includes('if (!playerId) return;') &&
+    sources.lms.indexOf('this.statusTimer = setInterval(') < sources.lms.indexOf('if (!playerId) return;'),
+    'library status polling is independent of playback player selection');
   const oldRpc = realRpc('0', ['players',0,1]); resetRpcSession();
   let rejected = false; try { await oldRpc; } catch (_) { rejected = true; }
   assert(rejected, 'old server RPC rejected');
@@ -80,7 +156,9 @@ export async function runTests(sources) {
   const requestAnimationFrame=fn=>{frames.set(++nextId,fn);return nextId;},cancelAnimationFrame=id=>frames.delete(id);
   const rpcCalls=[];
   const catalogueEvents=[];
-  let catalogueReconcileChanged=true;
+  let catalogueReconcileChanged=true,recentNewAlbumIdsFixture=[];
+  let preparedLibraryOverride=null,preparedCreatedAt=200;
+  const revisionOf=rows=>JSON.stringify(rows.map(x=>[x.id,x.album,x.artist]));
   let tracksFixture=null,statusFixture=null,tracksHandler=null,spottyCapability=1,spotifyFollowAlbums=[],spotifyFollowSearch=null;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
   const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='can')return {_can:spottyCapability};if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return statusFixture||{mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return tracksHandler?tracksHandler(cmd):{titles_loop:(tracksFixture||[]).slice(cmd[1],cmd[1]+cmd[2]),count:tracksFixture?.length||0};if(cmd[0]==='albums'){
@@ -103,14 +181,18 @@ export async function runTests(sources) {
       }
       if(url==='/api/catalogue/reconcile'){
         catalogueEvents.push({action:'reconcile',method:args[0]?.method});
-        return Promise.resolve({ok:true,json:async()=>({changed:catalogueReconcileChanged,count:library.length,new_albums:catalogueReconcileChanged?1:0})});
+        return Promise.resolve({ok:true,json:async()=>({changed:catalogueReconcileChanged,count:library.length,revision:revisionOf(library),new_albums:catalogueReconcileChanged?recentNewAlbumIdsFixture.length:0,recent_new_album_ids:recentNewAlbumIdsFixture})});
       }
       if(url.startsWith('/api/catalogue')){
         catalogueEvents.push({action:'read',url});
-        return Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})});
+        const prepared=preparedLibraryOverride||library;
+        return Promise.resolve({ok:true,json:async()=>({
+          albums_loop:prepared.map(a=>({...a,artwork_track_id:a.id})),
+          count:prepared.length,library_count:prepared.length,snapshot_created:preparedCreatedAt,catalogue_revision:revisionOf(prepared)
+        })});
       }
       return metadataFetch(url,...args);
-    },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
+    },rpc,CometDClient:class{stop(){}start(){}resetLibraryState(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
@@ -118,13 +200,16 @@ export async function runTests(sources) {
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
     return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+      preparedStateForTest:()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated,revision:preparedCatalogueRevision,live:libraryAlbumCount}),
+      arrivalStateForTest:()=>({mode:newAlbumAction,revision:observedLibraryRevision}),
+      manualSourceStateForTest:()=>({timeout:MANUAL_SOURCE_IDLE_MS,until:sourceBrowseDeadline,timer:sourceBrowseTimer,held:sourceBrowseHeld()}),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
       finiteShelfBounds,snapShelfPosition,
       prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,syncFrontTimeoutPause,openQueue,closeQueue,storeBatch,restoreSourceOrders,resolveSpotifyPlayingAlbum,followPlayingSource,playbackSourceForTrack,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
-      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,frontTimeoutRemaining,frontTimeoutDeadline,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,frontTimeoutRemaining,frontTimeoutDeadline,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf,sourceFollowPending}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
   async function settle(promise) {
@@ -136,6 +221,27 @@ export async function runTests(sources) {
     if(error)throw error;if(!done)throw Error('Animation did not finish');
   }
   await api.loadInitialCatalogue();
+  // Simulate the reported failure: LMS sees the latest album, but the saved
+  // SQLite catalogue was prepared before that album was indexed.
+  const previousPrepared=library.slice();
+  library.push({id:96,album:'Unobserved album',artist:'Artist'});
+  preparedLibraryOverride=previousPrepared;
+  await api.loadInitialCatalogue();
+  assert(api.state().albums.length===95 &&
+    api.preparedStateForTest().albums===95 &&
+    api.preparedStateForTest().live===95 &&
+    library.length===96,
+    'browser still has stale prepared snapshot while LMS reports a newer album');
+  let staleSnapshotObserved=0;
+  const actualStartupComet=new CometDClient(()=>{},()=>{},()=>{staleSnapshotObserved++;},
+    api.preparedStateForTest);
+  actualStartupComet.handleServerStatus({rescan:0,lastscan:'199','info total albums':96});
+  assert(staleSnapshotObserved===1,'initial LMS status notices the stale 95-album snapshot');
+  preparedLibraryOverride=null;
+  library.pop();
+  await api.loadInitialCatalogue();
+  assert(api.preparedStateForTest().albums===95,'restored catalogue snapshot baseline');
+
   assert(api.catalogueCodeLines('BEADYCD2')==='BEADYCD\n2','catalogue letter prefix stays intact');
   for(const code of ['9362-49870-2','1234567890123','509999 65111 2 1']){
     assert(api.catalogueCodeLines(code).split('\n').length===3,
@@ -370,6 +476,30 @@ export async function runTests(sources) {
     !observed.some(e=>e.action==='invalidate')&&
     api.state().albums.some(album=>album?.[0]==='Recently Updated'),
     'changed LMS scan is independently reconciled before Carousel loads its new snapshot');
+  // Another browser can reconcile the shared server before this browser
+  // receives a scan notification. Server then says changed:false, despite
+  // our still-visible shelf having an older content revision.
+  catalogueReconcileChanged=false;
+  library.push({id:97,album:'Another browser added this',artist:'Artist'});
+  const beforeAlreadyReconciled=catalogueEvents.length;
+  await api.handleLibraryEvent();
+  const otherBrowserEvents=catalogueEvents.slice(beforeAlreadyReconciled);
+  assert(otherBrowserEvents[0]?.action==='reconcile'&&
+    otherBrowserEvents.some(e=>e.action==='read')&&
+    api.state().albums.some(a=>a?.[0]==='Another browser added this'),
+    'already-reconciled server revision still refreshes stale browser shelf');
+  // Same count, changed album row: the content revision, not count, must win.
+  library[0]={...library[0],album:'Replaced without changing total'};
+  const beforeSameCount=catalogueEvents.length;
+  await api.handleLibraryEvent();
+  assert(catalogueEvents.slice(beforeSameCount).some(e=>e.action==='read')&&
+    api.state().albums.some(a=>a?.[0]==='Replaced without changing total'),
+    'same-count edits refresh when server revision differs from browser');
+  const afterSync=catalogueEvents.length;
+  await api.handleLibraryEvent();
+  assert(catalogueEvents.length===afterSync+1 &&
+    catalogueEvents[afterSync]?.action==='reconcile',
+    'matching server and browser revisions avoid unnecessary reloads');
   api.applySetting('random',1000);
   // Actual connectLyrion() keeps connecting=true until startup completes;
   // otherwise applyStatus() launches a competing follow animation.
@@ -751,7 +881,7 @@ export async function runTests(sources) {
     'closing an idle album preview clears its detail heading');
 
 
-  const tabs=['display','playback','connection','genres','cache','about'].map(name=>{
+  const tabs=['display','browsing','connection','genres','cache','about'].map(name=>{
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
   });
   window.fetch=async()=>{};
@@ -774,6 +904,25 @@ export async function runTests(sources) {
   const releaseNotice=element('.bf-update-notice');
   assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
   assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
+  const toastCss=sources.settingsCss.match(/\.bf-new-album-toast:not\(\[hidden\]\)\s*\{([^}]+)\}/)?.[1]||'';
+  assert(/z-index:\s*900\s*;/.test(toastCss)&&/top:\s*8px\s*;/.test(toastCss),
+    'new album notice appears above open cases and menus at the top of the viewer');
+  const newAlbumActionControl=element('.bf-new-album-action');
+  assert(newAlbumActionControl.value==='none','new album preview is opt-in');
+  newAlbumActionControl.value='preview';
+  newAlbumActionControl.listeners.change[0]();
+  assert(storage.get('albumBrowserNewAlbumAction')==='preview',
+    'new album action is saved for this browser');
+  newAlbumActionControl.value='none';
+  newAlbumActionControl.listeners.change[0]();
+  const manualTimeoutControl=element('.bf-source-browse-timeout');
+  assert(manualTimeoutControl.value==='300000','manual source browse timeout defaults to five minutes');
+  manualTimeoutControl.value='600000';
+  manualTimeoutControl.listeners.change[0]();
+  assert(storage.get('albumBrowserSourceBrowseTimeoutMs')==='600000',
+    'source browsing timeout choice is persisted per browser');
+  manualTimeoutControl.value='300000';
+  manualTimeoutControl.listeners.change[0]();
   assert(autoRelease.checked&&releaseDelays.get(settingsApi.state().timer)===0,'automatic release checks default on and schedule the first check');
   assert(settingsApi.releaseIsNewer('v0.11.0','0.10.0'),'new minor release is detected');
   assert(settingsApi.releaseIsNewer('v0.11.10','0.11.9'),'release versions are compared numerically, not lexically');
@@ -869,7 +1018,7 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
-  assert(sources.index.includes('css/settings.css?v=forum-project-link-2'),
+  assert(sources.index.includes('css/settings.css?v=new-album-toast-top-1'),
     'project-link styles invalidate the settings stylesheet cache');
   tabs[5].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
@@ -1414,7 +1563,7 @@ export async function runTests(sources) {
       'Debian package excludes removed disc module while retaining photographic assets');
   }
 
-  assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
+  assert(sources.app.includes("'tags:aluJenKNRAxE'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
     'closed-cover interaction no longer dispatches open-case events');
   assert(!sources.app.includes("isThisPlaying?' · Playing':'"),
@@ -1427,7 +1576,7 @@ export async function runTests(sources) {
     sources.app.includes('await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();'),
     'Playback source changes follow across browser sessions and on initial connection');
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
-    sources.app.includes("if(sourceFollowAttempt===key)return;"),
+    sources.app.includes("if(sourceFollowAttempt===key&&now-sourceFollowAttemptAt<5000)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
 
   // All original sort IDs remain stable, keeping saved preferences intact.
@@ -1459,7 +1608,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=sort-labels-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=touch-selection-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=new-album-notify-race-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1480,7 +1629,7 @@ export async function runTests(sources) {
 
   assert(!/function browseWithArrow\([\s\S]*?function stopFollowing\(/.exec(sources.app)?.[0].includes('openFrontPreview('),
     'arrow-key browsing cannot automatically open another cover');
-  assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
+  assert(sources.lms.includes("'tags:aluJenAxE'"),'CometD subscription requests artist roles');
 
   // Large catalogues retain O(1) album lookup; stale positions after a
   // reorder are validated and repaired rather than returning wrong albums.
@@ -1880,6 +2029,208 @@ export async function runTests(sources) {
   assert(api.state().albums.includes(radioAlbum)&&element('.bf-front-play').getAttribute('aria-label')==='Resume player','paused radio retains its shelf CD and matching button');
   api.applyStatus({mode:'play',playlist_loop:[{album_id:20,album:'Library album',title:'Local track'}]});
   assert(!api.state().albums.some(a=>a?.[13]==='external')&&api.state().albums.length===beforeRadioCount,'library playback removes the temporary radio CD');
+
+  // Spotify is also remote in LMS. A status payload without the u/URL tag
+  // must not be treated as a radio station just because it says remote:1.
+  assert(api.playbackSourceForTrack({title:'Spotty song'}, {remote:1})==='unknown',
+    'metadata-light Spotify status never becomes a fake radio CD');
+  assert(api.playbackSourceForTrack({extid:'spotify:track:abc'}, {remote:1})==='spotify',
+    'Spotify external ID identifies the music source');
+  assert(api.playbackSourceForTrack({url:'spotify://track:abc'}, {remote:1})==='spotify',
+    'Spotify track URI identifies the music source');
+  assert(api.playbackSourceForTrack({url:'https://radio.example/live'}, {remote:1})==='external',
+    'real HTTP radio streams remain external');
+  assert(api.playbackSourceForTrack({remote_title:'Radio station'}, {remote:1})==='external',
+    'radio station metadata keeps the fake CD when the stream URL is missing');
+  async function settleSource(expected) {
+    for(let i=0;i<500;i++){
+      await Promise.resolve();
+      time+=16;
+      const pending=[...frames.values()];frames.clear();
+      for(const fn of pending)fn(time);
+      if(api.sourceForTest()===expected&&!api.state().sourceFollowPending)return;
+    }
+    throw Error('Source switch did not settle: '+expected);
+  }
+  // Each independently open viewer observes the player's status. Simulate a
+  // second browser, still browsing Library, learning that Spotify started
+  // elsewhere without sending any playback command itself.
+  const beforePassiveSwitch=rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length;
+  api.set({playerId:'test-player',playing:true});
+  api.setSourceForTest('library');
+  spotifyFollowAlbums=[externalSpotifyAlbum];
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{
+    album:'External Spotify Album',artist:'External Artist',title:'Remote song',
+    url:'spotify://track:external'
+  }]});
+  await settleSource('spotify');
+  assert(root.dataset.externalPlayback==='false'&&!api.state().albums.some(a=>a?.[13]==='external'),
+    'another viewer follows Spotify rather than adding a dimmed fake radio CD');
+  api.applyStatus({mode:'pause',remote:1,playlist_loop:[{
+    album:'External Spotify Album',artist:'External Artist',title:'Remote song',
+    extid:'spotify:track:external'
+  }]});
+  assert(api.sourceForTest()==='spotify'&&!api.state().playing&&root.dataset.externalPlayback==='false',
+    'paused Spotify remains the selected source and is not treated as radio');
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{
+    album:'Radio station',remote_title:'Radio station',title:'Live radio',
+    url:'https://radio.example/live'
+  }]});
+  assert(api.sourceForTest()==='spotify'&&root.dataset.externalPlayback==='true'&&
+    api.state().albums.some(a=>a?.[13]==='external'),
+    'switching to radio dims the current shelf and adds exactly one temporary CD');
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',title:'Local song',url:'file:///music/local.flac'
+  }]});
+  await settleSource('library');
+  assert(root.dataset.externalPlayback==='false'&&
+    !api.state().albums.some(a=>a?.[13]==='external'),
+    'radio-to-Library playback restores the Library shelf and removes the fake CD');
+  assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length===beforePassiveSwitch,
+    'passive source-following on another viewer never issues playback commands');
+
+  // A deliberate selection is a LOCAL browsing decision, not a playback
+  // command. The user may browse Spotify while another viewer plays Library.
+  const playbackWritesBeforeBrowse=rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length;
+  assert(api.manualSourceStateForTest().timeout===300000,
+    'default manual source browsing hold is five minutes');
+  await settle(sourceButtonsForTest[1].onclick());
+  assert(api.sourceForTest()==='spotify'&&api.manualSourceStateForTest().held,
+    'selecting Spotify manually holds this viewer on Spotify');
+  const firstBrowseTimer=api.manualSourceStateForTest().timer;
+  const originalDeadline=api.manualSourceStateForTest().until;
+  api.applyStatus({mode:'play',playlist_loop:[{album_id:20,album:'Album 020',
+    title:'Other viewer playing local track',url:'file:///music/local.flac'}]});
+  await api.followPlayingSource();
+  assert(api.sourceForTest()==='spotify',
+    'local playback updates cannot override a manual Spotify browsing session');
+  time+=60000;api.noteUserActivity({type:'wheel'});
+  const renewed=api.manualSourceStateForTest();
+  assert(renewed.held&&renewed.until>originalDeadline&&renewed.timer!==firstBrowseTimer&&
+    !timers.has(firstBrowseTimer),'touch/wheel/keyboard activity extends the local browse timer');
+  time=originalDeadline+1;
+  await api.followPlayingSource();
+  assert(api.sourceForTest()==='spotify','original timeout no longer interrupts an active browser');
+  time=renewed.until+1;
+  const expire=timers.get(renewed.timer);
+  assert(typeof expire==='function','idle expiry has a scheduled callback');
+  expire();
+  await settleSource('library');
+  assert(!api.manualSourceStateForTest().held&&api.sourceForTest()==='library',
+    'after configured inactivity, manual browsing returns to player source');
+  // Changing the setting is immediate, including the Follow immediately
+  // option; automatic switches must never arm their own grace period.
+  api.applySetting('sourceBrowseTimeout',60000);
+  await settle(sourceButtonsForTest[1].onclick());
+  assert(api.manualSourceStateForTest().timeout===60000&&
+    api.manualSourceStateForTest().held,'new timeout applies to a newly selected source');
+  api.applySetting('sourceBrowseTimeout',0);
+  await settleSource('library');
+  assert(!api.manualSourceStateForTest().held&&api.sourceForTest()==='library',
+    'Follow immediately cancels an active browsing hold and resumes syncing');
+  assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length===playbackWritesBeforeBrowse,
+    'manual browsing and automatic return never issue player commands');
+  // New albums are a notification/preview, NEVER another playback action.
+  // First synchronise the viewer's revision without announcing any old scan.
+  recentNewAlbumIdsFixture=[];
+  api.applySetting('newAlbumAction','none');
+  api.setSourceForTest('library');
+  api.applyStatus({mode:'stop',playlist_loop:[]});
+  api.closeFrontPreview(true);
+  await settle(api.handleLibraryEvent());
+  assert(api.arrivalStateForTest().revision===revisionOf(library),
+    'existing library establishes a baseline without previewing old albums');
+  const newAlbumToast=element('.bf-new-album-toast');
+  const arrivalPlaybackBefore=rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||
+    (cmd[0]==='spotty'&&cmd[1]==='playlist')).length;
+  api.applySetting('newAlbumAction','notify');
+  const firstArrival={id:99101,album:'Freshly ripped album',artist:'Ripping artist'};
+  library.push(firstArrival);
+  recentNewAlbumIdsFixture=[String(firstArrival.id)];
+  // Another viewer already reconciled: changed=false, but the browser's
+  // revision is older and the arrival is still persisted in server metadata.
+  catalogueReconcileChanged=false;
+  await settle(api.handleLibraryEvent());
+  assert(!newAlbumToast.hidden&&newAlbumToast.textContent.includes('Freshly ripped album'),
+    'notify mode announces an arrival even if another viewer reconciled first');
+  assert(api.state().frontPreviewAlbum?.[6]!==firstArrival.id,
+    'notification alone never opens the new album');
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.hidden,'unchanged catalogue revision does not repeat the announcement');
+
+  // A different path can update this viewer's shelf BEFORE it receives the
+  // scan event. It must still announce that revision exactly once.
+  const alreadyRefreshedArrival={id:99107,album:'Already on the shelf',artist:'New arrival'};
+  library.push(alreadyRefreshedArrival);
+  recentNewAlbumIdsFixture=[String(alreadyRefreshedArrival.id)];
+  catalogueReconcileChanged=false;
+  await settle(api.loadInitialCatalogue());
+  assert(api.preparedStateForTest().revision===revisionOf(library)&&
+    api.arrivalStateForTest().revision!==revisionOf(library),
+    'shelf can be current before arrival revision is observed');
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(!newAlbumToast.hidden&&newAlbumToast.textContent.includes('Already on the shelf'),
+    'show notification works even when the shelf was refreshed before the event');
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.hidden,'already-refreshed arrival is never announced twice');
+
+  // In preview mode the virtual viewer is idle and may scroll/open, but never
+  // play. Opening an album also reuses the standard temporary case timeout.
+  api.applySetting('newAlbumAction','preview');
+  api.closeFrontPreview(true);
+  api.set({activity:Date.now()-30000});
+  const secondArrival={id:99102,album:'Second fresh CD',artist:'Ripping artist'};
+  library.push(secondArrival);
+  recentNewAlbumIdsFixture=[String(secondArrival.id)];
+  catalogueReconcileChanged=true;
+  await settle(api.handleLibraryEvent());
+  assert(api.state().frontPreviewAlbum?.[6]===secondArrival.id&&!preview.hidden,
+    'idle viewer scrolls to freshly added album and opens its jewel case');
+  assert(api.state().frontTimer!==0,
+    'new album cover uses the usual temporary front-preview timeout');
+
+  // Active browsing must not be hijacked; a text notification is safe.
+  api.closeFrontPreview(true);
+  api.set({activity:Date.now()});
+  const activeArrival={id:99103,album:'Added during browsing',artist:'Ripping artist'};
+  library.push(activeArrival);
+  recentNewAlbumIdsFixture=[String(activeArrival.id)];
+  await settle(api.handleLibraryEvent());
+  assert(!newAlbumToast.hidden&&api.state().frontPreviewAlbum?.[6]!==activeArrival.id,
+    'active browsing prevents automatic shelf motion even in preview mode');
+
+  // One scan with several album IDs never creates a cascade of animations.
+  api.closeFrontPreview(true);
+  api.set({activity:Date.now()-30000});
+  library.push({id:99104,album:'Multi disc one',artist:'Artist'});
+  library.push({id:99105,album:'Multi disc two',artist:'Artist'});
+  recentNewAlbumIdsFixture=['99104','99105'];
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.textContent.includes('2 new albums added')&&
+    ['99104','99105'].includes(String(api.state().frontPreviewAlbum?.[6])),
+    'multiple new albums result in one notification and one preview only');
+
+  // Spotify browsing must stay Spotify. An arrival can notify, but must not
+  // switch catalogues or open a local-library cover there.
+  api.setSourceForTest('spotify');
+  library.push({id:99106,album:'Added while in Spotify',artist:'Artist'});
+  recentNewAlbumIdsFixture=['99106'];
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(api.sourceForTest()==='spotify'&&
+    newAlbumToast.textContent.includes('New Library album added')&&
+    !newAlbumToast.hidden,'arrival never forces a Spotify viewer into Library');
+  assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||
+    (cmd[0]==='spotty'&&cmd[1]==='playlist')).length===arrivalPlaybackBefore,
+    'new album notifications and previews never issue playback commands');
+  recentNewAlbumIdsFixture=[];
+  api.setSourceForTest('library');
+  await settle(api.loadInitialCatalogue());
+  api.closeFrontPreview(true);
+  api.applySetting('newAlbumAction','none');
   api.set({playing:false,hover:0});const headingAlbum=api.state().albums[0],oldHeading=headingAlbum.slice(0,2);
   headingAlbum[0]=' ';headingAlbum[1]='The Dead Daisies';api.updateMeta(true);
   assert(element('.bf-meta').children[0].children[1].textContent==='The Dead Daisies','missing album title omits the artist separator');
@@ -1894,6 +2245,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
   sources.shelfCss=await readFile(new URL('../css/shelf.css',import.meta.url),'utf8');
+  sources.settingsCss=await readFile(new URL('../css/settings.css',import.meta.url),'utf8');
   sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
   sources.debianBuild=await readFile(new URL('../packaging/debian/build-deb.sh',import.meta.url),'utf8');
   sources.performance=await readFile(new URL('../js/performance.js',import.meta.url),'utf8');

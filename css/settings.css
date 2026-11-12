@@ -63,6 +63,19 @@
     padding: 15px 0;
     border-bottom: 1px solid rgba(255, 255, 255, .07);
 }
+
+/* Sections group related actions without adding more horizontal tabs. */
+.bf-settings-group-title {
+    margin: 15px 0 0;
+    padding: 0 0 7px;
+    border-bottom: 1px solid rgba(143, 186, 145, .2);
+    color: #8fba91;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+.bf-settings-group-title + .bf-settings-section { padding-top: 12px; }
 .bf-settings-section select {
     min-width: 170px;
     min-height: 34px;
@@ -425,3 +438,28 @@
     text-underline-offset: 3px;
 }
 .bf-track-spotify-link:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+
+/* Topmost active UI announcement; screen sleep (z-index:1000) still stays black. */
+.bf-new-album-toast:not([hidden]) {
+    position: absolute;
+    z-index: 900;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100% - 20px);
+    box-sizing: border-box;
+    padding: 10px 14px;
+    border: 1px solid rgba(143, 186, 145, .55);
+    border-radius: 9px;
+    background: rgba(22, 34, 26, .97);
+    color: #deebdd;
+    font-size: 13px;
+    line-height: 1.35;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, .35);
+}
+.bf-new-album-toast[hidden] { display: none; }

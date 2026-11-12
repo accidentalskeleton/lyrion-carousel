@@ -1,4 +1,4 @@
-import { rpc, CometDClient, resetRpcSession } from './lms.js?v=track-artist-roles-1';
+import { rpc, CometDClient, resetRpcSession } from './lms.js?v=source-sync-1';
 import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from './catalogue.js?v=display-choice-1';
 import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPosition } from './browser.js?v=display-choice-1';
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
@@ -8,8 +8,15 @@ import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
 let connectionGeneration=0,appStarted=false,artworkNamespace='',catalogueSource='library',libraryRefreshPending=false,libraryRefreshing=false,genreRefreshPending=false,disabledGenres=new Set();
+// The prepared catalogue may be older than the live LMS album count. Keep its
+// unfiltered count and creation time separate for scan-revision checks.
+let preparedCatalogueCount=null,preparedCatalogueCreated=null,preparedCatalogueRevision=null;
+// Observe revisions per viewer; a newly opened page establishes its baseline
+// without replaying an earlier browser's album arrival animation.
+let observedLibraryRevision=null,newAlbumAction='none',newAlbumToastTimer=0;
+const newAlbumToast=root.querySelector('.bf-new-album-toast');
 let COVER_SIZE=512;
-let PAGE_SIZE=40,DISPLAY_ALBUM_COUNT=30,IDLE_RETURN_MS=30000,MENU_TIMEOUT_MS=10000,FRONT_TIMEOUT_MS=10000,RECONNECT_MAX_MS=30000,RANDOM_SCROLL_MAX_MS=3000,SEARCH_LIMIT=100;
+let PAGE_SIZE=40,DISPLAY_ALBUM_COUNT=30,IDLE_RETURN_MS=30000,MANUAL_SOURCE_IDLE_MS=300000,MENU_TIMEOUT_MS=10000,FRONT_TIMEOUT_MS=10000,RECONNECT_MAX_MS=30000,RANDOM_SCROLL_MAX_MS=3000,SEARCH_LIMIT=100;
 const demoAlbums=[['Night Geometry','The Meridian','linear-gradient(145deg,#0f3155,#d14e45)','rgba(244,190,76,.9)','8%','18deg'],['Blue Hours','Harbour Lights','linear-gradient(145deg,#0e223a,#458ca5)','linear-gradient(90deg,#d5eef0 48%,#193a61 48%)','2px','-12deg'],['Still Moving','Northbound','linear-gradient(145deg,#4b1f2c,#de8a55)','rgba(30,16,24,.72)','50%','0deg'],['Parallel Lines','Signal Path','linear-gradient(145deg,#e8dfca,#9c2828)','repeating-linear-gradient(90deg,#181818 0 9px,transparent 9px 18px)','0','24deg'],['After Image','Low Season','linear-gradient(145deg,#192019,#557557)','radial-gradient(circle at 35% 35%,#e0c895 0 12%,transparent 13%),radial-gradient(circle,#182219 0 48%,transparent 49%)','50%','0deg']];
 let externalShelfPosition=-1;
 let playerPower=null,powerPending=false;let playingSource='unknown',albums=demoAlbums.slice(),orderMode='artistAlbum',desiredOrderMode='artistAlbum',orderBusy=false,nodes=[],renderedWindowAnchor=-1,renderedWindowCount=0,prefetchedWindowPage=-1,playerId='',playingAlbumId=null,progressTimer=0,reconnectTimer=0,reconnectDelay=1000,connecting=false,totalAlbums=albums.length,libraryAlbumCount=albums.length,liveCatalogue=false,loadedBatches=new Set(),loadingBatches=new Map(),catalogueGeneration=0,albumPositionById=new Map(),positionIndexPromise=null,nowAlbumTitle='',nowAlbumArtist='',nowTrackTitle='',nowTrackArtist='',nowTrackNumber='',playbackSeconds=0,trackDuration=0,statusUpdatedAt=performance.now(),searchTimer=0,searchToken=0,idleTimer=0,idleReturnAlbumId=null,lastActivityAt=Date.now();
@@ -210,15 +217,54 @@ async function checkSpottyAvailability(){
         spottyAvailable=Number(result._can)===1;
     }catch(_){if(generation!==connectionGeneration)return;spottyAvailable=null;}
     if(spottyAvailable!==true&&catalogueSource==='spotify'){
+        clearSourceBrowseHold();
         catalogueSource='library';
         try{localStorage.setItem('albumBrowserSource','library')}catch(_){}
     }
     updateSourceButtons();
 }
 
-async function setCatalogueSource(source){
+// A deliberate source choice belongs to THIS viewer. It temporarily takes
+// priority over the shared player's playback source while the viewer is active.
+// Automatic source changes never arm this override.
+let sourceBrowseDeadline=0,sourceBrowseTimer=0;
+function sourceBrowseHeld(){
+    return sourceBrowseDeadline>0&&performance.now()<sourceBrowseDeadline;
+}
+function clearSourceBrowseHold(){
+    clearTimeout(sourceBrowseTimer);sourceBrowseTimer=0;sourceBrowseDeadline=0;
+}
+function scheduleSourceBrowseExpiry(){
+    clearTimeout(sourceBrowseTimer);sourceBrowseTimer=0;
+    if(!sourceBrowseHeld()){
+        sourceBrowseDeadline=0;
+        void followPlayingSource();
+        return;
+    }
+    sourceBrowseTimer=setTimeout(()=>{
+        sourceBrowseTimer=0;
+        if(sourceBrowseHeld()){scheduleSourceBrowseExpiry();return}
+        sourceBrowseDeadline=0;
+        void followPlayingSource();
+    },Math.max(1,sourceBrowseDeadline-performance.now()));
+}
+function armSourceBrowseHold(){
+    if(MANUAL_SOURCE_IDLE_MS<=0){clearSourceBrowseHold();return}
+    sourceBrowseDeadline=performance.now()+MANUAL_SOURCE_IDLE_MS;
+    scheduleSourceBrowseExpiry();
+}
+
+async function setCatalogueSource(source,{manual=false}={}){
     if(source==='spotify'&&spottyAvailable===false)return;
-    if(source===catalogueSource||orderBusy||libraryRefreshing)return;
+    if(orderBusy||libraryRefreshing)return;
+    if(source===catalogueSource){
+        if(manual){armSourceBrowseHold();if(MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
+        return;
+    }
+    // Set the hold *before* loading the other catalogue, preventing live
+    // player updates from immediately reversing an explicit user choice.
+    const oldDeadline=sourceBrowseDeadline;
+    if(manual)armSourceBrowseHold();
     const previous=catalogueSource,previousDesired=desiredOrderMode;catalogueSource=source==='spotify'?'spotify':'library';desiredOrderMode=sourceOrderModes[catalogueSource];updateSourceButtons();sourceButtons.forEach(b=>b.disabled=true);
     try{
         if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();
@@ -245,13 +291,13 @@ async function setCatalogueSource(source){
             }
         }
     }
-    catch(error){catalogueSource=previous;desiredOrderMode=previousDesired;updateSourceButtons();setConnection(error.message||'Could not change music source',false)}
-    finally{updateSourceButtons();updateBusyState()}
+    catch(error){catalogueSource=previous;desiredOrderMode=previousDesired;if(manual){clearSourceBrowseHold();if(oldDeadline>performance.now()){sourceBrowseDeadline=oldDeadline;scheduleSourceBrowseExpiry()}}updateSourceButtons();setConnection(error.message||'Could not change music source',false)}
+    finally{updateSourceButtons();updateBusyState();if(manual&&MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
 }
 
 // Each browser has its own catalogue view, but playback belongs to the shared
 // LMS player. Follow a source change without relying on cross-tab storage events.
-let sourceFollowPending=false,sourceFollowAttempt='',spotifyFollowAttempt='',spotifyFollowStartedAt=-Infinity;
+let sourceFollowPending=false,sourceFollowAttempt='',sourceFollowAttemptAt=-Infinity,spotifyFollowAttempt='',spotifyFollowStartedAt=-Infinity;
 async function resolveSpotifyPlayingAlbum(){
     if(catalogueSource!=='spotify'||playingSource!=='spotify'||!hasPlaybackAlbum()||!nowAlbumTitle||playingCarouselIndex()>=0)return;
     const title=nowAlbumTitle,artist=nowAlbumArtist,expectedPlayer=playerId,connection=connectionGeneration,generation=catalogueGeneration;
@@ -273,12 +319,19 @@ async function resolveSpotifyPlayingAlbum(){
 async function followPlayingSource(){
     if(!hasPlaybackAlbum()||!playerId||!['library','spotify'].includes(playingSource))return;
     if(catalogueSource===playingSource){sourceFollowAttempt='';await resolveSpotifyPlayingAlbum();return}
+    if(sourceBrowseHeld())return;
     if(sourceFollowPending||orderBusy||libraryRefreshing)return;
     const key=playerId+'|'+playingSource+'|'+nowAlbumTitle;
-    if(sourceFollowAttempt===key)return;
-    sourceFollowAttempt=key;sourceFollowPending=true;
+    // A failed or incomplete source switch must be retryable. In particular,
+    // another browser can start Spotify while this viewer is showing radio.
+    const now=performance.now();
+    if(sourceFollowAttempt===key&&now-sourceFollowAttemptAt<5000)return;
+    sourceFollowAttempt=key;sourceFollowAttemptAt=now;sourceFollowPending=true;
     try{await setCatalogueSource(playingSource);await resolveSpotifyPlayingAlbum()}
-    finally{sourceFollowPending=false}
+    finally{
+        sourceFollowPending=false;
+        if(catalogueSource===playingSource)sourceFollowAttempt='';
+    }
 }
 
 const orderLabels={artistAlbum:'Artist → Album',album:'Album → Artist',random:'Random',colour:'Spine Colour',recent:'New Music (LMS)',indexed:'Recently Added'};
@@ -305,7 +358,14 @@ async function setDisplayOrder(mode){
         if(!response.ok)throw Error('Could not prepare catalogue; restart the updated server');
         const result=await response.json();
         if(generation!==catalogueGeneration)return;
-        albums=(result.albums_loop||[]).map(mapLyrionAlbum);totalAlbums=albums.length;libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
+        albums=(result.albums_loop||[]).map(mapLyrionAlbum);totalAlbums=albums.length;
+        const preparedCount=Number(result.library_count),preparedCreated=Number(result.snapshot_created);
+        preparedCatalogueRevision=typeof result.catalogue_revision==='string'?result.catalogue_revision:null;
+        if(observedLibraryRevision===null&&preparedCatalogueRevision)
+            observedLibraryRevision=preparedCatalogueRevision;
+        preparedCatalogueCount=Number.isSafeInteger(preparedCount)&&preparedCount>=0?preparedCount:null;
+        preparedCatalogueCreated=Number.isFinite(preparedCreated)&&preparedCreated>0?preparedCreated:null;
+        libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
         loadedBatches=new Set(Array.from({length:batchCount()},(_,i)=>i));
         orderMode=desiredOrderMode=mode;
         rememberSourceOrder(mode);
@@ -323,6 +383,7 @@ async function setDisplayOrder(mode){
             else if(libraryRefreshPending&&!libraryRefreshing&&!randomAnimating){
                 handleLibraryEvent();
             }
+            if(hasPlaybackAlbum()&&playingSource!==catalogueSource)void followPlayingSource();
         }
     }
 }
@@ -954,8 +1015,8 @@ function updateShelfWindow(){if(selectedIndex()!==renderedWindowAnchor||shelfWin
 function scheduleShelfDom(){if(!shelfDomFrame)shelfDomFrame=requestAnimationFrame(syncShelfDom)}
 window.addEventListener('resize',()=>{invalidateFrontCaseWidth();scheduleShelfDom()});new ResizeObserver(()=>{invalidateFrontCaseWidth();scheduleShelfDom()}).observe(measuredFrontCase);root.addEventListener('pointermove',scheduleShelfDom,{capture:true,passive:true});root.addEventListener('pointerup',scheduleShelfDom,{capture:true});root.addEventListener('wheel',scheduleShelfDom,{capture:true,passive:true});document.addEventListener('keydown',scheduleShelfDom,{capture:true});setTimeout(scheduleShelfDom,0);
 async function ensurePositionIndex(){if(albumPositionById.size)return albumPositionById;if(positionIndexPromise)return positionIndexPromise;const generation=catalogueGeneration;positionIndexPromise=buildAlbumPositionIndex(rpc,totalAlbums,generation,()=>catalogueGeneration,PAGE_SIZE).then(index=>{if(index&&generation===catalogueGeneration)albumPositionById=index;return index}).finally(()=>{if(generation===catalogueGeneration)positionIndexPromise=null});return positionIndexPromise}
-async function loadRuntimeConfig(){try{const r=await fetch('/api/config',{cache:'no-store'});if(!r.ok)throw 0;const c=await r.json(),pos=(v,f)=>Number(v)>0?Number(v):f,non=(v,f)=>Number(v)>=0?Number(v):f;artworkNamespace=encodeURIComponent(c.lms_url||'');PAGE_SIZE=pos(c.batch_size,PAGE_SIZE);IDLE_RETURN_MS=non(c.idle_return_ms,IDLE_RETURN_MS);RECONNECT_MAX_MS=pos(c.reconnect_max_ms,RECONNECT_MAX_MS);RANDOM_SCROLL_MAX_MS=pos(c.random_scroll_max_ms,RANDOM_SCROLL_MAX_MS);SEARCH_LIMIT=pos(c.search_limit,SEARCH_LIMIT)}catch(_){}const s=window.__lyrionCarouselSettings||{};setCatalogueVisibility(s.catalogueCodes);setShelfVariety(s.shelfVariety,false);stage.classList.add('bf-shelf-active');COVER_SIZE=[128,256,384,512,768,1024].includes(Number(s.coverSize))?Number(s.coverSize):512;DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(s.displayCount)||30));restoreSourceOrders();if(Number.isFinite(Number(s.idle)))IDLE_RETURN_MS=Number(s.idle);if(Number.isFinite(Number(s.frontTimeout)))FRONT_TIMEOUT_MS=Math.max(0,Number(s.frontTimeout)||0);if(Number(s.random)>0)RANDOM_SCROLL_MAX_MS=Number(s.random);if(Number.isFinite(Number(s.menuTimeout)))MENU_TIMEOUT_MS=Math.max(0,Number(s.menuTimeout))}
-function applySetting(name,value){if(name==='shelfVariety'){setShelfVariety(value)}else if(name==='catalogueCodes'){setCatalogueVisibility(value)}else if(name==='coverSize'){COVER_SIZE=[128,256,384,512,768,1024].includes(Number(value))?Number(value):512;for(const album of albums){if(!album?.[8])continue;album[8]=album[8].replace(/size=\d+/, 'size='+COVER_SIZE);album[2]=`url("${album[8]}") center / contain no-repeat`;}if(frontPreviewAlbum)frontArt.style.background=frontPreviewAlbum[2];renderAlbums();draw()}else if(name==='displayCount'){DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(value)||30));renderAlbums();draw()}else if(name==='frontTimeout'){FRONT_TIMEOUT_MS=Math.max(0,Number(value)||0);if(!frontPreview.hidden){resumeFrontTimeout(true)}}else if(name==='idle'){IDLE_RETURN_MS=Math.max(0,Number(value)||0);armIdleReturn()}else if(name==='menuTimeout'){MENU_TIMEOUT_MS=Math.max(0,Number(value)||0);if(typeof albumMenu!=='undefined'&&!albumMenu.hidden){clearTimeout(menuIdleTimer);menuIdleTimer=MENU_TIMEOUT_MS>0?setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS):0}}else if(name==='random'){const n=Number(value);if(n>0)RANDOM_SCROLL_MAX_MS=n}}
+async function loadRuntimeConfig(){try{const r=await fetch('/api/config',{cache:'no-store'});if(!r.ok)throw 0;const c=await r.json(),pos=(v,f)=>Number(v)>0?Number(v):f,non=(v,f)=>Number(v)>=0?Number(v):f;artworkNamespace=encodeURIComponent(c.lms_url||'');PAGE_SIZE=pos(c.batch_size,PAGE_SIZE);IDLE_RETURN_MS=non(c.idle_return_ms,IDLE_RETURN_MS);RECONNECT_MAX_MS=pos(c.reconnect_max_ms,RECONNECT_MAX_MS);RANDOM_SCROLL_MAX_MS=pos(c.random_scroll_max_ms,RANDOM_SCROLL_MAX_MS);SEARCH_LIMIT=pos(c.search_limit,SEARCH_LIMIT)}catch(_){}const s=window.__lyrionCarouselSettings||{};setCatalogueVisibility(s.catalogueCodes);setShelfVariety(s.shelfVariety,false);stage.classList.add('bf-shelf-active');COVER_SIZE=[128,256,384,512,768,1024].includes(Number(s.coverSize))?Number(s.coverSize):512;DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(s.displayCount)||30));restoreSourceOrders();if(Number.isFinite(Number(s.idle)))IDLE_RETURN_MS=Number(s.idle);if(Number.isFinite(Number(s.sourceBrowseTimeout))&&Number(s.sourceBrowseTimeout)>=0)MANUAL_SOURCE_IDLE_MS=Number(s.sourceBrowseTimeout);if(['none','notify','preview'].includes(s.newAlbumAction))newAlbumAction=s.newAlbumAction;if(Number.isFinite(Number(s.frontTimeout)))FRONT_TIMEOUT_MS=Math.max(0,Number(s.frontTimeout)||0);if(Number(s.random)>0)RANDOM_SCROLL_MAX_MS=Number(s.random);if(Number.isFinite(Number(s.menuTimeout)))MENU_TIMEOUT_MS=Math.max(0,Number(s.menuTimeout))}
+function applySetting(name,value){if(name==='newAlbumAction'){if(['none','notify','preview'].includes(value))newAlbumAction=value}else if(name==='shelfVariety'){setShelfVariety(value)}else if(name==='catalogueCodes'){setCatalogueVisibility(value)}else if(name==='coverSize'){COVER_SIZE=[128,256,384,512,768,1024].includes(Number(value))?Number(value):512;for(const album of albums){if(!album?.[8])continue;album[8]=album[8].replace(/size=\d+/, 'size='+COVER_SIZE);album[2]=`url("${album[8]}") center / contain no-repeat`;}if(frontPreviewAlbum)frontArt.style.background=frontPreviewAlbum[2];renderAlbums();draw()}else if(name==='displayCount'){DISPLAY_ALBUM_COUNT=Math.max(10,Math.min(60,Number(value)||30));renderAlbums();draw()}else if(name==='frontTimeout'){FRONT_TIMEOUT_MS=Math.max(0,Number(value)||0);if(!frontPreview.hidden){resumeFrontTimeout(true)}}else if(name==='idle'){IDLE_RETURN_MS=Math.max(0,Number(value)||0);armIdleReturn()}else if(name==='sourceBrowseTimeout'){const ms=Number(value);if(Number.isSafeInteger(ms)&&ms>=0){MANUAL_SOURCE_IDLE_MS=ms;if(sourceBrowseHeld()){if(ms)armSourceBrowseHold();else{clearSourceBrowseHold();void followPlayingSource()}}}}else if(name==='menuTimeout'){MENU_TIMEOUT_MS=Math.max(0,Number(value)||0);if(typeof albumMenu!=='undefined'&&!albumMenu.hidden){clearTimeout(menuIdleTimer);menuIdleTimer=MENU_TIMEOUT_MS>0?setTimeout(closeAlbumMenu,MENU_TIMEOUT_MS):0}}else if(name==='random'){const n=Number(value);if(n>0)RANDOM_SCROLL_MAX_MS=n}}
 window.addEventListener('lyrion-carousel-setting',e=>applySetting(e.detail?.name,e.detail?.value));
 window.addEventListener('lyrion-carousel-genres-change',event=>{
     disabledGenres=new Set(Array.isArray(event.detail?.disabled)?event.detail.disabled:[]);
@@ -968,7 +1029,7 @@ window.addEventListener('lyrion-carousel-lms-change',event=>{
     spottyAvailable=null;updateSourceButtons();
     resetRpcSession();connectionGeneration++;catalogueGeneration++;pinnedRequest++;
     artworkNamespace=encodeURIComponent(event.detail?.lmsUrl||'');
-    cometd.stop();resetReconnect();clearInterval(progressTimer);clearTimeout(idleTimer);
+    clearSourceBrowseHold();clearTimeout(newAlbumToastTimer);newAlbumToast.hidden=true;observedLibraryRevision=null;cometd.resetLibraryState();cometd.stop();sourceFollowAttempt='';sourceFollowAttemptAt=-Infinity;preparedCatalogueCount=preparedCatalogueCreated=preparedCatalogueRevision=null;resetReconnect();clearInterval(progressTimer);clearTimeout(idleTimer);
     cancelFollowAnimation();playing=false;paused=false;playingAlbumId=null;closeFrontPreview();
     closeSearch();closeAlbumMenu();closeTrackList();
     connecting=false;playerId='';liveCatalogue=false;orderBusy=false;randomAnimating=false;randomAnimationDuration=0;randomPlay.classList.remove('is-busy');
@@ -1105,11 +1166,29 @@ externalArt.onerror=()=>{
     else if(externalStationArtwork)externalDisplayedArtwork=externalCaseUrl(externalStationArtwork);
     syncExternalShelf();draw();
 };
+let sourceProbePending=false,sourceProbeAt=-Infinity;
+function probeAmbiguousRemoteSource(){
+    // CometD may deliver playerstatus before all track tags have arrived.
+    // Promptly request one full URL-bearing status, throttled if LMS still
+    // cannot identify the source. A separate 20s poll covers missed events.
+    const now=performance.now();
+    if(!playerId||sourceProbePending||now-sourceProbeAt<5000)return;
+    sourceProbeAt=now;sourceProbePending=true;
+    void Promise.resolve().then(refreshStatus).finally(()=>{sourceProbePending=false});
+}
 function playbackSourceForTrack(track,result){
     const remote=result.remoteMeta||{};
-    const urls=[track.url,track.uri,remote.url,remote.uri,remote.id].map(value=>String(value||''));
+    const urls=[track.url,track.uri,track.extid,track.ext_id,remote.url,remote.uri,remote.id,remote.extid]
+        .map(value=>String(value||''));
     if(urls.some(value=>/^spotify:/i.test(value)||/^https?:\/\/open\.spotify\.com\//i.test(value)))return 'spotify';
-    if(result.remote||urls.some(value=>/^https?:/i.test(value)))return 'external';
+    if(urls.some(value=>/^https?:/i.test(value)))return 'external';
+    // "remote:1" is true for Spotify AND internet radio. The URI (LMS tag
+    // u) or extid (tag E) is needed to distinguish them. Never call a
+    // metadata-light Spotify event radio just because it says remote.
+    if(result.remote===true||String(result.remote??'0')==='1'||track.remote===true||String(track.remote??'0')==='1'||remote.remote===true||String(remote.remote??'0')==='1'){
+        if(track.remote_title||track.icon||remote.remote_title||remote.icon)return 'external';
+        return 'unknown';
+    }
     return track.album_id||remote.album_id?'library':urls.some(Boolean)?'external':'unknown';
 }
 function spotifyPlayingIndex(track,result){
@@ -1121,8 +1200,8 @@ function spotifyPlayingIndex(track,result){
 }
 function setPlayerPower(value){playerPower=value===1||value==='1'||value===true?true:value===0||value==='0'||value===false?false:null;powerButton.dataset.power=playerPower===null?'unknown':playerPower?'on':'off';powerButton.setAttribute('aria-pressed',String(playerPower===true));const label=playerPower===null?'Player power unavailable':playerPower?'Turn selected player off':'Turn selected player on';powerButton.setAttribute('aria-label',label);powerButton.title=label;updateBusyState()}
 async function togglePlayerPower(){if(!playerId||powerPending||playerPower===null)return;const selected=playerId,target=playerPower?0:1;powerPending=true;updateBusyState();try{await rpc(selected,['power',target]);if(selected===playerId){setPlayerPower(target);await refreshStatus()}}catch(_){if(selected===playerId){setConnection('Could not change player power',false);await refreshStatus()}}finally{powerPending=false;updateBusyState()}}
-function applyStatus(result){if(!result)return;updateQueuePosition(result);if(Object.prototype.hasOwnProperty.call(result,'power'))setPlayerPower(result.power);const previousAlbum=playingAlbumId,wasActive=hasPlaybackAlbum();if(result.mode!==undefined){playing=result.mode==='play';paused=result.mode==='pause'}const currentIndex=Math.max(0,Number(result.playlist_cur_index)||0),track=result.playlist_loop?.find(item=>Number(item['playlist index']??item.playlist_index)===currentIndex)||result.playlist_loop?.[currentIndex]||result.playlist_loop?.[0];if(track){const remote=result.remoteMeta||{};const detectedSource=playbackSourceForTrack(track,result);if(detectedSource!=='unknown'||!hasPlaybackAlbum()||(track.album&&track.album!==nowAlbumTitle))playingSource=detectedSource;const spotifyIndex=playingSource==='spotify'?spotifyPlayingIndex(track,result):-1;playingAlbumId=playingSource==='external'?null:track.album_id||remote.album_id||(spotifyIndex>=0?albums[spotifyIndex][6]:null)||(hasPlaybackAlbum()&&previousAlbum&&(!track.album||track.album===nowAlbumTitle)&&(!track.title||track.title===nowTrackTitle)?previousAlbum:null);nowAlbumTitle=track.album||remote.album||track.remote_title||result.current_title||track.title||'';nowAlbumArtist=track.albumartist||track.artist||remote.artist||track.remote_artist||'';nowTrackTitle=track.title||remote.title||track.remote_title||result.current_title||'';nowTrackArtist=track.trackartist||track.artist||remote.trackartist||remote.artist||track.remote_artist||'';nowTrackNumber=track.tracknum||'';playbackSeconds=Number(result.time)||0;trackDuration=Number(track.duration||result.duration)||0;statusUpdatedAt=performance.now();if(playingSource==='external')updateExternalArtwork(result,track)}else if(!hasPlaybackAlbum()){playingSource='unknown';playingAlbumId=null;nowAlbumTitle=nowAlbumArtist='';nowTrackTitle=nowTrackArtist=nowTrackNumber='';playbackSeconds=trackDuration=0}syncExternalShelf();setConnection(albumCountLabel(),true);updateMeta(true);if(result.playlist_cur_index!==undefined)updateQueueCurrent(Number(result.playlist_cur_index));if(wasActive&&!hasPlaybackAlbum()&&frontPreviewAlbum&&String(frontPreviewAlbum[6])===String(previousAlbum)){pinnedRequest++;closeFrontPreview()}if(connecting)return;if(KEEP_PLAYING_OPEN&&(wasActive!==hasPlaybackAlbum()||String(previousAlbum)!==String(playingAlbumId)||frontPreview.hidden))ensurePlayingCover();else frontPreview.dataset.pinned=String(isPlayingCoverPinned());if(!hasPlaybackAlbum()){if(wasActive)cancelFollowAnimation();followingNowPlaying=false}if(wasActive!==hasPlaybackAlbum()||String(previousAlbum)!==String(playingAlbumId))resumeFrontTimeout();const carouselPlayingIndex=playingCarouselIndex(),carouselPlayingId=carouselPlayingIndex>=0?String(albums[carouselPlayingIndex]?.[6]||''):'';if(hasPlaybackAlbum()&&carouselPlayingIndex>=0&&String(previousAlbum)!==String(playingAlbumId)&&(followingNowPlaying||KEEP_PLAYING_OPEN)){returnToPlayingAlbum(true);return}if(carouselPlayingIndex>=0&&String(idleReturnAlbumId||'')!==carouselPlayingId&&Date.now()-lastActivityAt>=IDLE_RETURN_MS)armIdleReturn(0);void followPlayingSource()}
-async function getStatus(trackCount=1){if(!playerId)return null;return rpc(playerId,['status','-',trackCount,'tags:alJenKNRA'])}
+function applyStatus(result){if(!result)return;updateQueuePosition(result);if(Object.prototype.hasOwnProperty.call(result,'power'))setPlayerPower(result.power);const previousAlbum=playingAlbumId,wasActive=hasPlaybackAlbum();if(result.mode!==undefined){playing=result.mode==='play';paused=result.mode==='pause'}const currentIndex=Math.max(0,Number(result.playlist_cur_index)||0),track=result.playlist_loop?.find(item=>Number(item['playlist index']??item.playlist_index)===currentIndex)||result.playlist_loop?.[currentIndex]||result.playlist_loop?.[0];if(track){const remote=result.remoteMeta||{};const detectedSource=playbackSourceForTrack(track,result);if(detectedSource!=='unknown'||!hasPlaybackAlbum())playingSource=detectedSource;else if(result.remote===true||String(result.remote??'0')==='1')probeAmbiguousRemoteSource();const spotifyIndex=playingSource==='spotify'?spotifyPlayingIndex(track,result):-1;playingAlbumId=playingSource==='external'?null:track.album_id||remote.album_id||(spotifyIndex>=0?albums[spotifyIndex][6]:null)||(hasPlaybackAlbum()&&previousAlbum&&(!track.album||track.album===nowAlbumTitle)&&(!track.title||track.title===nowTrackTitle)?previousAlbum:null);nowAlbumTitle=track.album||remote.album||track.remote_title||result.current_title||track.title||'';nowAlbumArtist=track.albumartist||track.artist||remote.artist||track.remote_artist||'';nowTrackTitle=track.title||remote.title||track.remote_title||result.current_title||'';nowTrackArtist=track.trackartist||track.artist||remote.trackartist||remote.artist||track.remote_artist||'';nowTrackNumber=track.tracknum||'';playbackSeconds=Number(result.time)||0;trackDuration=Number(track.duration||result.duration)||0;statusUpdatedAt=performance.now();if(playingSource==='external')updateExternalArtwork(result,track)}else if(!hasPlaybackAlbum()){playingSource='unknown';playingAlbumId=null;nowAlbumTitle=nowAlbumArtist='';nowTrackTitle=nowTrackArtist=nowTrackNumber='';playbackSeconds=trackDuration=0}syncExternalShelf();setConnection(albumCountLabel(),true);updateMeta(true);if(result.playlist_cur_index!==undefined)updateQueueCurrent(Number(result.playlist_cur_index));if(wasActive&&!hasPlaybackAlbum()&&frontPreviewAlbum&&String(frontPreviewAlbum[6])===String(previousAlbum)){pinnedRequest++;closeFrontPreview()}if(connecting)return;if(hasPlaybackAlbum()&&playingSource!==catalogueSource&&['library','spotify'].includes(playingSource)){void followPlayingSource();return}if(KEEP_PLAYING_OPEN&&(wasActive!==hasPlaybackAlbum()||String(previousAlbum)!==String(playingAlbumId)||frontPreview.hidden))ensurePlayingCover();else frontPreview.dataset.pinned=String(isPlayingCoverPinned());if(!hasPlaybackAlbum()){if(wasActive)cancelFollowAnimation();followingNowPlaying=false}if(wasActive!==hasPlaybackAlbum()||String(previousAlbum)!==String(playingAlbumId))resumeFrontTimeout();const carouselPlayingIndex=playingCarouselIndex(),carouselPlayingId=carouselPlayingIndex>=0?String(albums[carouselPlayingIndex]?.[6]||''):'';if(hasPlaybackAlbum()&&carouselPlayingIndex>=0&&String(previousAlbum)!==String(playingAlbumId)&&(followingNowPlaying||KEEP_PLAYING_OPEN)){returnToPlayingAlbum(true);return}if(carouselPlayingIndex>=0&&String(idleReturnAlbumId||'')!==carouselPlayingId&&Date.now()-lastActivityAt>=IDLE_RETURN_MS)armIdleReturn(0);void followPlayingSource()}
+async function getStatus(trackCount=1){if(!playerId)return null;return rpc(playerId,['status','-',trackCount,'tags:aluJenKNRAxE'])}
 async function refreshStatus(){
     if(!playerId)return;
     const expectedPlayer=playerId,connection=connectionGeneration;
@@ -1148,6 +1227,54 @@ async function selectStartupAlbum(status){
     await scrollToAlbumIndex(index);
     prefetchAround(selectedIndex());
 }
+function showNewAlbumToast(message){
+    clearTimeout(newAlbumToastTimer);
+    newAlbumToast.textContent=message;
+    newAlbumToast.hidden=false;
+    newAlbumToastTimer=setTimeout(()=>{newAlbumToast.hidden=true;newAlbumToastTimer=0},8000);
+}
+function canPreviewNewAlbum(){
+    // Passive catalogue events never steal an active user's place, change
+    // source, interrupt radio, or replace an explicitly opened cover.
+    return catalogueSource==='library'&&playingSource!=='external'&&!sourceBrowseHeld()&&
+        Date.now()-lastActivityAt>=15000&&
+        !randomAnimating&&!discoveryBusy&&!dragging&&!orderBusy&&!sourceFollowPending&&
+        !root.querySelector('.bf-settings-overlay:not([hidden])')&&
+        searchOverlay.hidden&&trackOverlay.hidden&&albumMenu.hidden&&orderMenu.hidden&&
+        (frontPreview.hidden||isPlayingCoverPinned());
+}
+async function announceNewAlbums(newIds,connection){
+    if(newAlbumAction==='none'||!newIds.length)return;
+    const ids=new Set(newIds.map(String));
+    const index=albums.findIndex(album=>album&&ids.has(String(album[6])));
+    const album=index>=0?albums[index]:null;
+    const message=newIds.length===1?
+        'New album added'+(album?' · '+album[0]+' — '+album[1]:''):
+        newIds.length+' new albums added';
+    showNewAlbumToast(message);
+    if(newAlbumAction!=='preview'||!album||!canPreviewNewAlbum())return;
+    const activity=lastActivityAt,generation=catalogueGeneration,id=String(album[6]);
+    cancelFollowAnimation();
+    const arrived=await scrollToAlbumIndex(index);
+    if(!arrived||connection!==connectionGeneration||generation!==catalogueGeneration||
+       activity!==lastActivityAt||!canPreviewNewAlbum()||String(albums[index]?.[6])!==id)return;
+    // Open a temporary manual-style cover; no LMS playback request is sent.
+    // The existing front-preview timeout returns to the pinned playing cover.
+    position=target=nearestPositionForIndex(index);
+    hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();
+    openFrontPreview(albums[index],index,true);schedule();
+}
+async function seedObservedLibraryRevision(){
+    // Read-only and fast: avoids treating a prior scan as a brand-new arrival
+    // when a browser first opens on Spotify rather than Library.
+    if(observedLibraryRevision!==null)return;
+    try{
+        const response=await fetch('/api/catalogue/status',{cache:'no-store'});
+        if(!response.ok)return;
+        const result=await response.json();
+        if(typeof result.revision==='string')observedLibraryRevision=result.revision;
+    }catch(_){/* No snapshot yet: first completed reconciliation is baseline. */}
+}
 async function handleLibraryEvent(){
     // This is a passive LMS status observation, not a command from LMS.
     // Carousel independently checks whether its library has changed.
@@ -1162,16 +1289,43 @@ async function handleLibraryEvent(){
             if(!response.ok)throw Error('Could not check the LMS catalogue');
             const result=await response.json();
             if(connection!==connectionGeneration)return;
-            // Genre membership can change after a scan even when the album
-            // records remain identical, so active filters warrant a refresh.
-            if(!result.changed&&!disabledGenres.size)continue;
-            if(!liveCatalogue||catalogueSource==='spotify')continue;
-            await refreshCatalogue({invalidate:false});
+            const revision=typeof result.revision==='string'?result.revision:null;
+            const newRevision=!!revision&&observedLibraryRevision!==null&&revision!==observedLibraryRevision;
+            if(revision)observedLibraryRevision=revision;
+            const newIds=newRevision&&Array.isArray(result.recent_new_album_ids)?
+                result.recent_new_album_ids.filter(id=>typeof id==='string'&&id.length<=128):[];
+            // Another browser may already have reconciled the shared server
+            // snapshot. In that case "changed" is false relative to SERVER
+            // memory, but this browser still has the older shelf.
+            const countMismatch=Number.isSafeInteger(Number(result.count))&&
+                preparedCatalogueCount!==null&&Number(result.count)!==preparedCatalogueCount;
+            const revisionMismatch=typeof result.revision==='string'&&
+                preparedCatalogueRevision!==null&&result.revision!==preparedCatalogueRevision;
+            // Genre membership can change even when album rows don't.
+            const needsRefresh=!!(result.changed||countMismatch||revisionMismatch||disabledGenres.size);
+            if(!liveCatalogue||catalogueSource==='spotify'){
+                // A Spotify shelf stays Spotify. Notification mode remains
+                // useful there, but an arrival must not force a source switch.
+                if(newAlbumAction!=='none'&&newIds.length)
+                    showNewAlbumToast(newIds.length===1?'New Library album added':newIds.length+' new Library albums added');
+                continue;
+            }
+            // A browser may have refreshed its shelf through another route
+            // before its scan event runs. Still announce the newly observed
+            // revision even if the catalogue itself needs no second refresh.
+            if(needsRefresh){
+                await refreshCatalogue({invalidate:false});
+                if(connection!==connectionGeneration)return;
+            }
+            if(newIds.length)await announceNewAlbums(newIds,connection);
         }
     }catch(_){scheduleReconnect()}
-    finally{libraryRefreshing=false;updateBusyState()}
+    finally{
+        libraryRefreshing=false;updateBusyState();
+        if(hasPlaybackAlbum()&&playingSource!==catalogueSource)void followPlayingSource();
+    }
 }
-const cometd=new CometDClient(applyStatus,state=>{root.dataset.liveUpdates=state==='live'?'true':state==='connecting'?'connecting':'false';emitStatus();if(state==='connecting')setConnection('Connecting to live updates…',false);else if(state==='live')setConnection(albumCountLabel()+' · live',true);else setConnection('Live updates lost · reconnecting',false)},handleLibraryEvent);
+const cometd=new CometDClient(applyStatus,state=>{root.dataset.liveUpdates=state==='live'?'true':state==='connecting'?'connecting':'false';emitStatus();if(state==='connecting')setConnection('Connecting to live updates…',false);else if(state==='live')setConnection(albumCountLabel()+' · live',true);else setConnection('Live updates lost · reconnecting',false)},handleLibraryEvent,()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated}));
 function openSearch(){searchToken++;clearTimeout(searchTimer);searchInput.value='';searchResults.replaceChildren();searchStatus.textContent='Type at least two characters.';searchOverlay.hidden=false;searchInput.focus()}function closeSearch(){searchOverlay.hidden=true;searchToken++;clearTimeout(searchTimer)}function centreAlbumIndex(index,animate=true){if(randomAnimating||!Number.isFinite(index)||index<0)return;stopFollowing();const destination=nearestPositionForIndex(index);if(animate){target=destination;schedule()}else{position=target=destination;draw()}}
 async function navigateToAlbum(id){searchStatus.textContent='Locating album…';try{let i=albums.findIndex(album=>album&&String(album[6])===String(id));if(i<0&&catalogueSource!=='spotify')i=await locateAlbum(id);if(i<0)throw 0;closeSearch();followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;if(!isPlayingCoverPinned())closeFrontPreview(true);const arrived=await scrollToAlbumIndex(i);if(arrived){position=target=nearestPositionForIndex(i);renderAlbums();draw()}}catch(_){searchStatus.textContent='That album could not be located.'}}
 function renderSearchResults(results){searchResults.replaceChildren();for(const album of results){const b=document.createElement('button');b.className='bf-search-result';b.type='button';const img=document.createElement('img');img.alt='';if(album[8])img.src=album[8];const c=document.createElement('span'),t=document.createElement('strong'),a=document.createElement('span');t.textContent=album[0];a.textContent=album[1];c.append(t,a);b.append(img,c);b.onclick=()=>selectSearchAlbum(album);searchResults.append(b)}}
@@ -1220,12 +1374,13 @@ function scrollToAlbumIndex(index,allowPointerMovement=false){
     });
 }
 function armIdleReturn(delayOverride=null){clearTimeout(idleTimer);if(IDLE_RETURN_MS<=0)return;const elapsed=Date.now()-lastActivityAt,delay=delayOverride===null?Math.max(0,IDLE_RETURN_MS-elapsed):delayOverride;idleTimer=setTimeout(()=>returnToPlayingAlbum(),delay)}
-function noteUserActivity(event){if(!discoveryBusy&&!(event?.type==='pointermove'&&followAnimation?.allowPointerMovement))cancelFollowAnimation();lastActivityAt=Date.now();idleReturnAlbumId=null;armIdleReturn()}
+function noteUserActivity(event){if(!discoveryBusy&&!(event?.type==='pointermove'&&followAnimation?.allowPointerMovement))cancelFollowAnimation();if(sourceBrowseHeld())armSourceBrowseHold();lastActivityAt=Date.now();idleReturnAlbumId=null;armIdleReturn()}
 async function returnToPlayingAlbum(immediate=false){
     clearTimeout(idleTimer);idleTimer=0;
     if(!immediate&&Date.now()-lastActivityAt<IDLE_RETURN_MS){armIdleReturn();return}
     if(randomAnimating||discoveryBusy||dragging||orderBusy||libraryRefreshing||root.querySelector('.bf-settings-overlay:not([hidden])')||!searchOverlay.hidden||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden){clearTimeout(idleTimer);idleTimer=setTimeout(()=>returnToPlayingAlbum(immediate),1000);return}
     if(!hasPlaybackAlbum())return;
+    if(sourceBrowseHeld()&&catalogueSource!==playingSource)return;
     // A manual preview owns the visible case until its own timeout or the
     // user selects another spine. The idle return must not preempt it.
     if(!frontPreview.hidden&&!isPlayingCoverPinned())return;
@@ -1677,7 +1832,7 @@ stage.addEventListener('pointerdown',event=>{
 });
 stage.addEventListener('pointermove',event=>moveShelfDrag(event));
 stage.addEventListener('pointerup',()=>finishShelfDrag(false));
-stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
+stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;clearSourceBrowseHold();sourceFollowAttempt='';sourceFollowAttemptAt=-Infinity;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{clearTimeout(newAlbumToastTimer);clearSourceBrowseHold();cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
 async function connectLyrion(){if(connecting)return;connecting=true;const connection=connectionGeneration;try{const result=await rpc('0',['players',0,100]),players=(result.players_loop||[]).filter(p=>String(p.connected)!=='0');if(connection!==connectionGeneration)return;playerSelect.replaceChildren();for(const p of players){const o=document.createElement('option');o.value=p.playerid;o.textContent=p.name||p.playerid;playerSelect.append(o)}let remembered='';try{remembered=localStorage.getItem('albumBrowserPlayer')||''}catch(_){}const selected=players.find(p=>p.playerid===remembered)||players.find(p=>String(p.isplaying)==='1')||players[0];if(playerId!==(selected?.playerid||''))resetQueuePosition();playerId=selected?.playerid||'';setPlayerPower(null);if(playerId)playerSelect.value=playerId;playerSelect.disabled=!players.length;updateBusyState();await checkSpottyAvailability();if(connection!==connectionGeneration)return;if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();if(connection!==connectionGeneration)return;const status=await getStatus();if(connection!==connectionGeneration)return;await selectStartupAlbum(status);if(connection!==connectionGeneration)return;await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();armIdleReturn();cometd.start(playerId);clearInterval(progressTimer);progressTimer=setInterval(updateProgressDisplay,500)}catch(error){if(connection!==connectionGeneration)return;console.warn(error);cometd.stop();root.dataset.liveUpdates='false';emitStatus();if(!liveCatalogue){albums=demoAlbums.slice();totalAlbums=libraryAlbumCount=albums.length;position=target=Math.floor(Math.random()*albums.length);renderAlbums();draw();root.classList.remove('is-starting');root.dataset.ready='true';playerSelect.innerHTML='<option>Demo mode</option>'}playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);root.classList.remove('is-starting');root.dataset.ready='true';playerId='';resetQueuePosition();playerSelect.disabled=true;updateBusyState();setConnection('Lyrion Music Server unavailable',false);scheduleReconnect()}finally{if(connection===connectionGeneration)connecting=false}}
 orderToggle.onclick=()=>orderMenu.hidden?openOrderMenu():closeOrderMenu();orderMenu.querySelectorAll('[data-order]').forEach(button=>button.onclick=()=>{closeOrderMenu();setDisplayOrder(button.dataset.order).catch(error=>{setConnection(error.message||'Could not change album order',false)}).finally(()=>{if(libraryRefreshPending)handleLibraryEvent()})});updateOrderToggle();
 previousTrack.onclick=()=>skipTrack(-1);nextTrack.onclick=()=>skipTrack(1);
@@ -1703,5 +1858,5 @@ stage.addEventListener('pointerup',event=>{
     }
 },true);
 stage.addEventListener('pointercancel',()=>{focusClickIndex=null},true);
-sourceButtons.forEach(button=>button.onclick=()=>setCatalogueSource(button.dataset.source));updateSourceButtons();
-async function start(){await window.__lyrionLmsConfigReady;await loadRuntimeConfig();try{catalogueSource=localStorage.getItem('albumBrowserSource')==='spotify'?'spotify':'library'}catch(_){}updateSourceButtons();appStarted=true;setConnection('Connecting to Lyrion Music Server…',false);connectLyrion()}start();
+sourceButtons.forEach(button=>button.onclick=()=>setCatalogueSource(button.dataset.source,{manual:true}));updateSourceButtons();
+async function start(){await window.__lyrionLmsConfigReady;await loadRuntimeConfig();await seedObservedLibraryRevision();try{catalogueSource=localStorage.getItem('albumBrowserSource')==='spotify'?'spotify':'library'}catch(_){}updateSourceButtons();appStarted=true;setConnection('Connecting to Lyrion Music Server…',false);connectLyrion()}start();
