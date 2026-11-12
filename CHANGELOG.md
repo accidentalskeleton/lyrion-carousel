@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Fix new albums failing to appear automatically after LMS scans when the `rescan` true-to-false event is missed. Detect changed `lastscan` and album/track totals, use a lightweight 60-second `serverstatus` fallback during CometD interruptions, preserve revisions across same-server reconnects and reset them on LMS changes; retain first-observed album-added dates.
+
 - Consolidate persistent album-added dates, Library/Spotify spine metadata and catalogue snapshots into a single per-installation SQLite database outside the disposable artwork directory. Begin with a fresh empty metadata store; do not migrate legacy `.meta`, `colour-index-v1`, `indexed-order-v1` or catalogue JSON files. Keep images as files, preserve album-added dates when clearing artwork, and update packaging, regressions and documentation.
 
 - Align usage, getting-started, Windows, deployment and development documentation with the current Settings UI: remove the obsolete **Keep playing album open** toggle, correct the Cache tab artwork-preparation location, update control names and explain current cache clearing. No application behaviour changes.
