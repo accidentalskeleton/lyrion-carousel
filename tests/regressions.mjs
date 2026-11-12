@@ -904,6 +904,9 @@ export async function runTests(sources) {
   const releaseNotice=element('.bf-update-notice');
   assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
   assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
+  const toastCss=sources.settingsCss.match(/\.bf-new-album-toast:not\(\[hidden\]\)\s*\{([^}]+)\}/)?.[1]||'';
+  assert(/z-index:\s*900\s*;/.test(toastCss)&&/top:\s*8px\s*;/.test(toastCss),
+    'new album notice appears above open cases and menus at the top of the viewer');
   const newAlbumActionControl=element('.bf-new-album-action');
   assert(newAlbumActionControl.value==='none','new album preview is opt-in');
   newAlbumActionControl.value='preview';
@@ -1015,7 +1018,7 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
-  assert(sources.index.includes('css/settings.css?v=new-album-preview-1'),
+  assert(sources.index.includes('css/settings.css?v=new-album-toast-top-1'),
     'project-link styles invalidate the settings stylesheet cache');
   tabs[5].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
@@ -1605,7 +1608,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=sort-labels-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=new-album-preview-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=new-album-notify-race-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -2156,6 +2159,24 @@ export async function runTests(sources) {
   await settle(api.handleLibraryEvent());
   assert(newAlbumToast.hidden,'unchanged catalogue revision does not repeat the announcement');
 
+  // A different path can update this viewer's shelf BEFORE it receives the
+  // scan event. It must still announce that revision exactly once.
+  const alreadyRefreshedArrival={id:99107,album:'Already on the shelf',artist:'New arrival'};
+  library.push(alreadyRefreshedArrival);
+  recentNewAlbumIdsFixture=[String(alreadyRefreshedArrival.id)];
+  catalogueReconcileChanged=false;
+  await settle(api.loadInitialCatalogue());
+  assert(api.preparedStateForTest().revision===revisionOf(library)&&
+    api.arrivalStateForTest().revision!==revisionOf(library),
+    'shelf can be current before arrival revision is observed');
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(!newAlbumToast.hidden&&newAlbumToast.textContent.includes('Already on the shelf'),
+    'show notification works even when the shelf was refreshed before the event');
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.hidden,'already-refreshed arrival is never announced twice');
+
   // In preview mode the virtual viewer is idle and may scroll/open, but never
   // play. Opening an album also reuses the standard temporary case timeout.
   api.applySetting('newAlbumAction','preview');
@@ -2224,6 +2245,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
   sources.shelfCss=await readFile(new URL('../css/shelf.css',import.meta.url),'utf8');
+  sources.settingsCss=await readFile(new URL('../css/settings.css',import.meta.url),'utf8');
   sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
   sources.debianBuild=await readFile(new URL('../packaging/debian/build-deb.sh',import.meta.url),'utf8');
   sources.performance=await readFile(new URL('../js/performance.js',import.meta.url),'utf8');
