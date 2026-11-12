@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Position new-album notifications at the very top, above covers, menus and other active overlays, and let long album names wrap instead of being clipped. Keep the sleeping screen black. Deliver each new-album notification even when the same viewer's shelf was refreshed before its library event was processed.
+
 - Add per-viewer **Settings → Browsing → When new albums arrive** with Update shelf only (default), Show notification, and Scroll to album and open cover. An LMS reconciliation persists up to 25 new album IDs in the catalogue snapshot so multiple browsers can observe an addition independently; older IDs, retags and cover repairs do not trigger previews. Preview one added Library cover using existing scrolling and temporary-cover animations, with no playback commands; skip animation during active browsing, manually selected Spotify, radio, or open dialogs. Show one notification for multi-album scans and do not replay after browser refresh.
 - Audit Settings grouping: rename Playback to **Browsing** for source-follow, idle return, new-arrival and preview/navigation timing; move **Screen sleep** into **Display**, leave LMS/player under Connection and maintenance under Cache. Add accessible group headings within Browsing while retaining the compact tabbed layout.
 
