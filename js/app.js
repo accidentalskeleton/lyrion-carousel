@@ -253,7 +253,7 @@ async function setCatalogueSource(source,{manual=false}={}){
     if(source==='spotify'&&spottyAvailable===false)return;
     if(orderBusy||libraryRefreshing)return;
     if(source===catalogueSource){
-        if(manual)armSourceBrowseHold();
+        if(manual){armSourceBrowseHold();if(MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
         return;
     }
     // Set the hold *before* loading the other catalogue, preventing live
@@ -287,7 +287,7 @@ async function setCatalogueSource(source,{manual=false}={}){
         }
     }
     catch(error){catalogueSource=previous;desiredOrderMode=previousDesired;if(manual){clearSourceBrowseHold();if(oldDeadline>performance.now()){sourceBrowseDeadline=oldDeadline;scheduleSourceBrowseExpiry()}}updateSourceButtons();setConnection(error.message||'Could not change music source',false)}
-    finally{updateSourceButtons();updateBusyState()}
+    finally{updateSourceButtons();updateBusyState();if(manual&&MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
 }
 
 // Each browser has its own catalogue view, but playback belongs to the shared
