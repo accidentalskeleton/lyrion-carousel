@@ -323,6 +323,7 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(result['changed'])
         self.assertEqual(result['count'],2)
         self.assertEqual(result['new_albums'],0)
+        self.assertEqual(result['recent_new_album_ids'],[])
         self.assertIs(server._CATALOGUE_MEMORY[key],snapshot)
         self.assertEqual(snapshot['orders'][order_key],original)
         self.assertNotIn(('album',(7,)),snapshot['orders'])
@@ -343,6 +344,16 @@ class ServerTests(unittest.TestCase):
         data=json.loads(self.responses[-1][1])
         self.assertTrue(data['changed'])
         self.assertEqual((data['count'],data['new_albums']),(2,1))
+        self.assertEqual(data['recent_new_album_ids'],['2'])
+        # A second viewer should still learn which album appeared even
+        # after the first viewer reconciled this shared catalogue.
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([updated])):
+            self.handler._reconcile_catalogue()
+        second=json.loads(self.responses[-1][1])
+        self.assertFalse(second['changed'])
+        self.assertEqual(second['new_albums'],0)
+        self.assertEqual(second['recent_new_album_ids'],['2'])
+        self.assertEqual(self.stored_catalogue()['recent_new_album_ids'],['2'])
         enqueue.assert_called_once()
         self.assertEqual(list(enqueue.call_args.args[1]),['new-cover'])
         snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
@@ -363,6 +374,7 @@ class ServerTests(unittest.TestCase):
         result=json.loads(self.responses[-1][1])
         self.assertTrue(result['changed'])
         self.assertEqual(result['new_albums'],0)
+        self.assertEqual(result['recent_new_album_ids'],[])
         self.assertEqual(list(enqueue.call_args.args[1]),['new-cover'])
 
     def test_first_observed_snapshot_does_not_bulk_index_entire_library(self):
@@ -376,6 +388,7 @@ class ServerTests(unittest.TestCase):
         data=json.loads(self.responses[-1][1])
         self.assertTrue(data['changed'])
         self.assertEqual(data['count'],1000)
+        self.assertEqual(data['recent_new_album_ids'],[])
         enqueue.assert_not_called()
 
     def test_observed_scan_detects_updates_when_catalogue_loaded_from_disk(self):
