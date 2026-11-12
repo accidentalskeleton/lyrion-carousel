@@ -4,6 +4,10 @@ set -u
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 
+# Autostart and SSH may begin from a directory inaccessible to this user.
+# Ensure Chromium and helper processes inherit the kiosk account home.
+cd "$HOME" || { echo "Cannot enter kiosk home: $HOME" >&2; exit 1; }
+
 CONF="$HOME/.config/lyrion-carousel/kiosk.conf"
 if [[ ! -f "$CONF" ]]; then
   echo "Missing kiosk configuration: $CONF" >&2
