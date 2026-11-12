@@ -17,16 +17,20 @@ export async function rpc(targetPlayer, command) {
 }
 
 export class CometDClient {
-  constructor(onStatus, onState, onLibraryChanged = () => window.location.reload()) {
+  constructor(onStatus, onState, onLibraryChanged = () => window.location.reload(), getLibraryAlbumCount = () => null) {
     this.onStatus = onStatus;
     this.onState = onState;
     this.onLibraryChanged = onLibraryChanged;
+    this.getLibraryAlbumCount = getLibraryAlbumCount;
     this.generation = 0;
     this.messageId = 0;
     this.clientId = '';
     this.playerId = '';
     this.retryTimer = 0;
+    this.statusTimer = 0;
+    this.statusPollInFlight = false;
     this.serverWasScanning = null;
+    this.libraryState = {lastscan:null, albums:null, songs:null};
   }
 
   async post(messages) {
@@ -41,12 +45,58 @@ export class CometDClient {
     return body;
   }
 
+  resetLibraryState() {
+    // A new LMS endpoint has unrelated scan timestamps and album identities.
+    this.serverWasScanning = null;
+    this.libraryState = {lastscan:null, albums:null, songs:null};
+  }
+
   handleServerStatus(data) {
-    const scanning = data?.rescan === true || String(data?.rescan ?? '0') === '1';
-    if (this.serverWasScanning === true && !scanning) {
+    if (!data || typeof data !== 'object') return;
+    const scanning = data.rescan === true || String(data.rescan ?? '0') === '1';
+    const finished = this.serverWasScanning === true && !scanning;
+    // LMS can finish a short scan between CometD status deliveries. rescan
+    // then reads 0 -> 0, but lastscan and/or the catalogue counts change.
+    const lastscan = data.lastscan == null || data.lastscan === '' ? null : String(data.lastscan);
+    const count = value => {
+      if (value === null || value === undefined || value === '') return null;
+      const number = Number(value);
+      return Number.isSafeInteger(number) && number >= 0 ? number : null;
+    };
+    const albums = count(data['info total albums']);
+    const songs = count(data['info total songs']);
+    const previous = this.libraryState;
+    const lastscanChanged = lastscan !== null && previous.lastscan !== null && lastscan !== previous.lastscan;
+    const totalsChanged = (albums !== null && previous.albums !== null && albums !== previous.albums) ||
+      (songs !== null && previous.songs !== null && songs !== previous.songs);
+    // Catch a change during initial subscription, when the browser's live
+    // album count may already differ from its persistent server-side snapshot.
+    const displayed = count(this.getLibraryAlbumCount());
+    const initialMismatch = previous.albums === null && albums !== null &&
+      displayed !== null && albums !== displayed;
+    this.serverWasScanning = scanning;
+    this.libraryState = {
+      lastscan:lastscan ?? previous.lastscan,
+      albums:albums ?? previous.albums,
+      songs:songs ?? previous.songs
+    };
+    if (!scanning && (finished || lastscanChanged || totalsChanged || initialMismatch)) {
       this.onLibraryChanged(data);
     }
-    this.serverWasScanning = scanning;
+  }
+
+  async pollServerStatus(generation) {
+    if (generation !== this.generation || this.statusPollInFlight) return;
+    this.statusPollInFlight = true;
+    try {
+      const status = await rpc('0', ['serverstatus', 0, 0]);
+      // Switching LMS or stopping the client invalidates any old response.
+      if (generation === this.generation) this.handleServerStatus(status);
+    } catch (_) {
+      // CometD and the next lightweight check can recover independently.
+    } finally {
+      this.statusPollInFlight = false;
+    }
   }
 
   handle(messages) {
@@ -60,11 +110,13 @@ export class CometDClient {
   stop() {
     ++this.generation;
     clearTimeout(this.retryTimer);
+    clearInterval(this.statusTimer);
     this.retryTimer = 0;
+    this.statusTimer = 0;
     const clientId = this.clientId;
     this.clientId = '';
     this.playerId = '';
-    this.serverWasScanning = null;
+    // Preserve the scan revision across a reconnect to the SAME LMS.
     if (clientId) {
       this.post([{ channel: '/meta/disconnect', clientId, id: String(++this.messageId) }]).catch(() => {});
     }
@@ -75,6 +127,10 @@ export class CometDClient {
     if (!playerId) return;
     this.playerId = playerId;
     const generation = ++this.generation;
+    // The periodic serverstatus request does not enumerate albums or touch
+    // SQLite. It remains active even if CometD has temporarily disconnected.
+    this.statusTimer = setInterval(() => { void this.pollServerStatus(generation); }, 60000);
+    void this.pollServerStatus(generation);
     try {
       this.onState('connecting');
       const handshake = await this.post([{
