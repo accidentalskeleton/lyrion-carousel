@@ -58,6 +58,8 @@ Let HDMI/Wayland detect the panel's modes automatically. On a Corsair XENEON EDG
 
 When no HDMI screen is connected, labwc may expose a 1920 × 1080 `NOOP-1` virtual output, which is not proof that the eventual monitor mode or touch works.
 
+For optional Corsair-specific touch detection, five-point calibration and rollback, see [Corsair XENEON EDGE touchscreen calibration](corsair-touch-calibration.md). The calibration tool is not installed by default and should only be used if touch mapping is wrong after the physical display is connected.
+
 ## Diagnostics
 
 ```bash
