@@ -38,7 +38,7 @@ All API POST requests require `X-Lyrion-Request: 1`. Browser requests also rejec
 | `--lms` | `http://streamer:9000` | Lyrion Music Server base URL |
 | `--bind` | `127.0.0.1` | Controller listening address |
 | `--port` | `8088` | Controller HTTP port |
-| `--allowed-hosts` | appliance hostname | Extra comma-separated local browser hostnames |
+| `--allowed-hosts` | none | Additional comma-separated local browser hostnames beyond those auto-accepted on the local network |
 | `--cache-dir` | `.cache/album-art` | Persistent album cache location |
 | `--cache-limit-mb` | `512` | Initial soft artwork-cache limit, adjustable from the browser |
 | `--cache-hard-limit-mb` | `2000` | Server-only ceiling for browser cache-limit changes |
