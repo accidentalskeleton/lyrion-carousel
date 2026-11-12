@@ -1015,7 +1015,7 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
-  assert(sources.index.includes('css/settings.css?v=forum-project-link-2'),
+  assert(sources.index.includes('css/settings.css?v=new-album-preview-1'),
     'project-link styles invalidate the settings stylesheet cache');
   tabs[5].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
