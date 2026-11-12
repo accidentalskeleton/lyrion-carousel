@@ -18,5 +18,7 @@ grep -q 'Existing unmanaged' "$root/deploy/raspberry-pi/install-kiosk.sh"
 grep -q 'HEALTH_FAILURES' "$root/deploy/raspberry-pi/carousel-kiosk"
 grep -q 'browser_pid' "$root/deploy/raspberry-pi/carousel-kiosk"
 grep -q 'until healthy' "$root/deploy/raspberry-pi/carousel-kiosk"
+grep -Fq 'SUDO_USER="$USER_NAME" raspi-config' "$root/deploy/raspberry-pi/configure-dedicated-user.sh"
+grep -Fq 'LightDM autologin was not configured' "$root/deploy/raspberry-pi/configure-dedicated-user.sh"
 
 echo 'Raspberry Pi kiosk script checks passed'
