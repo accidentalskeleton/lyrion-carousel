@@ -20,7 +20,7 @@ Current application version: **0.12.0**. The canonical version is stored in [`VE
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
 - circular CD shelf with artwork-derived spine colours, stable readable font choices, and configurable displayed-album count;
 - optional shelf variety with stable title alignment, artist/title hierarchy, print treatments, subtle case wear, catalogue typography and 1.5× multi-disc spines;
-- shelf-only display with server-prepared artist/album, album-only, colour, random or **Recently Added** ordering; Recently Added uses LMS's recorded first-added date, newest first, and stops at both shelf ends instead of wrapping; random order is retained across library refreshes within the session;
+- shelf-only display with artist/album, album-only, spine colour, random, and two finite newest-first album orders: **Recently Added** (Carousel's current-library track indexing dates) and **New Music (LMS)** (LMS's original persistent-recording ordering); both chronological orders stop at the shelf ends instead of wrapping, while random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
 - server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered; a 15-minute persistent catalogue snapshot avoids rescanning LMS for every sort or genre-filter change;
 - paged album-ID → `sort:artflow` position index for direct jumps, plus validated in-memory ID-to-index lookups during animation;
@@ -56,6 +56,12 @@ Current application version: **0.12.0**. The canonical version is stored in [`VE
 https://github.com/user-attachments/assets/26f048b1-0845-4cb1-b619-2fec704d327a
 
 [Download the feature tour](assets/lyrion-carousel-feature-tour.mp4) · 2 min 33 sec · captioned · no soundtrack
+
+## Why are there two date orderings?
+
+**Recently Added** shows albums by when their tracks entered the current LMS library. **New Music (LMS)** preserves LMS's built-in ranking, which can make a newly imported compilation look older when its recordings were already known from another album. Matching MusicBrainz Recording IDs on different releases are generally correct metadata, not duplicate-tag errors.
+
+See [Understanding album date ordering](docs/usage.md#understanding-album-date-ordering) for an example and the limitations, or [the technical explanation](docs/architecture.md#album-date-ordering-implementation) for the underlying LMS query and Carousel cache.
 
 ## Quick start
 
