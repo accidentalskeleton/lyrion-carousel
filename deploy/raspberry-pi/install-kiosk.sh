@@ -28,7 +28,7 @@ if $INSTALL_DEPS; then
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y chromium labwc curl wlr-randr
 fi
-for cmd in chromium labwc curl; do
+for cmd in chromium labwc curl flock; do
   command -v "$cmd" >/dev/null || { echo "Missing $cmd; rerun with --install-deps" >&2; exit 1; }
 done
 BIN="$HOME_DIR/.local/bin/carousel-kiosk"
