@@ -4,11 +4,13 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Document the difference between Carousel's current-library **Recently Added** ordering and native LMS **New Music**, including the persistent-recording timestamp cause, an example of legitimate shared MusicBrainz recording IDs, SQLite caching, database-rebuild limitations, and LMS source references. Correct the outdated README and architecture descriptions.
+
 - Prevent native touchscreen blue text-selection highlights, tap flash and long-press callouts on CD spines and open jewel cases. Scope the suppression to album surfaces so search inputs and popups retain their normal behaviour, without changing Carousel's tap, swipe, drag or long-press actions.
 
 - Clarify the order menu with **Artist → Album**, **Album → Artist**, **Recently Added** (Carousel’s indexed dates), **New Music (LMS)** (LMS persistent recording dates), **Spine Colour**, and **Random**. Keep the existing icons for other options, use a distinct history-clock icon for LMS New Music, and group choices with subtle dividers. Internal sort IDs and saved preferences remain unchanged.
 
-- Add **Recently Indexed** as a second Library-only album sort alongside the unchanged LMS **Recently Added** view. Use current-track indexing dates through the standard LMS API rather than recording history, with per-server SQLite caching, bounded pagination, genre exclusions, and regression tests. No LMS patch or Pi ripper dependency.
+- Add **Recently Indexed** (the original development name for today's Carousel **Recently Added**) as a second Library-only album sort alongside the LMS order (now labelled **New Music (LMS)**). Use current-track indexing dates through the standard LMS API rather than recording history, with per-server SQLite caching, bounded pagination, genre exclusions, and regression tests. No LMS patch or Pi ripper dependency.
 
 - Show external playback artwork as a temporary CD on the dimmed shelf, using normal spine spacing, scrolling, preview timeouts and idle return. Prefer song artwork with station-artwork fallback from LMS metadata or matching favourites. Keep the CD visible through missing or delayed artwork, preload replacement artwork, refresh reused artwork URLs when radio metadata changes, and remove the temporary CD when album playback resumes. Omit the artist separator when the album title is missing.
 
