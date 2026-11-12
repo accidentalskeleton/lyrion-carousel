@@ -535,8 +535,10 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     for path in self.cache_dir.rglob('*'):
                         if path.is_file() or path.is_symlink(): path.unlink(); removed+=1
                     _IMAGE_CACHE_BYTES.pop(str(self.cache_dir.resolve()),None)
+                # Keep the SQLite deletion under the same catalogue lock so
+                # another request cannot repopulate a snapshot during clearing.
+                metadata_db.clear_generated(self._metadata_db_path())
                 _CATALOGUE_MEMORY.clear()
-            metadata_db.clear_generated(self._metadata_db_path())
             self._send_payload(200,json.dumps({'removed':removed}).encode(),'application/json; charset=utf-8',cache_control='no-store')
         except (OSError,sqlite3.Error,ValueError) as error: self._send_upstream_error(error)
     def _update_lms_url(self)->None:
