@@ -213,6 +213,7 @@ async function checkSpottyAvailability(){
         spottyAvailable=Number(result._can)===1;
     }catch(_){if(generation!==connectionGeneration)return;spottyAvailable=null;}
     if(spottyAvailable!==true&&catalogueSource==='spotify'){
+        clearSourceBrowseHold();
         catalogueSource='library';
         try{localStorage.setItem('albumBrowserSource','library')}catch(_){}
     }
