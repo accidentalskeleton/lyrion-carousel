@@ -2127,6 +2127,89 @@ export async function runTests(sources) {
     'Follow immediately cancels an active browsing hold and resumes syncing');
   assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length===playbackWritesBeforeBrowse,
     'manual browsing and automatic return never issue player commands');
+  // New albums are a notification/preview, NEVER another playback action.
+  // First synchronise the viewer's revision without announcing any old scan.
+  recentNewAlbumIdsFixture=[];
+  api.applySetting('newAlbumAction','none');
+  api.setSourceForTest('library');
+  api.applyStatus({mode:'stop',playlist_loop:[]});
+  api.closeFrontPreview(true);
+  await settle(api.handleLibraryEvent());
+  assert(api.arrivalStateForTest().revision===revisionOf(library),
+    'existing library establishes a baseline without previewing old albums');
+  const newAlbumToast=element('.bf-new-album-toast');
+  const arrivalPlaybackBefore=rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||
+    (cmd[0]==='spotty'&&cmd[1]==='playlist')).length;
+  api.applySetting('newAlbumAction','notify');
+  const firstArrival={id:99101,album:'Freshly ripped album',artist:'Ripping artist'};
+  library.push(firstArrival);
+  recentNewAlbumIdsFixture=[String(firstArrival.id)];
+  // Another viewer already reconciled: changed=false, but the browser's
+  // revision is older and the arrival is still persisted in server metadata.
+  catalogueReconcileChanged=false;
+  await settle(api.handleLibraryEvent());
+  assert(!newAlbumToast.hidden&&newAlbumToast.textContent.includes('Freshly ripped album'),
+    'notify mode announces an arrival even if another viewer reconciled first');
+  assert(api.state().frontPreviewAlbum?.[6]!==firstArrival.id,
+    'notification alone never opens the new album');
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.hidden,'unchanged catalogue revision does not repeat the announcement');
+
+  // In preview mode the virtual viewer is idle and may scroll/open, but never
+  // play. Opening an album also reuses the standard temporary case timeout.
+  api.applySetting('newAlbumAction','preview');
+  api.closeFrontPreview(true);
+  api.set({activity:Date.now()-30000});
+  const secondArrival={id:99102,album:'Second fresh CD',artist:'Ripping artist'};
+  library.push(secondArrival);
+  recentNewAlbumIdsFixture=[String(secondArrival.id)];
+  catalogueReconcileChanged=true;
+  await settle(api.handleLibraryEvent());
+  assert(api.state().frontPreviewAlbum?.[6]===secondArrival.id&&!preview.hidden,
+    'idle viewer scrolls to freshly added album and opens its jewel case');
+  assert(api.state().frontTimer!==0,
+    'new album cover uses the usual temporary front-preview timeout');
+
+  // Active browsing must not be hijacked; a text notification is safe.
+  api.closeFrontPreview(true);
+  api.set({activity:Date.now()});
+  const activeArrival={id:99103,album:'Added during browsing',artist:'Ripping artist'};
+  library.push(activeArrival);
+  recentNewAlbumIdsFixture=[String(activeArrival.id)];
+  await settle(api.handleLibraryEvent());
+  assert(!newAlbumToast.hidden&&api.state().frontPreviewAlbum?.[6]!==activeArrival.id,
+    'active browsing prevents automatic shelf motion even in preview mode');
+
+  // One scan with several album IDs never creates a cascade of animations.
+  api.closeFrontPreview(true);
+  api.set({activity:Date.now()-30000});
+  library.push({id:99104,album:'Multi disc one',artist:'Artist'});
+  library.push({id:99105,album:'Multi disc two',artist:'Artist'});
+  recentNewAlbumIdsFixture=['99104','99105'];
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.textContent.includes('2 new albums added')&&
+    ['99104','99105'].includes(String(api.state().frontPreviewAlbum?.[6])),
+    'multiple new albums result in one notification and one preview only');
+
+  // Spotify browsing must stay Spotify. An arrival can notify, but must not
+  // switch catalogues or open a local-library cover there.
+  api.setSourceForTest('spotify');
+  library.push({id:99106,album:'Added while in Spotify',artist:'Artist'});
+  recentNewAlbumIdsFixture=['99106'];
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(api.sourceForTest()==='spotify'&&
+    newAlbumToast.textContent.includes('New Library album added')&&
+    !newAlbumToast.hidden,'arrival never forces a Spotify viewer into Library');
+  assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||
+    (cmd[0]==='spotty'&&cmd[1]==='playlist')).length===arrivalPlaybackBefore,
+    'new album notifications and previews never issue playback commands');
+  recentNewAlbumIdsFixture=[];
+  api.setSourceForTest('library');
+  await settle(api.loadInitialCatalogue());
+  api.closeFrontPreview(true);
+  api.applySetting('newAlbumAction','none');
   api.set({playing:false,hover:0});const headingAlbum=api.state().albums[0],oldHeading=headingAlbum.slice(0,2);
   headingAlbum[0]=' ';headingAlbum[1]='The Dead Daisies';api.updateMeta(true);
   assert(element('.bf-meta').children[0].children[1].textContent==='The Dead Daisies','missing album title omits the artist separator');
