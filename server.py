@@ -1104,6 +1104,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     if mode=='random':random.shuffle(albums)
                     elif mode not in ('recent','indexed'):albums.sort(key=key)
                     payload=json.dumps({'count':len(albums),'library_count':library_count,
+                                        'snapshot_created':snapshot['created'],
                                         'albums_loop':albums},ensure_ascii=False).encode('utf-8')
                     if mode!='random':
                         remember_catalogue_order(snapshot['orders'],order_key,payload)
