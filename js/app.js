@@ -1302,7 +1302,7 @@ async function handleLibraryEvent(){
             const revisionMismatch=typeof result.revision==='string'&&
                 preparedCatalogueRevision!==null&&result.revision!==preparedCatalogueRevision;
             // Genre membership can change even when album rows don't.
-            if(!result.changed&&!countMismatch&&!revisionMismatch&&!disabledGenres.size)continue;
+            const needsRefresh=!!(result.changed||countMismatch||revisionMismatch||disabledGenres.size);
             if(!liveCatalogue||catalogueSource==='spotify'){
                 // A Spotify shelf stays Spotify. Notification mode remains
                 // useful there, but an arrival must not force a source switch.
@@ -1310,9 +1310,14 @@ async function handleLibraryEvent(){
                     showNewAlbumToast(newIds.length===1?'New Library album added':newIds.length+' new Library albums added');
                 continue;
             }
-            await refreshCatalogue({invalidate:false});
-            if(connection!==connectionGeneration)return;
-            await announceNewAlbums(newIds,connection);
+            // A browser may have refreshed its shelf through another route
+            // before its scan event runs. Still announce the newly observed
+            // revision even if the catalogue itself needs no second refresh.
+            if(needsRefresh){
+                await refreshCatalogue({invalidate:false});
+                if(connection!==connectionGeneration)return;
+            }
+            if(newIds.length)await announceNewAlbums(newIds,connection);
         }
     }catch(_){scheduleReconnect()}
     finally{
