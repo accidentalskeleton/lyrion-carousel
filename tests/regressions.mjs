@@ -21,14 +21,50 @@ export async function runTests(sources) {
   assert(invalid, 'invalid page size rejected');
 
   let libraryEvents = 0;
+  let serverStatusFixture = {rescan:0,lastscan:'100','info total albums':95,'info total songs':900};
   const {CometDClient, rpc:realRpc, resetRpcSession} = new Function('fetch', plain(sources.lms) + ';return {CometDClient,rpc,resetRpcSession};')(
-    async () => ({ok:true,json:async () => ({result:{}})})
+    async () => ({ok:true,json:async () => ({result:serverStatusFixture})})
   );
-  const comet = new CometDClient(() => {}, () => {}, data => { assert(data.rescan === 0 || data.rescan === false, 'scan payload forwarded'); libraryEvents++; });
-  comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:1}); comet.handleServerStatus({rescan:0}); comet.handleServerStatus({rescan:0});
-  assert(libraryEvents === 1, 'one observation per completed scan');
-  comet.handleServerStatus({rescan:true}); comet.handleServerStatus({rescan:false});
-  assert(libraryEvents === 2, 'boolean scan-status changes are also observed once');
+  const statusEvents=[];
+  const comet = new CometDClient(() => {}, () => {}, data => {
+    statusEvents.push(data);
+    libraryEvents++;
+  }, () => 95);
+  comet.handleServerStatus(serverStatusFixture);
+  assert(libraryEvents===0,'first serverstatus observation establishes a baseline');
+  comet.handleServerStatus({...serverStatusFixture,rescan:1});
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'101'});
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'101'});
+  assert(libraryEvents===1,'scan completion and lastscan change trigger one refresh');
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'102'});
+  assert(libraryEvents===2,'lastscan change triggers refresh even when rescan remains 0');
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'102'});
+  assert(libraryEvents===2,'replayed serverstatus is idempotent');
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'102','info total albums':96});
+  assert(libraryEvents===3,'album total detects additions without a rescan transition');
+  comet.handleServerStatus({...serverStatusFixture,rescan:0,lastscan:'102','info total albums':96,'info total songs':902});
+  assert(libraryEvents===4,'song total detects new tracks on an existing album');
+  comet.handleServerStatus({...serverStatusFixture,rescan:true,lastscan:'103'});
+  assert(libraryEvents===4,'never refresh while LMS is still scanning');
+  comet.handleServerStatus({...serverStatusFixture,rescan:false,lastscan:'103'});
+  assert(libraryEvents===5,'scan completion refreshes after deferred revision change');
+  comet.stop();
+  comet.handleServerStatus({...serverStatusFixture,lastscan:'104'});
+  assert(libraryEvents===6,'same-LMS reconnect retains previous lastscan baseline');
+  comet.resetLibraryState();
+  comet.handleServerStatus({...serverStatusFixture,lastscan:'3','info total albums':22});
+  assert(libraryEvents===7,'new-LMS initial mismatch with displayed album count triggers reconciliation');
+  comet.resetLibraryState();
+  comet.handleServerStatus({...serverStatusFixture,lastscan:'3','info total albums':95});
+  assert(libraryEvents===7,'new-LMS initial matching baseline does not trigger false scan');
+  // A status request still works without CometD messages, but stale in-flight
+  // replies from a previous LMS generation must not cause a refresh.
+  comet.generation=21;
+  serverStatusFixture={rescan:0,lastscan:'4','info total albums':95,'info total songs':900};
+  await comet.pollServerStatus(21);
+  assert(libraryEvents===8,'lightweight serverstatus polling catches a missed scan');
+  await comet.pollServerStatus(20);
+  assert(libraryEvents===8,'stale serverstatus polls are ignored');
   const oldRpc = realRpc('0', ['players',0,1]); resetRpcSession();
   let rejected = false; try { await oldRpc; } catch (_) { rejected = true; }
   assert(rejected, 'old server RPC rejected');
@@ -110,7 +146,7 @@ export async function runTests(sources) {
         return Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})});
       }
       return metadataFetch(url,...args);
-    },rpc,CometDClient:class{stop(){}start(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
+    },rpc,CometDClient:class{stop(){}start(){}resetLibraryState(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
