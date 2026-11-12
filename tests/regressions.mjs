@@ -213,8 +213,9 @@ export async function runTests(sources) {
   await api.loadInitialCatalogue();
   assert(api.state().albums.length===95 &&
     api.preparedStateForTest().albums===95 &&
-    api.preparedStateForTest().live===96,
-    'browser distinguishes the prepared snapshot count from the live LMS album count');
+    api.preparedStateForTest().live===95 &&
+    library.length===96,
+    'browser still has stale prepared snapshot while LMS reports a newer album');
   let staleSnapshotObserved=0;
   const actualStartupComet=new CometDClient(()=>{},()=>{},()=>{staleSnapshotObserved++;},
     api.preparedStateForTest);
