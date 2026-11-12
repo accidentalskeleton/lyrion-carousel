@@ -63,6 +63,19 @@
     padding: 15px 0;
     border-bottom: 1px solid rgba(255, 255, 255, .07);
 }
+
+/* Sections group related actions without adding more horizontal tabs. */
+.bf-settings-group-title {
+    margin: 15px 0 0;
+    padding: 0 0 7px;
+    border-bottom: 1px solid rgba(143, 186, 145, .2);
+    color: #8fba91;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+.bf-settings-group-title + .bf-settings-section { padding-top: 12px; }
 .bf-settings-section select {
     min-width: 170px;
     min-height: 34px;
