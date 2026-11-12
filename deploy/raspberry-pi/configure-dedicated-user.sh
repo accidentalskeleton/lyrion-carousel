@@ -26,11 +26,15 @@ if $AUTOLOGIN; then
   command -v raspi-config >/dev/null || {
     echo "raspi-config unavailable; configure desktop autologin manually" >&2; exit 1;
   }
-  # Raspberry Pi OS chooses the autologin identity from USER.
-  # Does not touch SSH configuration or change other user passwords.
-  USER="$USER_NAME" raspi-config nonint do_boot_behaviour B4
-  echo "Configured Raspberry Pi OS desktop autologin for $USER_NAME"
-  echo "Reboot required. Check /etc/lightdm/lightdm.conf before rebooting."
+  # raspi-config derives USER from SUDO_USER (not from the USER environment variable).
+  # This also adjusts tty1 autologin as part of Raspberry Pi OS boot behaviour.
+  SUDO_USER="$USER_NAME" raspi-config nonint do_boot_behaviour B4
+  if ! grep -Eq "^autologin-user=$USER_NAME$" /etc/lightdm/lightdm.conf; then
+    echo "ERROR: LightDM autologin was not configured for $USER_NAME; do not reboot." >&2
+    exit 1
+  fi
+  echo "Verified LightDM desktop autologin for $USER_NAME"
+  echo "Reboot required; SSH configuration and other user passwords are unchanged."
 else
   echo "Desktop autologin unchanged. Opt in with --desktop-autologin after kiosk installation."
 fi
