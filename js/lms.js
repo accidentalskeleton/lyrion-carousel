@@ -28,6 +28,8 @@ export class CometDClient {
     this.playerId = '';
     this.retryTimer = 0;
     this.statusTimer = 0;
+    this.playerStatusTimer = 0;
+    this.playerPollInFlight = null;
     this.statusPollInFlight = null;
     this.serverWasScanning = null;
     this.libraryState = {lastscan:null, albums:null, songs:null};
@@ -106,6 +108,22 @@ export class CometDClient {
     }
   }
 
+  async pollPlayerStatus(generation, playerId) {
+    if (generation !== this.generation || !playerId || this.playerId !== playerId ||
+        this.playerPollInFlight === generation) return;
+    this.playerPollInFlight = generation;
+    try {
+      // The full status includes the URL (tag u) and external ID (tag E).
+      // A partial CometD message may omit both, making Spotify look like radio.
+      const status = await rpc(playerId, ['status', '-', 1, 'tags:aluJenKNRAxE']);
+      if (generation === this.generation && this.playerId === playerId) this.onStatus(status);
+    } catch (_) {
+      // Read-only fallback; CometD and future checks continue independently.
+    } finally {
+      if (this.playerPollInFlight === generation) this.playerPollInFlight = null;
+    }
+  }
+
   handle(messages) {
     for (const message of messages) {
       if (!message?.data || !message?.channel) continue;
@@ -118,8 +136,10 @@ export class CometDClient {
     ++this.generation;
     clearTimeout(this.retryTimer);
     clearInterval(this.statusTimer);
+    clearInterval(this.playerStatusTimer);
     this.retryTimer = 0;
     this.statusTimer = 0;
+    this.playerStatusTimer = 0;
     const clientId = this.clientId;
     this.clientId = '';
     this.playerId = '';
@@ -139,6 +159,9 @@ export class CometDClient {
     void this.pollServerStatus(generation);
     // Library monitoring must not require an available playback device.
     if (!playerId) return;
+    this.playerStatusTimer = setInterval(() => {
+      void this.pollPlayerStatus(generation, playerId);
+    }, 20000);
     try {
       this.onState('connecting');
       const handshake = await this.post([{
@@ -160,7 +183,7 @@ export class CometDClient {
           clientId: hello.clientId,
           id: String(++this.messageId),
           data: {
-            request: [playerId, ['status', '-', 1, 'tags:alJenA', 'subscribe:30']],
+            request: [playerId, ['status', '-', 1, 'tags:aluJenAxE', 'subscribe:30']],
             response: playerChannel
           }
         },
