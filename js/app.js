@@ -1,4 +1,4 @@
-import { rpc, CometDClient, resetRpcSession } from './lms.js?v=library-refresh-1';
+import { rpc, CometDClient, resetRpcSession } from './lms.js?v=library-refresh-2';
 import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from './catalogue.js?v=display-choice-1';
 import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPosition } from './browser.js?v=display-choice-1';
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
