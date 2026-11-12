@@ -22,8 +22,12 @@ export async function runTests(sources) {
 
   let libraryEvents = 0;
   let serverStatusFixture = {rescan:0,lastscan:'100','info total albums':95,'info total songs':900};
+  const lmsPollCommands=[];
   const {CometDClient, rpc:realRpc, resetRpcSession} = new Function('fetch', plain(sources.lms) + ';return {CometDClient,rpc,resetRpcSession};')(
-    async () => ({ok:true,json:async () => ({result:serverStatusFixture})})
+    async (_,request) => {
+      lmsPollCommands.push(JSON.parse(request?.body||'{}')?.params?.[1]);
+      return {ok:true,json:async () => ({result:serverStatusFixture})};
+    }
   );
   const statusEvents=[];
   const comet = new CometDClient(() => {}, () => {}, data => {
@@ -65,6 +69,15 @@ export async function runTests(sources) {
   assert(libraryEvents===8,'lightweight serverstatus polling catches a missed scan');
   await comet.pollServerStatus(20);
   assert(libraryEvents===8,'stale serverstatus polls are ignored');
+  let playerStatusDelivered=0;
+  comet.onStatus=()=>{playerStatusDelivered++;};
+  comet.playerId='test-player';
+  await comet.pollPlayerStatus(21,'test-player');
+  assert(playerStatusDelivered===1 &&
+    lmsPollCommands.some(cmd=>cmd?.[0]==='status'&&cmd.includes('tags:aluJenKNRAxE')),
+    'fallback player-status read includes Spotify URL/extid tags and reaches the viewer');
+  await comet.pollPlayerStatus(20,'test-player');
+  assert(playerStatusDelivered===1,'stale player-status poll does not update another session');
   // A browser can already have the NEW live LMS count, yet have an OLD
   // 15-minute prepared SQLite catalogue. The old comparison with the live
   // count failed to detect this; compare against the prepared count instead.
@@ -194,7 +207,7 @@ export async function runTests(sources) {
       finiteShelfBounds,snapShelfPosition,
       prefetchCoverWindow,invalidateFrontCaseWidth,frontCaseWidth,coverCache:()=>({active:warmingCovers.size,cached:warmCovers.size,queued:coverQueue.length}),browseWithArrow,connectLyrion,playRandomAlbum,discoverAlbum,centreAlbumIndex,loadInitialCatalogue,refreshCatalogue,handleLibraryEvent,setDisplayOrder,applySetting,applyStatus,selectStartupAlbum,returnToPlayingAlbum,stopFollowing,ensurePlayingCover,closeFrontPreview,openFrontPreview,showTrackList,closeTrackList,closeAlbumMenu,syncFrontTimeoutPause,openQueue,closeQueue,storeBatch,restoreSourceOrders,resolveSpotifyPlayingAlbum,followPlayingSource,playbackSourceForTrack,openSearch,closeSearch,runSearch,noteUserActivity,selectSearchAlbum,openAlbumMenu,selectedAlbumFilter,queueAlbum,playAlbumNow,clearPlaylistAndPlay,sortAlbumTracks,distinctTrackArtist,updateHoveredAlbumFromPoint,updateMeta,draw,
       set(values){if('playerId' in values)playerId=values.playerId;if('connecting' in values)connecting=values.connecting;if('playing' in values){playing=values.playing;paused=false;}if('paused' in values)paused=values.paused;if('playingAlbumId' in values)playingAlbumId=values.playingAlbumId;if('hover' in values)hoveredAlbumIndex=values.hover;if('position' in values)position=target=values.position;if('activity' in values)lastActivityAt=values.activity;},
-      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,frontTimeoutRemaining,frontTimeoutDeadline,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf}),
+      state:()=>({albums,position,target,PAGE_SIZE,DISPLAY_ALBUM_COUNT,orderMode,frontPreviewAlbum,frontTimer,frontTimeoutRemaining,frontTimeoutDeadline,followAnimation,followingNowPlaying,playing,paused,KEEP_PLAYING_OPEN,randomAnimating,discoveryBusy,discoveryHoldTimer,discoveryHoverSuspended,hoveredAlbumIndex,wheelTimer,coverOpening,raf,sourceFollowPending}),
       geometry:()=>({nodes,frontPreviewIndex})};
   `)(...Object.values(env));
   async function settle(promise) {
