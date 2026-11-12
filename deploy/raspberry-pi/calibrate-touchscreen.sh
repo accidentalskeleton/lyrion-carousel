@@ -61,6 +61,7 @@ case "$ACTION" in
     for cmd in git python3; do command -v "$cmd" >/dev/null || { echo "Missing $cmd" >&2; exit 1; }; done
     python3 -m venv --help >/dev/null || { echo "Install python3-venv" >&2; exit 1; }
     install -d -o "$KIOSK_USER" -g "$(id -gn "$KIOSK_USER")" "$HOME_DIR/.local" "$HOME_DIR/.local/share"
+    cd "$HOME_DIR" || exit 1  # child commands must not inherit the admin home
     if [[ -e "$UPSTREAM_DIR" ]]; then
       echo "Existing source at $UPSTREAM_DIR — will not overwrite or update it."
     else
