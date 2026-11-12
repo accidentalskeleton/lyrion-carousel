@@ -1053,7 +1053,6 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         # One inexpensive read-only endpoint lets every open browser observe
         # the shared LMS selection and catalogue revision. No LMS scan or
         # album enumeration is triggered by this status request.
-        state['lms_url']=self.runtime_config.get('lms_url',self.lms_url)
         state['colour_indexing']=COLOUR_INDEXER.snapshot()
         self._send_payload(200,json.dumps(state).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
