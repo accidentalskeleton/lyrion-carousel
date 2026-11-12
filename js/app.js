@@ -10,7 +10,7 @@ stage.classList.add('bf-shelf-active');
 let connectionGeneration=0,appStarted=false,artworkNamespace='',catalogueSource='library',libraryRefreshPending=false,libraryRefreshing=false,genreRefreshPending=false,disabledGenres=new Set();
 // The prepared catalogue may be older than the live LMS album count. Keep its
 // unfiltered count and creation time separate for scan-revision checks.
-let preparedCatalogueCount=null,preparedCatalogueCreated=null;
+let preparedCatalogueCount=null,preparedCatalogueCreated=null,preparedCatalogueRevision=null;
 let COVER_SIZE=512;
 let PAGE_SIZE=40,DISPLAY_ALBUM_COUNT=30,IDLE_RETURN_MS=30000,MENU_TIMEOUT_MS=10000,FRONT_TIMEOUT_MS=10000,RECONNECT_MAX_MS=30000,RANDOM_SCROLL_MAX_MS=3000,SEARCH_LIMIT=100;
 const demoAlbums=[['Night Geometry','The Meridian','linear-gradient(145deg,#0f3155,#d14e45)','rgba(244,190,76,.9)','8%','18deg'],['Blue Hours','Harbour Lights','linear-gradient(145deg,#0e223a,#458ca5)','linear-gradient(90deg,#d5eef0 48%,#193a61 48%)','2px','-12deg'],['Still Moving','Northbound','linear-gradient(145deg,#4b1f2c,#de8a55)','rgba(30,16,24,.72)','50%','0deg'],['Parallel Lines','Signal Path','linear-gradient(145deg,#e8dfca,#9c2828)','repeating-linear-gradient(90deg,#181818 0 9px,transparent 9px 18px)','0','24deg'],['After Image','Low Season','linear-gradient(145deg,#192019,#557557)','radial-gradient(circle at 35% 35%,#e0c895 0 12%,transparent 13%),radial-gradient(circle,#182219 0 48%,transparent 49%)','50%','0deg']];
@@ -310,6 +310,7 @@ async function setDisplayOrder(mode){
         if(generation!==catalogueGeneration)return;
         albums=(result.albums_loop||[]).map(mapLyrionAlbum);totalAlbums=albums.length;
         const preparedCount=Number(result.library_count),preparedCreated=Number(result.snapshot_created);
+        preparedCatalogueRevision=typeof result.catalogue_revision==='string'?result.catalogue_revision:null;
         preparedCatalogueCount=Number.isSafeInteger(preparedCount)&&preparedCount>=0?preparedCount:null;
         preparedCatalogueCreated=Number.isFinite(preparedCreated)&&preparedCreated>0?preparedCreated:null;
         libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
@@ -975,7 +976,7 @@ window.addEventListener('lyrion-carousel-lms-change',event=>{
     spottyAvailable=null;updateSourceButtons();
     resetRpcSession();connectionGeneration++;catalogueGeneration++;pinnedRequest++;
     artworkNamespace=encodeURIComponent(event.detail?.lmsUrl||'');
-    cometd.resetLibraryState();cometd.stop();preparedCatalogueCount=preparedCatalogueCreated=null;resetReconnect();clearInterval(progressTimer);clearTimeout(idleTimer);
+    cometd.resetLibraryState();cometd.stop();preparedCatalogueCount=preparedCatalogueCreated=preparedCatalogueRevision=null;resetReconnect();clearInterval(progressTimer);clearTimeout(idleTimer);
     cancelFollowAnimation();playing=false;paused=false;playingAlbumId=null;closeFrontPreview();
     closeSearch();closeAlbumMenu();closeTrackList();
     connecting=false;playerId='';liveCatalogue=false;orderBusy=false;randomAnimating=false;randomAnimationDuration=0;randomPlay.classList.remove('is-busy');
@@ -1169,9 +1170,15 @@ async function handleLibraryEvent(){
             if(!response.ok)throw Error('Could not check the LMS catalogue');
             const result=await response.json();
             if(connection!==connectionGeneration)return;
-            // Genre membership can change after a scan even when the album
-            // records remain identical, so active filters warrant a refresh.
-            if(!result.changed&&!disabledGenres.size)continue;
+            // Another browser may already have reconciled the shared server
+            // snapshot. In that case "changed" is false relative to SERVER
+            // memory, but this browser still has the older shelf.
+            const countMismatch=Number.isSafeInteger(Number(result.count))&&
+                preparedCatalogueCount!==null&&Number(result.count)!==preparedCatalogueCount;
+            const revisionMismatch=typeof result.revision==='string'&&
+                preparedCatalogueRevision!==null&&result.revision!==preparedCatalogueRevision;
+            // Genre membership can change even when album rows don't.
+            if(!result.changed&&!countMismatch&&!revisionMismatch&&!disabledGenres.size)continue;
             if(!liveCatalogue||catalogueSource==='spotify')continue;
             await refreshCatalogue({invalidate:false});
         }
