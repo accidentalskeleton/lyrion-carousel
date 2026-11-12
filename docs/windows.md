@@ -60,7 +60,7 @@ extracted LyrionCarousel-Windows-x64-v<version> folder:
 
 Then visit http://127.0.0.1:18088/ in a modern browser. Replace the LMS
 URL with your existing server's LAN address. Stop the server with Ctrl+C.
-Artwork is cached at %LOCALAPPDATA%\LyrionCarousel\cache\album-art.
+Artwork images are cached at %LOCALAPPDATA%\LyrionCarousel\cache\album-art; the unified metadata database is %LOCALAPPDATA%\LyrionCarousel\cache\carousel-metadata.sqlite3.
 To use port 8088 instead, pass -Port 8088; Windows can reserve that port
 and produce [WinError 10013], so 18088 is the recommended first attempt.
 
@@ -77,7 +77,8 @@ not LocalSystem. Its HTTP listener binds only to **127.0.0.1**, so it does
 not accept LAN connections from other computers by default.
 
 The service uses these separate, persistent directories:
-- %ProgramData%\LyrionCarousel\cache\album-art — persistent artwork cache;
+- %ProgramData%\LyrionCarousel\cache\album-art — disposable artwork images;
+- %ProgramData%\LyrionCarousel\cache\carousel-metadata.sqlite3 — persistent metadata and album-added dates;
 - %ProgramData%\LyrionCarousel\logs — WinSW/server logs.
 
 The installer grants LocalService write access to these directories, not

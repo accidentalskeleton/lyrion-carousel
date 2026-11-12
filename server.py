@@ -3,6 +3,7 @@
 from __future__ import annotations
 import time, io, random, argparse, colorsys, hashlib, ipaddress, json, os, re, shutil, socket, sqlite3, sys, threading
 from indexed_order import indexed_album_order
+import metadata_db
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
@@ -534,9 +535,12 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     for path in self.cache_dir.rglob('*'):
                         if path.is_file() or path.is_symlink(): path.unlink(); removed+=1
                     _IMAGE_CACHE_BYTES.pop(str(self.cache_dir.resolve()),None)
+                # Keep the SQLite deletion under the same catalogue lock so
+                # another request cannot repopulate a snapshot during clearing.
+                metadata_db.clear_generated(self._metadata_db_path())
                 _CATALOGUE_MEMORY.clear()
             self._send_payload(200,json.dumps({'removed':removed}).encode(),'application/json; charset=utf-8',cache_control='no-store')
-        except OSError as error: self._send_upstream_error(error)
+        except (OSError,sqlite3.Error,ValueError) as error: self._send_upstream_error(error)
     def _update_lms_url(self)->None:
         """Update the shared proxy target; subsequent HTTP handlers use the new URL."""
         try:
@@ -585,7 +589,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         """Count committed cache files; image bytes alone are subject to the cache limit."""
         image_bytes=metadata_bytes=files=0
         for path in self.cache_dir.iterdir():
-            if path.suffix not in ('.img','.meta','.type'): continue
+            if path.suffix not in ('.img','.type'): continue
             try:
                 if not path.is_file() or path.is_symlink(): continue
                 size=path.stat().st_size
@@ -698,32 +702,33 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         return key,payload,content_type
 
     def _serve_spotty_art_meta(self)->None:
-        """Derive shelf-spine colour metadata from the same cached Spotty cover image."""
+        """Persist Spotify spine metadata in the same SQLite database as Library spines."""
         try:
             raw=parse_qs(urlsplit(self.path).query).get('path',[''])[0]
-            key,payload,_=self._spotty_artwork(raw); meta_path=self.cache_dir/f'{key}.meta'
-            try:
-                metadata=json.loads(meta_path.read_bytes())
-                if not isinstance(metadata,dict) or not re.fullmatch(r'#[0-9a-fA-F]{6}',str(metadata.get('spine_color',''))): raise ValueError
-                if metadata.get('text_style_version')!=SPINE_TEXT_STYLE_VERSION:
-                    metadata['text_color']=select_spine_text_colour(metadata['spine_color'],raw)
-                    metadata['text_style_version']=SPINE_TEXT_STYLE_VERSION
-                    temp=meta_path.with_name(meta_path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
-                    try: temp.write_bytes(json.dumps(metadata).encode()); temp.replace(meta_path)
-                    finally: temp.unlink(missing_ok=True)
-            except (OSError,ValueError,UnicodeError,json.JSONDecodeError):
-                with Image.open(io.BytesIO(payload)) as image:
-                    red,green,blue=ImageStat.Stat(image.convert('RGB').resize((1,1),getattr(Image,'Resampling',Image).BILINEAR)).mean
-                spine_color=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'
-                font=SPINE_FONTS[int(hashlib.sha256(raw.encode()).hexdigest()[:8],16)%len(SPINE_FONTS)]
-                metadata={'spine_color':spine_color,'text_color':select_spine_text_colour(spine_color,raw),'text_style_version':SPINE_TEXT_STYLE_VERSION,'spine_font':font,'colour_index':colour_sort_index(spine_color)}
-                temp=meta_path.with_name(meta_path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
-                try: temp.write_bytes(json.dumps(metadata).encode()); temp.replace(meta_path)
-                finally: temp.unlink(missing_ok=True)
+            key,payload,_=self._spotty_artwork(raw)
+            db_path=self._metadata_db_path()
+            metadata=metadata_db.artwork_get(db_path,self.lms_url,key,source='spotify')
+            font=SPINE_FONTS[int(hashlib.sha256(raw.encode()).hexdigest()[:8],16)%len(SPINE_FONTS)]
+            if (not valid_colour_metadata(metadata) or
+                    metadata.get('text_style_version')!=SPINE_TEXT_STYLE_VERSION or
+                    metadata.get('spine_font')!=font):
+                # Preserve the known cover colour when upgrading a cached style.
+                # Only decode the original artwork when no valid colour exists.
+                colour=metadata.get('spine_color') if isinstance(metadata,dict) else None
+                if not isinstance(colour,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',colour):
+                    with Image.open(io.BytesIO(payload)) as image:
+                        rgb=image.convert('RGB').resize((1,1),getattr(Image,'Resampling',Image).BILINEAR)
+                        red,green,blue=ImageStat.Stat(rgb).mean
+                    colour=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'
+                metadata={'spine_color':colour,
+                          'text_color':select_spine_text_colour(colour,raw),
+                          'text_style_version':SPINE_TEXT_STYLE_VERSION,
+                          'spine_font':font,'colour_index':colour_sort_index(colour)}
+                metadata_db.artwork_put_many(db_path,self.lms_url,{key:metadata},source='spotify')
             self._send_payload(200,json.dumps(metadata).encode(),'application/json; charset=utf-8',cache_control='public, max-age=86400')
         except ValueError as error: self.send_error(400,str(error))
         except HTTPError as error: self._send_http_error(error)
-        except (URLError,TimeoutError,OSError,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
+        except (URLError,TimeoutError,OSError,sqlite3.Error,UpstreamPayloadTooLarge) as error: self._send_upstream_error(error)
 
     def _serve_now_playing_diagnostic(self)->None:
         """Return the raw LMS status payload needed to map Spotty now-playing metadata."""
@@ -800,34 +805,24 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if start>=int(result.get('count',start)): return
             if not page: raise ValueError('Incomplete catalogue')
 
-    def _catalogue_snapshot_path(self,lms_url:str|None=None)->Path:
-        namespace=hashlib.sha256((lms_url or self.lms_url).encode()).hexdigest()[:24]
-        return self.cache_dir/f'catalogue-v{CATALOGUE_SNAPSHOT_VERSION}-{namespace}.json'
-
-    def _indexed_order_path(self)->Path:
-        namespace=hashlib.sha256(self.lms_url.encode()).hexdigest()[:24]
-        return self.cache_dir/f'indexed-order-v1-{namespace}.sqlite3'
+    def _metadata_db_path(self)->Path:
+        return metadata_db.database_path(self.cache_dir)
 
     def _catalogue_snapshot_key(self,lms_url:str|None=None):
         return (str(self.cache_dir.resolve()),lms_url or self.lms_url)
 
     def _save_catalogue_snapshot(self,snapshot)->None:
-        """Atomically persist the base catalogue and any indexed genre filters."""
-        path=self._catalogue_snapshot_path()
-        payload=json.dumps({
-            'version':CATALOGUE_SNAPSHOT_VERSION,
-            'lms_url':self.lms_url,
-            'created':snapshot['created'],
-            'albums':snapshot['albums'],
-            'genres':snapshot['genres']
-        },ensure_ascii=False,separators=(',',':')).encode('utf-8')
-        if len(payload)>CATALOGUE_MAX_SNAPSHOT_BYTES:return
-        temp=path.with_name(path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
-        try:
-            temp.write_bytes(payload)
-            temp.replace(path)
-        finally:
-            temp.unlink(missing_ok=True)
+        """Persist the full snapshot in the shared SQLite database."""
+        data = {
+            'version': CATALOGUE_SNAPSHOT_VERSION,
+            'lms_url': self.lms_url,
+            'created': snapshot['created'],
+            'albums': snapshot['albums'],
+            'genres': snapshot['genres']
+        }
+        if len(json.dumps(data,ensure_ascii=False).encode('utf-8'))>CATALOGUE_MAX_SNAPSHOT_BYTES:
+            return
+        metadata_db.snapshot_put(self._metadata_db_path(),self.lms_url,data)
 
     def _load_catalogue_snapshot(self):
         """Read a valid snapshot, otherwise fetch the complete library exactly once."""
@@ -836,10 +831,10 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         snapshot=_CATALOGUE_MEMORY.get(key)
         if snapshot and 0<=now-snapshot['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS:
             return snapshot
-        path=self._catalogue_snapshot_path()
         try:
-            if path.stat().st_size>CATALOGUE_MAX_SNAPSHOT_BYTES:raise ValueError('Snapshot too large')
-            data=json.loads(path.read_bytes())
+            data=metadata_db.snapshot_get(self._metadata_db_path(),self.lms_url)
+            if data is None: raise ValueError('No snapshot')
+            if len(json.dumps(data,ensure_ascii=False).encode('utf-8'))>CATALOGUE_MAX_SNAPSHOT_BYTES:raise ValueError('Snapshot too large')
             if (data.get('version')!=CATALOGUE_SNAPSHOT_VERSION or
                     data.get('lms_url')!=self.lms_url or
                     not isinstance(data.get('albums'),list) or
@@ -853,54 +848,33 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             snapshot={'created':data['created'],'albums':data['albums'],
                       'genres':data['genres'],'colours':self._load_colour_index(),
                       'orders':OrderedDict()}
-        except (OSError,ValueError,TypeError,AttributeError,UnicodeError):
+        except (OSError,ValueError,TypeError,AttributeError,UnicodeError,sqlite3.Error):
             albums=[album for page in self._catalogue_pages() for album in page]
             snapshot={'created':time.time(),'albums':albums,'genres':{},
                       'colours':self._load_colour_index(),'orders':OrderedDict()}
             try:self._save_catalogue_snapshot(snapshot)
-            except OSError:pass  # Serving the live catalogue is more important than caching.
+            except (OSError,sqlite3.Error,ValueError):pass  # Serving the live catalogue takes priority.
         _CATALOGUE_MEMORY[key]=snapshot
         return snapshot
 
-    def _colour_index_path(self,lms_url:str|None=None)->Path:
-        namespace=hashlib.sha256((lms_url or self.lms_url).encode()).hexdigest()[:24]
-        return self.cache_dir/f'colour-index-v{COLOUR_INDEX_VERSION}-{namespace}.sqlite3'
-
     def _load_colour_index(self)->dict:
-        """Load previously indexed colours; bad records are ignored safely."""
-        colours={}
-        path=self._colour_index_path()
-        if not path.is_file():return colours
+        """Load validated local artwork metadata from the shared database."""
         try:
-            with closing(sqlite3.connect(path,timeout=5)) as db:
-                for artwork_id,raw in db.execute('SELECT artwork_id, metadata FROM colours'):
-                    try:details=json.loads(raw)
-                    except (ValueError,TypeError,UnicodeError):continue
-                    if valid_colour_metadata(details):colours[artwork_id]=details
-        except (sqlite3.Error,OSError):
-            # Corruption is nonfatal: the ordinary .meta artwork cache remains.
+            data=metadata_db.artwork_all(self._metadata_db_path(),self.lms_url)
+            return {key:value for key,value in data.items()
+                    if valid_colour_metadata(value)}
+        except (sqlite3.Error,OSError,ValueError):
             return {}
-        return colours
 
     def _save_colour_index(self,metadata:dict)->None:
-        """Write only changed colour rows; the large album JSON stays untouched."""
-        values=[(str(artwork_id),json.dumps(details,separators=(',',':')))
-                for artwork_id,details in metadata.items()
-                if valid_colour_metadata(details)]
-        if not values:return
-        with closing(sqlite3.connect(self._colour_index_path(),timeout=5)) as db, db:
-            db.execute('CREATE TABLE IF NOT EXISTS colours ('
-                       'artwork_id TEXT PRIMARY KEY, metadata TEXT NOT NULL)')
-            db.executemany('INSERT OR REPLACE INTO colours (artwork_id,metadata) VALUES (?,?)',values)
+        """Upsert changed spine metadata only, not the whole catalogue."""
+        valid={str(key):value for key,value in metadata.items()
+               if valid_colour_metadata(value)}
+        if valid:metadata_db.artwork_put_many(self._metadata_db_path(),self.lms_url,valid)
 
     def _colour_index_count(self)->int:
-        """Read count for diagnostics without loading thousands of entries."""
-        path=self._colour_index_path()
-        if not path.is_file():return 0
-        try:
-            with closing(sqlite3.connect(path,timeout=5)) as db:
-                return int(db.execute('SELECT count(*) FROM colours').fetchone()[0])
-        except (sqlite3.Error,OSError):return 0
+        try:return metadata_db.artwork_count(self._metadata_db_path(),self.lms_url)
+        except (sqlite3.Error,OSError,ValueError):return 0
 
     def _remember_catalogue_colours(self,metadata:dict)->int:
         """Index successful spine batches and invalidate prepared colour orders."""
@@ -936,7 +910,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             excluded.update(snapshot['genres'][key])
         if changed:
             try:self._save_catalogue_snapshot(snapshot)
-            except OSError:pass
+            except (OSError,sqlite3.Error):pass
         return excluded
 
     def _invalidate_catalogue_data(self,lms_url:str|None=None)->None:
@@ -946,13 +920,13 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 if key[0]==(lms_url or self.lms_url):_CATALOGUE_CODES.pop(key,None)
         with _CATALOGUE_LOCK:
             _CATALOGUE_MEMORY.pop(self._catalogue_snapshot_key(lms_url),None)
-            self._catalogue_snapshot_path(lms_url).unlink(missing_ok=True)
+            metadata_db.snapshot_delete(self._metadata_db_path(),lms_url or self.lms_url)
 
     def _invalidate_catalogue(self)->None:
         try:
             self._invalidate_catalogue_data()
             self._send_payload(200,b'{"invalidated":true}','application/json; charset=utf-8',cache_control='no-store')
-        except OSError as error:self._send_upstream_error(error)
+        except (OSError,sqlite3.Error,ValueError) as error:self._send_upstream_error(error)
 
     @staticmethod
     def _catalogue_fingerprint(albums)->str:
@@ -965,10 +939,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         """Compare with memory or the saved snapshot without forcing a new scan."""
         snapshot=_CATALOGUE_MEMORY.get(self._catalogue_snapshot_key())
         if snapshot is not None:return snapshot
-        path=self._catalogue_snapshot_path()
         try:
-            if path.stat().st_size>CATALOGUE_MAX_SNAPSHOT_BYTES:return None
-            saved=json.loads(path.read_bytes())
+            saved=metadata_db.snapshot_get(self._metadata_db_path(),self.lms_url)
+            if saved is None:return None
+            if len(json.dumps(saved,ensure_ascii=False).encode('utf-8'))>CATALOGUE_MAX_SNAPSHOT_BYTES:
+                return None
             if (saved.get('version')!=CATALOGUE_SNAPSHOT_VERSION or
                     saved.get('lms_url')!=self.lms_url or
                     not isinstance(saved.get('albums'),list) or
@@ -977,7 +952,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             return {'albums':saved['albums'],'genres':saved.get('genres',{}),
                     'orders':OrderedDict(),'colours':self._load_colour_index(),
                     'created':saved.get('created',0)}
-        except (OSError,ValueError,TypeError,UnicodeError,AttributeError):
+        except (OSError,ValueError,TypeError,UnicodeError,AttributeError,sqlite3.Error):
             return None
 
     def _reconcile_catalogue(self)->None:
@@ -1021,7 +996,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                         if order_key[1]:snapshot['orders'].pop(order_key,None)
                 _CATALOGUE_MEMORY[self._catalogue_snapshot_key()]=snapshot
                 try:self._save_catalogue_snapshot(snapshot)
-                except OSError:pass
+                except (OSError,sqlite3.Error):pass
                 result={'changed':changed,'count':len(current),
                         'new_albums':sum(1 for a in current if str(a.get('id')) not in old_by_id)}
             # Do not hold the catalogue lock while starting background work.
@@ -1029,7 +1004,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 COLOUR_INDEXER.enqueue(self,dict.fromkeys(new_artwork_ids))
             self._send_payload(200,json.dumps(result).encode(),
                                'application/json; charset=utf-8',cache_control='no-store')
-        except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
+        except (OSError,ValueError,KeyError,sqlite3.Error,URLError,UpstreamPayloadTooLarge) as error:
             self._send_upstream_error(error)
 
     def _serve_catalogue_status(self)->None:
@@ -1045,25 +1020,22 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                        'genre_indexes':len(snapshot['genres']),
                        'colour_indexes':len(snapshot['colours'])}
             else:
-                path=self._catalogue_snapshot_path()
-                if path.is_file():
-                    # Checking the recorded creation date avoids reporting an
-                    # expired on-disk snapshot as warm. Never contact LMS here.
-                    try:
-                        data=json.loads(path.read_bytes())
+                try:
+                    data=metadata_db.snapshot_get(self._metadata_db_path(),self.lms_url)
+                    if data is None:
+                        state={'cached':False,'source':'none'}
+                    else:
                         age=max(0,time.time()-float(data['created']))
                         valid=(data.get('version')==CATALOGUE_SNAPSHOT_VERSION and
                                data.get('lms_url')==self.lms_url and
                                age<CATALOGUE_SNAPSHOT_TTL_SECONDS)
-                        state={'cached':valid,'source':'disk',
+                        state={'cached':valid,'source':'database',
                                'age_seconds':round(age,1),
                                'albums':len(data.get('albums',[])),
                                'genre_indexes':len(data.get('genres',{})),
                                'colour_indexes':self._colour_index_count()}
-                    except (OSError,ValueError,KeyError,TypeError,AttributeError):
-                        state={'cached':False,'source':'invalid'}
-                else:
-                    state={'cached':False,'source':'none'}
+                except (OSError,ValueError,KeyError,TypeError,AttributeError,sqlite3.Error):
+                    state={'cached':False,'source':'invalid'}
         state['colour_indexing']=COLOUR_INDEXER.snapshot()
         self._send_payload(200,json.dumps(state).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
@@ -1100,7 +1072,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                         # Use current LMS library indexing, not persistent
                         # recording history shared by other releases.
                         ranked_ids=indexed_album_order(snapshot['albums'],self._lms_rpc,
-                                                      self._indexed_order_path())
+                                                      self._metadata_db_path(),self.lms_url)
                         rank={album_id:i for i,album_id in enumerate(ranked_ids)}
                         albums.sort(key=lambda item:(rank.get(str(item.get('id')),len(rank)),
                                                      str(item.get('id',''))))
@@ -1108,8 +1080,8 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                         ids=list(dict.fromkeys(str(a['artwork_track_id']) for a in albums
                                                if a.get('artwork_track_id')))
                         # Already indexed artwork is never reopened just to sort.
-                        # Fetch only the missing colours (existing .meta files are
-                        # reused by _artwork_metadata before fetching artwork).
+                        # Fetch only missing colours. Metadata cached in SQLite is
+                        # reused by _artwork_metadata before artwork is fetched.
                         missing=[artwork_id for artwork_id in ids
                                  if artwork_id not in snapshot['colours']]
                         if missing:
@@ -1136,7 +1108,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     if mode!='random':
                         remember_catalogue_order(snapshot['orders'],order_key,payload)
             self._send_payload(200,payload,'application/json; charset=utf-8',cache_control='no-store')
-        except (OSError,ValueError,KeyError,URLError,UpstreamPayloadTooLarge) as error:
+        except (OSError,ValueError,KeyError,sqlite3.Error,URLError,UpstreamPayloadTooLarge) as error:
             self._send_upstream_error(error)
 
     def _serve_sized_artwork(self,artwork_id:str,size:int,case:bool=False)->None:
@@ -1240,43 +1212,32 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         self._send_payload(200,json.dumps({'metadata':metadata}).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
     def _artwork_metadata(self,artwork_id:str):
-        """Reuse or upgrade cached spine metadata; return None for unavailable artwork."""
-        key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest();meta_path=self.cache_dir/f'{key}.meta'
-        # Hash the artwork ID for a repeatable local font choice, not a new random
-        # choice on each load. Cache keys also include LMS to isolate servers.
+        """Load or calculate Library spine metadata from the unified database."""
+        key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest()
         font=SPINE_FONTS[int(hashlib.sha256(artwork_id.encode()).hexdigest()[:8],16)%len(SPINE_FONTS)]
         try:
-            metadata=json.loads(meta_path.read_bytes())
-            if not isinstance(metadata,dict) or not all(k in metadata for k in ('spine_color','text_color')) or not re.fullmatch(r'#[0-9a-fA-F]{6}',str(metadata.get('spine_color',''))):
-                metadata=None
-        except (OSError,ValueError,UnicodeError): metadata=None
-        if metadata is not None and metadata.get('text_style_version')==SPINE_TEXT_STYLE_VERSION and metadata.get('spine_font')==font and metadata.get('colour_index')==colour_sort_index(metadata['spine_color']):
-            return metadata
-        try:
-            # Upgrade existing colour caches without decoding or fetching artwork again.
-            if metadata is None:
+            metadata=metadata_db.artwork_get(self._metadata_db_path(),self.lms_url,artwork_id)
+            if (valid_colour_metadata(metadata) and
+                    metadata.get('text_style_version')==SPINE_TEXT_STYLE_VERSION and
+                    metadata.get('spine_font')==font):
+                return metadata
+            if not isinstance(metadata,dict):
+                metadata={}
+            colour=metadata.get('spine_color')
+            if not isinstance(colour,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',colour):
                 self._ensure_artwork(artwork_id)
                 with Image.open(self.cache_dir/f'{key}.img') as image:
-                    # A one-pixel filtered sample approximates the overall cover colour;
-                    # use the original cover, not the dark plastic case composition.
                     sample=image.convert('RGB').resize((1,1),getattr(Image,'Resampling',Image).BILINEAR)
                     red,green,blue=ImageStat.Stat(sample).mean
-                spine_color=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'
-                metadata={'spine_color':spine_color}
-            metadata['text_color']=select_spine_text_colour(metadata['spine_color'],artwork_id)
-            metadata['text_style_version']=SPINE_TEXT_STYLE_VERSION
-            metadata['spine_font']=font
-            metadata['colour_index']=colour_sort_index(metadata['spine_color'])
-            payload=json.dumps(metadata).encode()
-            # Per-thread temporary names avoid collisions; readers see a whole JSON
-            # document after replace, rather than a partially written cache entry.
-            meta_temp=meta_path.with_name(meta_path.name+f'.{os.getpid()}.{threading.get_ident()}.tmp')
-            try:
-                meta_temp.write_bytes(payload); meta_temp.replace(meta_path)
-            finally:
-                meta_temp.unlink(missing_ok=True)
+                colour=f'#{round(red):02x}{round(green):02x}{round(blue):02x}'
+            metadata={'spine_color':colour,
+                      'text_color':select_spine_text_colour(colour,artwork_id),
+                      'text_style_version':SPINE_TEXT_STYLE_VERSION,
+                      'spine_font':font,'colour_index':colour_sort_index(colour)}
+            metadata_db.artwork_put_many(self._metadata_db_path(),self.lms_url,{artwork_id:metadata})
             return metadata
-        except (OSError,ValueError,URLError,UpstreamPayloadTooLarge): return None
+        except (OSError,ValueError,sqlite3.Error,URLError,UpstreamPayloadTooLarge): return None
+
     def _ensure_artwork(self,artwork_id:str)->None:
         """Populate the disk cache without sending full artwork to a metadata client."""
         key=hashlib.sha256(f'{self.lms_url}\0{artwork_id}'.encode()).hexdigest()
@@ -1352,7 +1313,6 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 try:
                     path.unlink()
                     path.with_suffix('.type').unlink(missing_ok=True)
-                    path.with_suffix('.meta').unlink(missing_ok=True)
                     total-=size
                 except OSError: continue
             _IMAGE_CACHE_BYTES[str(self.cache_dir.resolve())]=total
@@ -1403,6 +1363,7 @@ def main()->int:
     if args.clear_cache and cache_dir.exists():
         removed=sum(1 for path in cache_dir.rglob('*') if path.is_file()); shutil.rmtree(cache_dir); print(f"Cleared artwork cache: {removed} file{'s' if removed!=1 else ''} removed from {cache_dir}")
     cache_dir.mkdir(parents=True,exist_ok=True)
+    if args.clear_cache:metadata_db.clear_generated(metadata_db.database_path(cache_dir))
     saved_lms_url=load_saved_lms_url(cache_dir.parent/LMS_SETTINGS_FILENAME,args.lms.rstrip('/'))
     # Shared mutable defaults are exposed to the browser. UI durations use ms;
     # CLI durations use seconds. The handler factory reads the current LMS target.

@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from PIL import Image
 import server
+import metadata_db
 
 
 class ServerTests(unittest.TestCase):
@@ -27,6 +28,13 @@ class ServerTests(unittest.TestCase):
     def paths(self, artwork_id):
         key = hashlib.sha256(f'{self.handler.lms_url}\0{artwork_id}'.encode()).hexdigest()
         return self.handler.cache_dir / f'{key}.img', self.handler.cache_dir / f'{key}.meta'
+
+    def stored_artwork(self, artwork_id, source='library'):
+        return metadata_db.artwork_get(self.handler._metadata_db_path(),
+                                       self.handler.lms_url, artwork_id, source=source)
+
+    def stored_catalogue(self):
+        return metadata_db.snapshot_get(self.handler._metadata_db_path(), self.handler.lms_url)
 
     def test_catalogue_code_lookup_is_cached_and_server_scoped(self):
         server._CATALOGUE_CODES.clear()
@@ -336,7 +344,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(list(enqueue.call_args.args[1]),['new-cover'])
         snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
         self.assertEqual(len(snapshot['albums']),2)
-        self.assertEqual(len(json.loads(self.handler._catalogue_snapshot_path().read_bytes())['albums']),2)
+        self.assertEqual(len(self.stored_catalogue()['albums']),2)
 
     def test_observed_scan_detects_artwork_id_change_on_existing_album(self):
         old=[{'id':1,'artist':'A','album':'Album','artwork_track_id':'previous'}]
@@ -385,7 +393,7 @@ class ServerTests(unittest.TestCase):
         with patch.object(self.handler,'_catalogue_pages',return_value=iter([original])):
             self.handler.path='/api/catalogue'
             self.handler._serve_catalogue()
-        snapshot_bytes=self.handler._catalogue_snapshot_path().read_bytes()
+        snapshot_before=self.stored_catalogue()
         key=self.handler._catalogue_snapshot_key()
         old=server._CATALOGUE_MEMORY[key]
         with patch.object(self.handler,'_catalogue_pages',side_effect=OSError('LMS unreachable')):
@@ -395,7 +403,7 @@ class ServerTests(unittest.TestCase):
         fail.assert_called_once()
         enqueue.assert_not_called()
         self.assertIs(server._CATALOGUE_MEMORY[key],old)
-        self.assertEqual(self.handler._catalogue_snapshot_path().read_bytes(),snapshot_bytes)
+        self.assertEqual(self.stored_catalogue(),snapshot_before)
 
     def test_background_indexer_can_restart_after_cancellation_for_same_lms(self):
         indexer=server.CarouselColourIndexer()
@@ -514,7 +522,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual([a['id'] for a in json.loads(self.responses[0][1])['albums_loop']],[2,1])
         self.assertEqual([a['id'] for a in json.loads(self.responses[1][1])['albums_loop']],[1,2])
         self.assertEqual(self.responses[0][1],self.responses[2][1])
-        self.assertTrue(self.handler._catalogue_snapshot_path().exists())
+        self.assertIsNotNone(self.stored_catalogue())
 
     def test_recently_added_uses_lms_date_added_ranking_and_genre_exclusions(self):
         base=[{'id':1,'artist':'A','album':'Older'},
@@ -579,7 +587,7 @@ class ServerTests(unittest.TestCase):
             self.handler._serve_catalogue()
         self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['album'],'First')
         self.handler._invalidate_catalogue_data()
-        self.assertFalse(self.handler._catalogue_snapshot_path().exists())
+        self.assertIsNone(self.stored_catalogue())
         newer=[[{'id':2,'artist':'A','album':'New Album'}]]
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(newer)):
             self.handler._serve_catalogue()
@@ -607,30 +615,37 @@ class ServerTests(unittest.TestCase):
         self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,4])
 
     def test_corrupt_saved_catalogue_falls_back_to_lms(self):
-        path=self.handler._catalogue_snapshot_path()
-        path.write_bytes(b'not-json')
+        # A malformed snapshot must be rejected, but never wipe other rows.
+        metadata_db.snapshot_put(self.handler._metadata_db_path(),
+                                 self.handler.lms_url, {'created':0,'version':-1})
         pages=[[{'id':5,'artist':'A','album':'Recovered'}]]
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
             self.handler.path='/api/catalogue?order=album'
             self.handler._serve_catalogue()
         self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['id'],5)
-        self.assertEqual(json.loads(path.read_bytes())['version'],server.CATALOGUE_SNAPSHOT_VERSION)
+        self.assertEqual(self.stored_catalogue()['version'],server.CATALOGUE_SNAPSHOT_VERSION)
 
     def test_invalidation_endpoint_and_cache_clear_drop_snapshots(self):
-        path=self.handler._catalogue_snapshot_path()
         pages=[[{'id':1,'artist':'A','album':'Example'}]]
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
             self.handler.path='/api/catalogue'
             self.handler._serve_catalogue()
-        self.assertTrue(path.exists())
+        self.assertIsNotNone(self.stored_catalogue())
         self.handler.path='/api/catalogue/invalidate'
         self.handler.do_POST()
         self.assertEqual(json.loads(self.responses[-1][1]),{'invalidated':True})
-        self.assertFalse(path.exists())
+        self.assertIsNone(self.stored_catalogue())
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
             self.handler._serve_catalogue()
+        # Date rows are historical state and survive an artwork-cache clear.
+        with metadata_db.connect(self.handler._metadata_db_path()) as db:
+            db.execute("INSERT INTO album_dates VALUES (?,?,?,?)",
+                       (self.handler.lms_url, '1', 'stable', 123))
         self.handler._clear_cache_files()
-        self.assertFalse(path.exists())
+        self.assertIsNone(self.stored_catalogue())
+        with metadata_db.connect(self.handler._metadata_db_path()) as db:
+            self.assertEqual(db.execute("SELECT added FROM album_dates "
+                "WHERE lms_url=? AND album_id='1'",(self.handler.lms_url,)).fetchone()[0],123)
         self.assertNotIn(self.handler._catalogue_snapshot_key(),server._CATALOGUE_MEMORY)
 
     def test_snapshot_status_does_not_scan_lms(self):
@@ -690,22 +705,24 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(data['spine_color'], '#ff0000')
             self.assertEqual(data['colour_index'], server.colour_sort_index('#ff0000'))
             self.assertIn(data['spine_font'], server.SPINE_FONTS)
-            self.assertEqual(data, json.loads(meta_path.read_bytes()))
+            self.assertEqual(data, self.stored_artwork(artwork_id))
+            self.assertFalse(meta_path.exists(), 'No legacy .meta files should be created')
             self.handler._serve_artwork_meta(artwork_id)
             self.assertEqual(body, self.responses[-1][1])
             fonts.add(data['spine_font'])
         self.assertEqual(len(fonts), len(server.SPINE_FONTS))
 
-    def test_old_metadata_upgrades_without_artwork(self):
-        _, meta_path = self.paths('legacy')
-        meta_path.write_text('{"spine_color":"#abcdef","text_color":"#111417"}')
+    def test_partial_metadata_upgrades_without_reopening_artwork(self):
+        metadata_db.artwork_put_many(self.handler._metadata_db_path(),
+                                     self.handler.lms_url,
+                                     {'legacy':{'spine_color':'#abcdef','text_color':'#111417'}})
         self.handler._serve_artwork_meta('legacy')
         status, body = self.responses[-1]
         self.assertEqual(status, 200)
         data = json.loads(body)
         self.assertEqual(data['spine_color'], '#abcdef')
         self.assertIn(data['spine_font'], server.SPINE_FONTS)
-        self.assertEqual(data, json.loads(meta_path.read_bytes()))
+        self.assertEqual(data, self.stored_artwork('legacy'))
 
     def test_colour_sqlite_connections_are_closed_on_success_and_errors(self):
         """sqlite3's transaction context does not close connections in Python 3.13."""
@@ -733,7 +750,7 @@ class ServerTests(unittest.TestCase):
             self.handler._save_colour_index({'a':details})
             self.assertEqual(self.handler._load_colour_index(),{'a':details})
             self.assertEqual(self.handler._colour_index_count(),1)
-            path=self.handler._colour_index_path()
+            path=self.handler._metadata_db_path()
             path.write_bytes(b'not a sqlite database')
             self.assertEqual(self.handler._load_colour_index(),{})
             self.assertEqual(self.handler._colour_index_count(),0)
@@ -759,20 +776,22 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(payload['metadata']['first'],meta)
         self.assertIsNone(payload['metadata']['missing'])
 
-    def test_damaged_colour_database_falls_back_to_metadata_files(self):
-        path=self.handler._colour_index_path()
+    def test_damaged_metadata_database_does_not_crash_colour_sort(self):
+        rows=[[{'id':1,'artist':'A','album':'Album','artwork_track_id':'art'}]]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter(rows)):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        path=self.handler._metadata_db_path()
         path.write_bytes(b'not SQLite data')
         self.assertEqual(self.handler._load_colour_index(),{})
         self.assertEqual(self.handler._colour_index_count(),0)
-        rows=[[{'id':1,'artist':'A','album':'Album','artwork_track_id':'art'}]]
         colour='#ffff00'
         meta={'spine_color':colour,'text_color':'#111417',
               'spine_font':server.SPINE_FONTS[0],
               'colour_index':server.colour_sort_index(colour)}
-        with patch.object(self.handler,'_catalogue_pages',return_value=iter(rows)):
-            self.handler.path='/api/catalogue?order=colour'
-            with patch.object(self.handler,'_artwork_metadata',return_value=meta):
-                self.handler._serve_catalogue()
+        self.handler.path='/api/catalogue?order=colour'
+        with patch.object(self.handler,'_artwork_metadata',return_value=meta):
+            self.handler._serve_catalogue()
         self.assertEqual(json.loads(self.responses[-1][1])['count'],1)
 
     def test_colour_sort_reuses_index_and_only_computes_missing_spines(self):
@@ -810,8 +829,7 @@ class ServerTests(unittest.TestCase):
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(rows)):
             self.handler.path='/api/catalogue?order=album'
             self.handler._serve_catalogue()
-        catalogue_path=self.handler._catalogue_snapshot_path()
-        original=catalogue_path.read_bytes()
+        original=self.stored_catalogue()
         def metadata():
             color='#888888'
             return {'spine_color':color,'text_color':'#f5f2ea',
@@ -821,7 +839,7 @@ class ServerTests(unittest.TestCase):
         second={str(i):metadata() for i in range(100,200)}
         self.assertEqual(self.handler._remember_catalogue_colours(first),100)
         self.assertEqual(self.handler._remember_catalogue_colours(second),100)
-        self.assertEqual(catalogue_path.read_bytes(),original)
+        self.assertEqual(self.stored_catalogue(),original)
         self.assertEqual(self.handler._colour_index_count(),200)
         server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
         with patch.object(self.handler,'_catalogue_pages',side_effect=AssertionError('Unnecessary LMS scan')):
@@ -868,13 +886,16 @@ class ServerTests(unittest.TestCase):
         indexes = [server.colour_sort_index(colour) for colour in colours]
         self.assertEqual(indexes, sorted(set(indexes)))
 
-    def test_font_cache_gains_colour_index_without_artwork(self):
-        _, meta_path = self.paths('font-cache')
-        meta_path.write_text(json.dumps({'spine_color': '#00ff00', 'text_color': '#111417', 'spine_font': server.SPINE_FONTS[0]}))
+    def test_partial_font_metadata_gains_colour_index_without_artwork(self):
+        metadata_db.artwork_put_many(self.handler._metadata_db_path(),
+                                     self.handler.lms_url,
+                                     {'font-cache':{'spine_color':'#00ff00',
+                                                    'text_color':'#111417',
+                                                    'spine_font':server.SPINE_FONTS[0]}})
         self.handler._serve_artwork_meta('font-cache')
         data = json.loads(self.responses[-1][1])
         self.assertEqual(data['colour_index'], server.colour_sort_index('#00ff00'))
-        self.assertEqual(data, json.loads(meta_path.read_bytes()))
+        self.assertEqual(data, self.stored_artwork('font-cache'))
 
     def test_cold_cache_and_corrupt_metadata_recover(self):
         with patch.object(server, 'urlopen', side_effect=OSError('Unavailable')):
@@ -882,13 +903,17 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.responses[-1][0], 404)
         image_path, meta_path = self.paths('cold')
         Image.new('RGB', (8, 8), 'white').save(image_path, format='PNG')
-        meta_path.write_text('broken')
+        # Invalid JSON stored in the database must be recomputed from artwork.
+        with metadata_db.connect(self.handler._metadata_db_path()) as db:
+            db.execute("INSERT INTO artwork_metadata VALUES (?,?,?,?)",
+                       (self.handler.lms_url, 'library', 'cold', 'broken'))
         self.handler._serve_artwork_meta('cold')
         self.assertEqual(self.responses[-1][0], 200)
         metadata=json.loads(self.responses[-1][1])
         self.assertEqual(metadata['text_style_version'],server.SPINE_TEXT_STYLE_VERSION)
         self.assertGreaterEqual(server.spine_contrast_ratio(
             metadata['text_color'],metadata['spine_color']),4.5)
+        self.assertFalse(meta_path.exists())
 
     def test_cold_metadata_fetches_artwork_once_and_returns_only_metadata(self):
         from email.message import Message
@@ -999,14 +1024,16 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(image_path.read_bytes(),b'12345')
         self.assertFalse(new_path.exists())
 
-    def test_cache_usage_counts_images_and_metadata_separately(self):
+    def test_cache_usage_counts_images_and_content_types_separately(self):
         image_path,meta_path=self.paths('usage')
         image_path.write_bytes(b'12345')
-        meta_path.write_bytes(b'{}')
         image_path.with_suffix('.type').write_bytes(b'png')
         (self.handler.cache_dir/'unfinished.tmp').write_bytes(b'ignored')
+        # Legacy metadata is ignored by the new storage implementation.
+        meta_path.write_bytes(b'{}')
         usage=self.handler._cache_usage()
-        self.assertEqual(usage,{'image_bytes':5,'metadata_bytes':5,'total_bytes':10,'files':3,'limit_bytes':server.MAX_ARTWORK_CACHE_BYTES})
+        self.assertEqual(usage,{'image_bytes':5,'metadata_bytes':3,'total_bytes':8,
+                                'files':2,'limit_bytes':server.MAX_ARTWORK_CACHE_BYTES})
         image_path.unlink()
         self.assertEqual(self.handler._cache_usage()['image_bytes'],0)
 
@@ -1034,16 +1061,21 @@ class ServerTests(unittest.TestCase):
         self.handler.lms_url = 'http://different:9000'
         self.assertNotEqual(first, self.paths('same-id'))
 
-    def test_pruning_removes_metadata_and_content_type(self):
+    def test_pruning_removes_image_and_content_type_but_preserves_sqlite_metadata(self):
         image_path, meta_path = self.paths('prune')
         image_path.write_bytes(b'12345')
         image_path.with_suffix('.type').write_text('image/png')
-        meta_path.write_text('{}')
+        artwork={'spine_color':'#ff0000','text_color':'#111111',
+                 'spine_font':server.SPINE_FONTS[0],
+                 'colour_index':server.colour_sort_index('#ff0000')}
+        metadata_db.artwork_put_many(self.handler._metadata_db_path(),
+                                     self.handler.lms_url,{'prune':artwork})
         with patch.object(server, 'MAX_ARTWORK_CACHE_BYTES', 1):
             self.handler._prune_artwork_cache()
         self.assertFalse(image_path.exists())
-        self.assertFalse(meta_path.exists())
         self.assertFalse(image_path.with_suffix('.type').exists())
+        self.assertFalse(meta_path.exists())
+        self.assertEqual(self.stored_artwork('prune'),artwork)
 
     def test_incremental_cache_bytes_and_overwrite(self):
         image_path, _ = self.paths('accounting')
@@ -1143,7 +1175,8 @@ class ServerTests(unittest.TestCase):
             second=json.loads(self.responses[-1][1])
         self.assertEqual(first['spine_color'],'#ff0000')
         self.assertEqual(first,second)
-        self.assertTrue((self.handler.cache_dir/f'{key}.meta').exists())
+        self.assertEqual(self.stored_artwork(key,source='spotify'),first)
+        self.assertFalse((self.handler.cache_dir/f'{key}.meta').exists())
 
     def test_malformed_rpc_log_does_not_crash_handler(self):
         with patch('builtins.print'):
