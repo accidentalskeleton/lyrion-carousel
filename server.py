@@ -1028,6 +1028,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 age=max(0,time.time()-snapshot['created'])
                 state={'cached':age<CATALOGUE_SNAPSHOT_TTL_SECONDS,
                        'source':'memory','age_seconds':round(age,1),
+                       'revision':self._catalogue_revision(snapshot),
                        'albums':len(snapshot['albums']),
                        'genre_indexes':len(snapshot['genres']),
                        'colour_indexes':len(snapshot['colours'])}
@@ -1043,11 +1044,16 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                                age<CATALOGUE_SNAPSHOT_TTL_SECONDS)
                         state={'cached':valid,'source':'database',
                                'age_seconds':round(age,1),
+                               'revision':data.get('revision'),
                                'albums':len(data.get('albums',[])),
                                'genre_indexes':len(data.get('genres',{})),
                                'colour_indexes':self._colour_index_count()}
                 except (OSError,ValueError,KeyError,TypeError,AttributeError,sqlite3.Error):
                     state={'cached':False,'source':'invalid'}
+        # One inexpensive read-only endpoint lets every open browser observe
+        # the shared LMS selection and catalogue revision. No LMS scan or
+        # album enumeration is triggered by this status request.
+        state['lms_url']=self.runtime_config.get('lms_url',self.lms_url)
         state['colour_indexing']=COLOUR_INDEXER.snapshot()
         self._send_payload(200,json.dumps(state).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
