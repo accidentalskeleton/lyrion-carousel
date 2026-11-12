@@ -1529,7 +1529,7 @@ export async function runTests(sources) {
       'Debian package excludes removed disc module while retaining photographic assets');
   }
 
-  assert(sources.app.includes("'tags:alJenKNRA'"),'initial LMS player status requests artist roles');
+  assert(sources.app.includes("'tags:aluJenKNRAxE'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
     'closed-cover interaction no longer dispatches open-case events');
   assert(!sources.app.includes("isThisPlaying?' · Playing':'"),
@@ -1542,7 +1542,7 @@ export async function runTests(sources) {
     sources.app.includes('await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();'),
     'Playback source changes follow across browser sessions and on initial connection');
   assert(sources.app.includes("await setCatalogueSource(playingSource)")&&
-    sources.app.includes("if(sourceFollowAttempt===key)return;"),
+    sources.app.includes("if(sourceFollowAttempt===key&&now-sourceFollowAttemptAt<5000)return;"),
     'Source following reuses catalogue switching without repeatedly retrying unavailable albums');
 
   // All original sort IDs remain stable, keeping saved preferences intact.
@@ -1574,7 +1574,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=sort-labels-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=library-refresh-2')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=source-sync-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1595,7 +1595,7 @@ export async function runTests(sources) {
 
   assert(!/function browseWithArrow\([\s\S]*?function stopFollowing\(/.exec(sources.app)?.[0].includes('openFrontPreview('),
     'arrow-key browsing cannot automatically open another cover');
-  assert(sources.lms.includes("'tags:alJenA'"),'CometD subscription requests artist roles');
+  assert(sources.lms.includes("'tags:aluJenAxE'"),'CometD subscription requests artist roles');
 
   // Large catalogues retain O(1) album lookup; stale positions after a
   // reorder are validated and repaired rather than returning wrong albums.
