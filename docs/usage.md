@@ -54,11 +54,39 @@ numbers remain available with variety off; catalogue visibility has its own swit
 
 **Settings → Cache → Clear album cache** uses an inline confirmation and removes artwork, resized covers and derived colours, fonts and colour indexes. Metadata rebuilds as needed; colour ordering prepares it for the whole library. The Cache tab starts at a 512 MB soft limit by default; the browser may raise or lower it, but never above the server-only 2 GB hard limit. Set `CACHE_LIMIT_MB` and `CACHE_HARD_LIMIT_MB` in `/etc/default/lyrion-carousel` (or pass the corresponding command-line options) before starting the service to change those defaults.
 
-Album ordering is saved separately for Library and Spotify. Switching sources or reloading restores each source’s last selection. The sort menu groups **Artist → Album**, **Album → Artist**, the two chronological options, **Spine Colour**, and **Random**. **Recently Added** is Carousel’s LMS-API-only ordering based on the earliest current-track `addedTime` (when the album’s present tracks entered the LMS library). **New Music (LMS)** retains the native `sort:new` ordering based on each album’s oldest persistent recording-added date, which may be inherited from another compilation. The new clock/history icon distinguishes the native LMS option from the calendar icon on Recently Added. Neither mode patches LMS nor depends on any ripping software. Both chronological modes use a finite, non-wrapping shelf. The first Recently Added selection may take longer while Carousel builds its index; subsequent selections use cached dates, so rescans and repairs do not promote known albums. A complete LMS database rebuild can lose historical import dates; dates absent from the API sort last.
+## Understanding album date ordering
+
+Carousel provides two **newest-first** choices for albums in your local LMS library. They are deliberately different, so you can compare them without changing LMS, your audio files or your tags:
+
+| Menu choice | What determines the album's position? | When to use it |
+| --- | --- | --- |
+| **Recently Added** (calendar icon) | Carousel's earliest **current-library track-added** timestamp for that album, as reported by LMS | To find albums recently imported into your library, including compilations and greatest-hits releases |
+| **New Music (LMS)** (history-clock icon) | LMS's native `sort:new` ordering, using the oldest **persistent recording-added** timestamp associated with the album | To see the same New Music order that LMS itself reports |
+
+### Why can a newly added album appear old in LMS?
+
+A recording can legitimately appear on several different releases. For example, Elastica's **2:1** appears on both *Elastica* and *Trainspotting: Music From the Motion Picture*. These two album tracks can have the **same MusicBrainz Recording ID** (`MUSICBRAINZ_TRACKID`), while having **different MusicBrainz Release Track IDs** (`MUSICBRAINZ_RELEASETRACKID`).
+
+LMS can reuse a recording's persistent history when the recording is recognised on another album. Its built-in New Music order uses the **earliest persistent track-added timestamp** in each album. Consequently, adding *Trainspotting* later does not necessarily put it at the front of **New Music (LMS)**: a previously recognised recording can give it an older ranking.
+
+This is **not** a reason to strip or invent MusicBrainz IDs. Matching Recording IDs across releases are generally correct; different Release Track IDs identify their separate appearances. A shared recording ID does not, by itself, prove that two audio files are bit-for-bit identical or that their masterings match.
+
+### What Carousel does differently
+
+**Recently Added** asks LMS for each album's currently indexed tracks and their `addedTime` values, then orders albums by their **earliest current-track timestamp** (newest album first). It does not use file-modification times, ripper-specific metadata or a patched LMS installation. An album with several tracks uses the earliest valid timestamp among those tracks, not the newest one.
+
+On first selection, Carousel builds a separate **per-LMS SQLite index**; this can take longer with a large library. Subsequent selections reuse the saved values. When a new album appears, Carousel looks up its dates without recalculating every previously known album. Ordinary retagging, track repairs, rescans and Carousel restarts do not promote an existing album while its stored identity stays the same.
+
+**Limitations:** This is an index of when LMS currently knows the album's tracks, not proof of the original CD rip or import date. If LMS's database is completely rebuilt, previously unknown historical dates cannot be reconstructed; Carousel can retain previously observed dates only when the cached album ID and identity still match. Album IDs reused or metadata identities changed after a rebuild may lead to recalculation. Albums for which LMS supplies no usable track-added timestamp sort last. The first sort requires LMS connectivity.
+
+Both date-based choices use a **finite shelf** (no wraparound), respect excluded genres, and are available for the **Library**, not Spotify. Carousel saves Library and Spotify sort preferences independently. The other choices are **Artist → Album**, **Album → Artist**, **Spine Colour** and **Random**.
+
+For the LMS query, SQLite cache, paging and edge cases, see the [album-ordering implementation](architecture.md#album-date-ordering-implementation).
+
 
 ## Colour ordering
 
-Choose **Colour** in the album-order menu to arrange spines from red through yellow, green, blue and violet. Nearly neutral colours follow, dark to light; albums with unavailable artwork sort last. Equal colours are ordered by artist and title. The choice persists across reloads and catalogue refreshes.
+Choose **Spine Colour** in the album-order menu to arrange spines from red through yellow, green, blue and violet. Nearly neutral colours follow, dark to light; albums with unavailable artwork sort last. Equal colours are ordered by artist and title. The choice persists across reloads and catalogue refreshes.
 
 The server derives a numeric `colour_index` from each cached spine colour and upgrades older metadata without refetching artwork. The first colour sort may take longer while metadata is gathered for the whole library, using six shared server workers while the browser shows a preparation message. Subsequent sorts reuse cached metadata. Changing any sort order immediately centres and opens the playing album once the new catalogue is ready; otherwise it preserves the selected album.
 
