@@ -23,5 +23,8 @@ grep -q 'until healthy' "$root/deploy/raspberry-pi/carousel-kiosk"
 grep -Fq 'flock -n 9' "$root/deploy/raspberry-pi/carousel-kiosk"
 grep -Fq 'SUDO_USER="$USER_NAME" raspi-config' "$root/deploy/raspberry-pi/configure-dedicated-user.sh"
 grep -Fq 'LightDM autologin was not configured' "$root/deploy/raspberry-pi/configure-dedicated-user.sh"
+grep -Fq 'visudo -cf "$tmp"' "$root/deploy/raspberry-pi/configure-dedicated-user.sh"
+grep -Fq '[[ "$account" != "$USER_NAME" ]]' "$root/deploy/raspberry-pi/configure-dedicated-user.sh"
+bash "$root/deploy/raspberry-pi/configure-dedicated-user.sh" --help | grep -q -- '--revoke-passwordless-sudo-user'
 
 echo 'Raspberry Pi kiosk script checks passed'

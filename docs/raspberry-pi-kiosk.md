@@ -31,6 +31,24 @@ Omit `--install-deps` when Chromium, labwc and curl are already installed. No se
 
 To use a local server: `--server http://127.0.0.1:8088/`.
 
+## Optional passwordless sudo for the administrator
+
+To allow the SSH administrator `stu` to run **any** sudo command without a password (including commands that can fully control the Pi), explicitly opt in:
+
+```bash
+sudo bash deploy/raspberry-pi/configure-dedicated-user.sh \
+  --user carousel --passwordless-sudo-user stu
+```
+
+The script writes a validated, root-owned `/etc/sudoers.d/90-lyrion-carousel-admin-stu` rule with mode 0440. This is **not enabled by default** and is not granted to `carousel`. Passwordless sudo reduces protection against someone gaining access to `stu`'s SSH session. Keep SSH keys and the admin account secure.
+
+To undo only this managed rule:
+
+```bash
+sudo bash deploy/raspberry-pi/configure-dedicated-user.sh \
+  --user carousel --revoke-passwordless-sudo-user stu
+```
+
 ## Configure
 
 Edit `~/.config/lyrion-carousel/kiosk.conf` as the desktop user:
@@ -57,6 +75,8 @@ Let HDMI/Wayland detect the panel's modes automatically. On a Corsair XENEON EDG
 `HIDE_CURSOR` and `DISABLE_SCREEN_BLANKING` are retained as future configuration switches but are **not yet enforced automatically** by this installer. Configure these through the desktop's supported pointer/power tools after verifying the real display, rather than applying potentially unsafe headless display configuration.
 
 When no HDMI screen is connected, labwc may expose a 1920 × 1080 `NOOP-1` virtual output, which is not proof that the eventual monitor mode or touch works.
+
+For optional Corsair-specific touch detection, five-point calibration and rollback, see [Corsair XENEON EDGE touchscreen calibration](corsair-touch-calibration.md). The calibration tool is not installed by default and should only be used if touch mapping is wrong after the physical display is connected.
 
 ## Diagnostics
 
