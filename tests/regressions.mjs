@@ -156,7 +156,7 @@ export async function runTests(sources) {
   const requestAnimationFrame=fn=>{frames.set(++nextId,fn);return nextId;},cancelAnimationFrame=id=>frames.delete(id);
   const rpcCalls=[];
   const catalogueEvents=[];
-  let catalogueReconcileChanged=true;
+  let catalogueReconcileChanged=true,recentNewAlbumIdsFixture=[];
   let preparedLibraryOverride=null,preparedCreatedAt=200;
   const revisionOf=rows=>JSON.stringify(rows.map(x=>[x.id,x.album,x.artist]));
   let tracksFixture=null,statusFixture=null,tracksHandler=null,spottyCapability=1,spotifyFollowAlbums=[],spotifyFollowSearch=null;
@@ -181,7 +181,7 @@ export async function runTests(sources) {
       }
       if(url==='/api/catalogue/reconcile'){
         catalogueEvents.push({action:'reconcile',method:args[0]?.method});
-        return Promise.resolve({ok:true,json:async()=>({changed:catalogueReconcileChanged,count:library.length,revision:revisionOf(library),new_albums:catalogueReconcileChanged?1:0})});
+        return Promise.resolve({ok:true,json:async()=>({changed:catalogueReconcileChanged,count:library.length,revision:revisionOf(library),new_albums:catalogueReconcileChanged?recentNewAlbumIdsFixture.length:0,recent_new_album_ids:recentNewAlbumIdsFixture})});
       }
       if(url.startsWith('/api/catalogue')){
         catalogueEvents.push({action:'read',url});
@@ -201,6 +201,7 @@ export async function runTests(sources) {
   const api=new Function(...Object.keys(env), app + `
     return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       preparedStateForTest:()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated,revision:preparedCatalogueRevision,live:libraryAlbumCount}),
+      arrivalStateForTest:()=>({mode:newAlbumAction,revision:observedLibraryRevision}),
       manualSourceStateForTest:()=>({timeout:MANUAL_SOURCE_IDLE_MS,until:sourceBrowseDeadline,timer:sourceBrowseTimer,held:sourceBrowseHeld()}),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
@@ -880,7 +881,7 @@ export async function runTests(sources) {
     'closing an idle album preview clears its detail heading');
 
 
-  const tabs=['display','playback','connection','genres','cache','about'].map(name=>{
+  const tabs=['display','browsing','connection','genres','cache','about'].map(name=>{
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
   });
   window.fetch=async()=>{};
@@ -903,6 +904,14 @@ export async function runTests(sources) {
   const releaseNotice=element('.bf-update-notice');
   assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
   assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
+  const newAlbumActionControl=element('.bf-new-album-action');
+  assert(newAlbumActionControl.value==='none','new album preview is opt-in');
+  newAlbumActionControl.value='preview';
+  newAlbumActionControl.listeners.change[0]();
+  assert(storage.get('albumBrowserNewAlbumAction')==='preview',
+    'new album action is saved for this browser');
+  newAlbumActionControl.value='none';
+  newAlbumActionControl.listeners.change[0]();
   const manualTimeoutControl=element('.bf-source-browse-timeout');
   assert(manualTimeoutControl.value==='300000','manual source browse timeout defaults to five minutes');
   manualTimeoutControl.value='600000';
@@ -1596,7 +1605,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=sort-labels-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=manual-source-hold-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=new-album-preview-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Cross-browser source following invalidates the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
