@@ -2008,6 +2008,65 @@ export async function runTests(sources) {
   assert(api.state().albums.includes(radioAlbum)&&element('.bf-front-play').getAttribute('aria-label')==='Resume player','paused radio retains its shelf CD and matching button');
   api.applyStatus({mode:'play',playlist_loop:[{album_id:20,album:'Library album',title:'Local track'}]});
   assert(!api.state().albums.some(a=>a?.[13]==='external')&&api.state().albums.length===beforeRadioCount,'library playback removes the temporary radio CD');
+
+  // Spotify is also remote in LMS. A status payload without the u/URL tag
+  // must not be treated as a radio station just because it says remote:1.
+  assert(api.playbackSourceForTrack({title:'Spotty song'}, {remote:1})==='unknown',
+    'metadata-light Spotify status never becomes a fake radio CD');
+  assert(api.playbackSourceForTrack({extid:'spotify:track:abc'}, {remote:1})==='spotify',
+    'Spotify external ID identifies the music source');
+  assert(api.playbackSourceForTrack({url:'spotify://track:abc'}, {remote:1})==='spotify',
+    'Spotify track URI identifies the music source');
+  assert(api.playbackSourceForTrack({url:'https://radio.example/live'}, {remote:1})==='external',
+    'real HTTP radio streams remain external');
+  assert(api.playbackSourceForTrack({remote_title:'Radio station'}, {remote:1})==='external',
+    'radio station metadata keeps the fake CD when the stream URL is missing');
+  async function settleSource(expected) {
+    for(let i=0;i<500;i++){
+      await Promise.resolve();
+      time+=16;
+      const pending=[...frames.values()];frames.clear();
+      for(const fn of pending)fn(time);
+      if(api.sourceForTest()===expected&&!api.state().sourceFollowPending)return;
+    }
+    throw Error('Source switch did not settle: '+expected);
+  }
+  // Each independently open viewer observes the player's status. Simulate a
+  // second browser, still browsing Library, learning that Spotify started
+  // elsewhere without sending any playback command itself.
+  const beforePassiveSwitch=rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length;
+  api.set({playerId:'test-player',playing:true});
+  api.setSourceForTest('library');
+  spotifyFollowAlbums=[externalSpotifyAlbum];
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{
+    album:'External Spotify Album',artist:'External Artist',title:'Remote song',
+    url:'spotify://track:external'
+  }]});
+  await settleSource('spotify');
+  assert(root.dataset.externalPlayback==='false'&&!api.state().albums.some(a=>a?.[13]==='external'),
+    'another viewer follows Spotify rather than adding a dimmed fake radio CD');
+  api.applyStatus({mode:'pause',remote:1,playlist_loop:[{
+    album:'External Spotify Album',artist:'External Artist',title:'Remote song',
+    extid:'spotify:track:external'
+  }]});
+  assert(api.sourceForTest()==='spotify'&&!api.state().playing&&root.dataset.externalPlayback==='false',
+    'paused Spotify remains the selected source and is not treated as radio');
+  api.applyStatus({mode:'play',remote:1,playlist_loop:[{
+    album:'Radio station',remote_title:'Radio station',title:'Live radio',
+    url:'https://radio.example/live'
+  }]});
+  assert(api.sourceForTest()==='spotify'&&root.dataset.externalPlayback==='true'&&
+    api.state().albums.some(a=>a?.[13]==='external'),
+    'switching to radio dims the current shelf and adds exactly one temporary CD');
+  api.applyStatus({mode:'play',playlist_loop:[{
+    album_id:20,album:'Album 020',title:'Local song',url:'file:///music/local.flac'
+  }]});
+  await settleSource('library');
+  assert(root.dataset.externalPlayback==='false'&&
+    !api.state().albums.some(a=>a?.[13]==='external'),
+    'radio-to-Library playback restores the Library shelf and removes the fake CD');
+  assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length===beforePassiveSwitch,
+    'passive source-following on another viewer never issues playback commands');
   api.set({playing:false,hover:0});const headingAlbum=api.state().albums[0],oldHeading=headingAlbum.slice(0,2);
   headingAlbum[0]=' ';headingAlbum[1]='The Dead Daisies';api.updateMeta(true);
   assert(element('.bf-meta').children[0].children[1].textContent==='The Dead Daisies','missing album title omits the artist separator');
