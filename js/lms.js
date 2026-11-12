@@ -28,7 +28,7 @@ export class CometDClient {
     this.playerId = '';
     this.retryTimer = 0;
     this.statusTimer = 0;
-    this.statusPollInFlight = false;
+    this.statusPollInFlight = null;
     this.serverWasScanning = null;
     this.libraryState = {lastscan:null, albums:null, songs:null};
   }
@@ -86,8 +86,8 @@ export class CometDClient {
   }
 
   async pollServerStatus(generation) {
-    if (generation !== this.generation || this.statusPollInFlight) return;
-    this.statusPollInFlight = true;
+    if (generation !== this.generation || this.statusPollInFlight === generation) return;
+    this.statusPollInFlight = generation;
     try {
       const status = await rpc('0', ['serverstatus', 0, 0]);
       // Switching LMS or stopping the client invalidates any old response.
@@ -95,7 +95,7 @@ export class CometDClient {
     } catch (_) {
       // CometD and the next lightweight check can recover independently.
     } finally {
-      this.statusPollInFlight = false;
+      if (this.statusPollInFlight === generation) this.statusPollInFlight = null;
     }
   }
 
