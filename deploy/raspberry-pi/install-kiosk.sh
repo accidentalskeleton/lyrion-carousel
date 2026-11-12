@@ -35,15 +35,17 @@ BIN="$HOME_DIR/.local/bin/carousel-kiosk"
 CONF_DIR="$HOME_DIR/.config/lyrion-carousel"
 CONF="$CONF_DIR/kiosk.conf"
 AUTOSTART="$HOME_DIR/.config/labwc/autostart"
-mkdir -p "$(dirname "$BIN")" "$CONF_DIR" "$(dirname "$AUTOSTART")"
+USER_GROUP="$(id -gn "$USER_NAME")"
+install -d -o "$USER_NAME" -g "$USER_GROUP" "$(dirname "$BIN")" "$CONF_DIR" "$(dirname "$AUTOSTART")"
 # Refuse to overwrite user files unless they are already managed by this installer.
 if [[ -e "$BIN" ]] && ! grep -q 'Lyrion Carousel managed kiosk launcher' "$BIN"; then
   echo "Existing unmanaged $BIN; move it aside manually before installing" >&2
   exit 1
 fi
 {
+  head -n 1 "$SCRIPT_DIR/carousel-kiosk"
   echo '# Lyrion Carousel managed kiosk launcher'
-  cat "$SCRIPT_DIR/carousel-kiosk"
+  tail -n +2 "$SCRIPT_DIR/carousel-kiosk"
 } > "$BIN"
 chmod 755 "$BIN"
 if [[ ! -e "$CONF" ]]; then
@@ -58,7 +60,7 @@ touch "$AUTOSTART"
 if ! grep -Fq '# BEGIN LYRION CAROUSEL KIOSK' "$AUTOSTART"; then
   printf '\n# BEGIN LYRION CAROUSEL KIOSK\n%s &\n# END LYRION CAROUSEL KIOSK\n' "$BIN" >> "$AUTOSTART"
 fi
-chown "$USER_NAME:$(id -gn "$USER_NAME")" "$BIN" "$CONF" "$AUTOSTART"
+chown "$USER_NAME:$USER_GROUP" "$BIN" "$CONF" "$AUTOSTART"
 echo "Installed kiosk for $USER_NAME: $SERVER"
 echo "Desktop autologin is not changed automatically. Enable it with sudo raspi-config if required."
 echo "Reboot or restart the labwc user session to activate."
