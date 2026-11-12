@@ -14,6 +14,8 @@ bash "$root/deploy/raspberry-pi/configure-dedicated-user.sh" --help | grep -q --
 grep -q 'BEGIN LYRION CAROUSEL KIOSK' "$root/deploy/raspberry-pi/install-kiosk.sh"
 grep -q 'BEGIN LYRION CAROUSEL KIOSK' "$root/deploy/raspberry-pi/uninstall-kiosk.sh"
 grep -q 'Preserving existing configuration' "$root/deploy/raspberry-pi/install-kiosk.sh"
+grep -Fq '"$HOME_DIR/.local/state/lyrion-carousel-kiosk"' "$root/deploy/raspberry-pi/install-kiosk.sh"
+grep -Fq '"$HOME_DIR/.local"' "$root/deploy/raspberry-pi/install-kiosk.sh"
 grep -q 'Existing unmanaged' "$root/deploy/raspberry-pi/install-kiosk.sh"
 grep -q 'HEALTH_FAILURES' "$root/deploy/raspberry-pi/carousel-kiosk"
 grep -q 'browser_pid' "$root/deploy/raspberry-pi/carousel-kiosk"
