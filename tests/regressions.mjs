@@ -144,6 +144,7 @@ export async function runTests(sources) {
   const rpcCalls=[];
   const catalogueEvents=[];
   let catalogueReconcileChanged=true;
+  let preparedLibraryOverride=null,preparedCreatedAt=200;
   let tracksFixture=null,statusFixture=null,tracksHandler=null,spottyCapability=1,spotifyFollowAlbums=[],spotifyFollowSearch=null;
   let library=Array.from({length:95},(_,i)=>({id:i+1,album:'Album '+String(i+1).padStart(3,'0'),artist:'Artist',textkey:'A'}));
   const rpc=async (player,cmd)=>{rpcCalls.push(cmd);if(cmd[0]==='can')return {_can:spottyCapability};if(cmd[0]==='players')return {players_loop:[{playerid:'test-player',connected:1,isplaying:1}]};if(cmd[0]==='status')return statusFixture||{mode:'play',playlist_loop:[{album_id:20,album:'Album 020',artist:'Artist',title:'Track',duration:60}],time:1};if(cmd[0]==='tracks')return tracksHandler?tracksHandler(cmd):{titles_loop:(tracksFixture||[]).slice(cmd[1],cmd[1]+cmd[2]),count:tracksFixture?.length||0};if(cmd[0]==='albums'){
@@ -170,7 +171,11 @@ export async function runTests(sources) {
       }
       if(url.startsWith('/api/catalogue')){
         catalogueEvents.push({action:'read',url});
-        return Promise.resolve({ok:true,json:async()=>({albums_loop:library.map(a=>({...a,artwork_track_id:a.id})),count:library.length})});
+        const prepared=preparedLibraryOverride||library;
+        return Promise.resolve({ok:true,json:async()=>({
+          albums_loop:prepared.map(a=>({...a,artwork_track_id:a.id})),
+          count:prepared.length,library_count:prepared.length,snapshot_created:preparedCreatedAt
+        })});
       }
       return metadataFetch(url,...args);
     },rpc,CometDClient:class{stop(){}start(){}resetLibraryState(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
@@ -181,6 +186,7 @@ export async function runTests(sources) {
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
     return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+      preparedStateForTest:()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated,live:libraryAlbumCount}),
       metaState:()=>({cached:spineMetaCache.size,pending:spineMetaPending.size,queued:spineMetaBatchQueue.size,active:spineMetaBatchesActive}),
       cachedSpineMeta:url=>spineMetaCache.get(url),
       replaceAlbumsForTest:value=>{albums=value;totalAlbums=value.length;rebuildAlbumIndex();},
@@ -199,6 +205,26 @@ export async function runTests(sources) {
     if(error)throw error;if(!done)throw Error('Animation did not finish');
   }
   await api.loadInitialCatalogue();
+  // Simulate the reported failure: LMS sees the latest album, but the saved
+  // SQLite catalogue was prepared before that album was indexed.
+  const previousPrepared=library.slice();
+  library.push({id:96,album:'Unobserved album',artist:'Artist'});
+  preparedLibraryOverride=previousPrepared;
+  await api.loadInitialCatalogue();
+  assert(api.state().albums.length===95 &&
+    api.preparedStateForTest().albums===95 &&
+    api.preparedStateForTest().live===96,
+    'browser distinguishes the prepared snapshot count from the live LMS album count');
+  let staleSnapshotObserved=0;
+  const actualStartupComet=new CometDClient(()=>{},()=>{},()=>{staleSnapshotObserved++;},
+    api.preparedStateForTest);
+  actualStartupComet.handleServerStatus({rescan:0,lastscan:'199','info total albums':96});
+  assert(staleSnapshotObserved===1,'initial LMS status notices the stale 95-album snapshot');
+  preparedLibraryOverride=null;
+  library.pop();
+  await api.loadInitialCatalogue();
+  assert(api.preparedStateForTest().albums===95,'restored catalogue snapshot baseline');
+
   assert(api.catalogueCodeLines('BEADYCD2')==='BEADYCD\n2','catalogue letter prefix stays intact');
   for(const code of ['9362-49870-2','1234567890123','509999 65111 2 1']){
     assert(api.catalogueCodeLines(code).split('\n').length===3,
