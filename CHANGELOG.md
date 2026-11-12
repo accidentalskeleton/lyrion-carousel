@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add **Settings → Playback → Manual source browsing** (Follow immediately, 1/5/10/15/30/60 minutes; 5-minute default). Explicit Library or Spotify selection holds that source on the current viewer until the selected period of inactivity, restarting on touch/scroll/keyboard use. Player-driven cross-viewer source synchronisation resumes when it expires, without changing playback or other viewers; manual and automatic source switches are distinguished in code.
+
 - Restore player-driven Library/Spotify source synchronisation across Carousel viewers, including transitions from the temporary radio jewel case. Request LMS track URL and external ID in CometD status, distinguish Spotify from real radio rather than treating `remote:1` as radio, add a 20-second read-only player-status fallback, retry failed follows, and prevent album-return animation from skipping source changes. Keep radio dimming/fake CD and avoid extra playback commands.
 
 - Fix new albums failing to appear automatically after LMS scans when the `rescan` true-to-false event is missed. Detect changed `lastscan` and album/track totals, use a lightweight 60-second `serverstatus` fallback during CometD interruptions, preserve revisions across same-server reconnects and reset them on LMS changes; retain first-observed album-added dates.
