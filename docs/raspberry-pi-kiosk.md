@@ -6,19 +6,26 @@ Use a Raspberry Pi 4 (preferably 4 GB RAM) or Pi 5 as a **display-only Carousel 
 
 ## Prerequisites
 
-Install Raspberry Pi OS **64-bit Desktop** (Debian Trixie or a current supported Raspberry Pi OS Desktop release), configure Wi-Fi/Ethernet and SSH in Raspberry Pi Imager, and enable desktop autologin through `sudo raspi-config` (System Options → Boot / Auto Login → Desktop Autologin; menu text may vary). The installer does **not** change login policy, network settings, HDMI configuration or power settings. The display can remain disconnected for headless initial setup.
+Install Raspberry Pi OS **64-bit Desktop** (Debian Trixie or a current supported Raspberry Pi OS Desktop release), configure Wi-Fi/Ethernet and SSH in Raspberry Pi Imager, and use a dedicated unprivileged desktop account for Chromium. Keep your ordinary account for SSH and administration. Desktop autologin is configured explicitly after the dedicated account is installed. The installer does **not** change login policy, network settings, HDMI configuration or power settings. The display can remain disconnected for headless initial setup.
 
 For a remote Carousel server, confirm that `curl -f http://streamer:8088/` succeeds from the Pi. Only expose the Carousel server to trusted local clients: the controller API is not authenticated.
 
 ## Install
 
-Clone or update this repository on the **display Pi**, then from its root:
+Clone or update this repository on the **display Pi** as your administrator (for example `stu`), then from its root:
 
 ```bash
+sudo bash deploy/raspberry-pi/configure-dedicated-user.sh --user carousel
 sudo bash deploy/raspberry-pi/install-kiosk.sh \
-  --user stu --server http://streamer:8088 --install-deps
+  --user carousel --server http://streamer:8088 --install-deps
+sudo bash deploy/raspberry-pi/configure-dedicated-user.sh \
+  --user carousel --desktop-autologin
 sudo reboot
 ```
+
+The `carousel` account has its own home, browser profile, kiosk logs and configuration. Newly created accounts have locked password authentication and no `sudo` grant. SSH administration continues using your existing account. The final autologin command opts into changing the **local graphical login**, not SSH; review `/etc/lightdm/lightdm.conf` before rebooting.
+
+**Migrating from an existing `stu` kiosk:** Back up `/home/stu/.config/labwc/autostart` and `/home/stu/.local/bin/carousel-kiosk`. Run `sudo bash deploy/raspberry-pi/uninstall-kiosk.sh --user carousel` before switching graphical autologin; it removes only installer-managed autostart, and leaves `stu`'s profiles/settings. Then install for `carousel` as above. Do **not** copy Chromium profiles from `stu` or grant the kiosk account sudo. Any browser-only Carousel settings will start fresh and can be configured on the new display later.
 
 Omit `--install-deps` when Chromium, labwc and curl are already installed. No second Carousel server is installed. Autostart launches Chromium using the user's own desktop Wayland session. Installation preserves existing config and existing labwc autostart content; it refuses to overwrite a non-managed launcher. Repeat installation is safe.
 
@@ -56,9 +63,9 @@ When no HDMI screen is connected, labwc may expose a 1920 × 1080 `NOOP-1` virtu
 ```bash
 pgrep -af '[c]arousel-kiosk'
 pgrep -af '[c]hromium.*--kiosk' | head -3
-tail -40 ~/.local/state/lyrion-carousel-kiosk/chromium.log
+sudo tail -40 /home/carousel/.local/state/lyrion-carousel-kiosk/chromium.log
 curl -fI http://streamer:8088/ || curl -f http://streamer:8088/ -o /dev/null
-XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 wlr-randr
+sudo -u carousel env XDG_RUNTIME_DIR=/run/user/$(id -u carousel) WAYLAND_DISPLAY=wayland-0 wlr-randr
 ```
 
 The desktop must have an active Wayland/labwc session. If only a TTY session exists over SSH, inspect `loginctl list-sessions` and `systemctl status lightdm`; SSH itself normally reports `tty` even when the graphical session is healthy.
@@ -70,7 +77,7 @@ sudo bash deploy/raspberry-pi/uninstall-kiosk.sh --user stu
 sudo reboot
 ```
 
-The uninstaller removes the managed launcher and only the marked autostart block. It deliberately preserves the browser profile, logs, user configuration and all unrelated desktop settings. The installer does not change desktop autologin or install a separate server/service.
+The uninstaller does not delete the `carousel` Linux account or change graphical autologin; change the autologin identity separately before removing an account. It removes the managed launcher and only the marked autostart block. It deliberately preserves the browser profile, logs, user configuration and all unrelated desktop settings. The installer does not change desktop autologin or install a separate server/service.
 
 ## Testing
 
