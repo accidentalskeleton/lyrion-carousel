@@ -8,6 +8,7 @@ done
 # CLI help must be usable without root and without modifying the host.
 bash "$root/deploy/raspberry-pi/install-kiosk.sh" --help | grep -q -- '--server'
 bash "$root/deploy/raspberry-pi/uninstall-kiosk.sh" --help | grep -q -- '--user'
+bash "$root/deploy/raspberry-pi/configure-dedicated-user.sh" --help | grep -q -- '--desktop-autologin'
 
 # Guard installer/uninstaller contracts and the recovery loop.
 grep -q 'BEGIN LYRION CAROUSEL KIOSK' "$root/deploy/raspberry-pi/install-kiosk.sh"
