@@ -1006,7 +1006,7 @@ export async function runTests(sources) {
   assert(!!settingsApi.state().timer,'restoring a suspended page resumes daily checks');
   autoRelease.checked=false;autoRelease.listeners.change[0]();
   tabs[2].listeners.click[0]();
-  assert(tabs[2].getAttribute('aria-selected')==='true'&&tabs[3].tabIndex===0,'settings tab selected accessibly');
+  assert(tabs[2].getAttribute('aria-selected')==='true'&&tabs[2].tabIndex===0,'settings tab selected accessibly');
   assert(!element('#settings-panel-connection').hidden&&element('#settings-panel-display').hidden,'settings shows only selected panel');
   const key=key=>({key,preventDefault(){},stopPropagation(){}});
   tabs[2].listeners.keydown[0](key('ArrowRight'));
@@ -1019,7 +1019,7 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
-  assert(sources.index.includes('css/settings.css?v=demo-mode-1'),
+  assert(sources.index.includes('css/settings.css?v=demo-guide-1'),
     'Demo styles invalidate the settings stylesheet cache');
   tabs[7].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
@@ -1564,6 +1564,9 @@ export async function runTests(sources) {
       'Debian package excludes removed disc module while retaining photographic assets');
   }
 
+  assert(sources.index.indexOf('id="settings-tab-demo"')>
+    sources.index.indexOf('id="settings-tab-coffee"'),
+    'Demo is the final, secondary Settings tab after Coffee');
   assert(sources.index.includes('id="settings-tab-demo"')&&
     sources.index.includes('class="bf-demo-local"')&&
     sources.index.includes('class="bf-demo-join"')&&
@@ -1618,7 +1621,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=player-standby-dim-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=demo-mode-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=demo-tour-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
