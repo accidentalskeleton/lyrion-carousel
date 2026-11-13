@@ -27,7 +27,7 @@ class DemoSessionTests(unittest.TestCase):
         self.assertIsNone(self.sessions.update(code, viewer, "step", 0, "library", "123"))
         self.assertIsNone(self.sessions.update(code, controller, "step", 0, "library", ""))
         self.assertIsNone(self.sessions.update(code, controller, "step", 0, "library", "x" * 200))
-        self.assertIsNone(self.sessions.update(code, controller, "step", 16, "library", "123"))
+        self.assertIsNone(self.sessions.update(code, controller, "step", 17, "library", "123"))
         self.assertIsNone(self.sessions.update(code, controller, "step", True, "library", "123"))
         self.assertIsNone(self.sessions.update(code, controller, "step", 0, "external", "123"))
         update = self.sessions.update(code, controller, "step", 2, "spotify", "spotify:album:example")

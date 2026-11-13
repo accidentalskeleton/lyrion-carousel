@@ -2039,6 +2039,7 @@ const demoScenes=[
     {source:'library',fraction:.62,open:false},
     {source:'spotify',fraction:.28,open:true},
     {source:'library',fraction:.68,open:false},
+    {source:'library',fraction:.54,open:false,fastNavigation:true},
     {source:'library',fraction:.78,open:true}
 ];
 const demoMode=createDemoMode({
@@ -2081,7 +2082,7 @@ const demoMode=createDemoMode({
         const scene=demoScenes[step],request=demoSceneGeneration,albumId=selection.album_id;
         if(!scene)return;
         // Close previous presentation surfaces before the next animation.
-        closeAlbumMenu();closeOrderMenu();closeDiscoveryMenu();closeTrackList();
+        closeAlbumMenu();closeOrderMenu();closeDiscoveryMenu();closeTrackList();fastNavigator.hide();
         searchOverlay.hidden=true;
         if(scene.order&&scene.order!==orderMode){
             if(liveCatalogue||catalogueSource==='spotify'){
@@ -2122,6 +2123,12 @@ const demoMode=createDemoMode({
         const arrived=await scrollToAlbumIndex(index);
         if(!demoActive||request!==demoSceneGeneration||!arrived)return;
         if(scene.open)openFrontPreview(albums[index],index,true);
+        if(scene.fastNavigation){
+            // The visual tour holds this open for the whole scene, including
+            // Relaxed mode; ordinary manual activation still auto-hides.
+            fastNavigator.show({keepOpen:true});
+            return '.bf-fast-nav-range';
+        }
         if(step===3){
             // Read-only LMS/Spotty metadata, never a playback action.
             await showTrackList(albums[index]);
@@ -2142,7 +2149,7 @@ const demoMode=createDemoMode({
         return '.bf-stage .bf-album[data-index="'+index+'"]';
     },
     onStop(){
-        closeAlbumMenu();closeOrderMenu();closeDiscoveryMenu();closeTrackList();searchOverlay.hidden=true;
+        fastNavigator.hide();closeAlbumMenu();closeOrderMenu();closeDiscoveryMenu();closeTrackList();searchOverlay.hidden=true;
         // Put the user's own browsing choices back after the visual tour.
         const source=demoOriginalSource,order=demoOriginalOrder;
         if(source&&source!==catalogueSource){

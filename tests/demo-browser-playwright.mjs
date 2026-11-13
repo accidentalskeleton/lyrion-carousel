@@ -117,7 +117,7 @@ try{
     await page.waitForFunction(()=>document.querySelector('#book-fan-browser')?.dataset.demoActive==='true',{timeout:5000});
     await page.waitForTimeout(1000);    await page.waitForFunction(()=>
         document.querySelector('.bf-demo-guide')?.hidden===false&&
-        document.querySelector('.bf-demo-banner-progress')?.textContent.includes('Scene 1 of 16')&&
+        document.querySelector('.bf-demo-banner-progress')?.textContent.includes('Scene 1 of 17')&&
         document.querySelector('.bf-demo-callout')?.hidden===false,null,{timeout:8000});
     const annotations=await page.evaluate(()=>({
         banner:document.querySelector('.bf-demo-banner')?.getBoundingClientRect().width,

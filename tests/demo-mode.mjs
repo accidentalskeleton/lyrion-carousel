@@ -68,13 +68,13 @@ createDemoMode({prepareStep:async step=>({source:'library',album_id:'repeat:'+st
     onStep:async step=>repeatSteps.push(step),
     onActiveChange:()=>{},onStop:()=>{}});
 repeatHost.node('.bf-demo-local').click();await flush();
-for(let i=0;i<16;i++){
+for(let i=0;i<17;i++){
     const entry=[...timers.entries()].at(-1);
     assert(!!entry,'repeat showcase schedules its next scene');
     timers.delete(entry[0]);await entry[1]();await flush();
 }
-assert(repeatSteps.length===17&&repeatSteps[0]===0&&repeatSteps[16]===0,
-    'enabled repeat restarts the sixteen-scene sequence without stopping');
+assert(repeatSteps.length===18&&repeatSteps[0]===0&&repeatSteps[17]===0,
+    'enabled repeat restarts the seventeen-scene sequence without stopping');
 repeatHost.node('.bf-demo-stop').click();await flush();
 assert(repeatHost.root.dataset.demoActive==='false','repeat demo stops on request');
 

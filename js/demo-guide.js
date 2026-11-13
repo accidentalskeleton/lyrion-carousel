@@ -78,6 +78,11 @@ export const DEMO_SCENES=[
         "target": ".bf-source-switch"
     },
     {
+        "title": "Jump across large collections",
+        "detail": "Use the fast scrubber or A–Z shortcuts to find CDs without endless swiping.",
+        "target": ".bf-fast-nav-range"
+    },
+    {
         "title": "A final look at the cover",
         "detail": "Open a jewel case and enjoy the album artwork.",
         "target": ".bf-front-case"

@@ -9,7 +9,7 @@ import threading
 import time
 
 MAX_AGE = 30 * 60
-DEMO_SCENE_COUNT = 16
+DEMO_SCENE_COUNT = 17
 
 class DemoSessions:
     def __init__(self):
