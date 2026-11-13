@@ -2326,9 +2326,14 @@ export async function runTests(sources) {
   assert(newAlbumToast.hidden,'already-refreshed arrival is never announced twice');
 
   // In preview mode the virtual viewer is idle and may scroll/open, but never
-  // play. Opening an album also reuses the standard temporary case timeout.
+  // play. A manual Library source hold must NOT suppress this same-shelf,
+  // opted-in preview; the 15-second activity guard still applies.
   api.applySetting('newAlbumAction','preview');
   api.closeFrontPreview(true);
+  api.applySetting('sourceBrowseTimeout',60000);
+  await settle(api.setCatalogueSource('library',{manual:true}));
+  assert(api.manualSourceStateForTest().held,
+    'manual source hold is active during the idle new-album preview test');
   api.set({activity:Date.now()-30000});
   const secondArrival={id:99102,album:'Second fresh CD',artist:'Ripping artist'};
   library.push(secondArrival);
@@ -2339,6 +2344,8 @@ export async function runTests(sources) {
     'idle viewer scrolls to freshly added album and opens its jewel case');
   assert(api.state().frontTimer!==0,
     'new album cover uses the usual temporary front-preview timeout');
+  api.applySetting('sourceBrowseTimeout',0);
+
 
   // Active browsing must not be hijacked; a text notification is safe.
   api.closeFrontPreview(true);
