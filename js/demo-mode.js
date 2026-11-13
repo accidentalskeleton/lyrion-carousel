@@ -11,6 +11,7 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
     const floatingStop=root.querySelector('.bf-demo-stop-floating');
     const codeInput=root.querySelector('.bf-demo-code');
     const speedInput=root.querySelector('.bf-demo-speed');
+    const repeatInput=root.querySelector('.bf-demo-repeat');
     const status=root.querySelector('.bf-demo-status');
     const controls=root.querySelector('.bf-demo-controls');
     let mode='',code='',viewer='',controller='',timer=0,sequence=0,epoch=0,stepIndex=-1;
@@ -67,9 +68,21 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
     }
     async function hostStep(generation,step=0){
         if(generation!==epoch||!mode)return;
-        if(step>=8){await stop();return}
+        if(step>=8){
+            if(repeatInput?.checked)step=0;
+            else{await stop();return}
+        }
         try{await runStep(step,null,generation)}
-        catch(error){if(generation===epoch)cleanup('Demo stopped: '+error.message);return}
+        catch(error){
+            if(generation===epoch){
+                // Notify joined viewers too: cleaning up only this host left
+                // its remote viewers stuck until session expiration.
+                const sessionCode=code,secret=controller;
+                cleanup('Demo stopped: '+error.message);
+                if(secret)void request({action:'stop',code:sessionCode,controller:secret}).catch(()=>{});
+            }
+            return;
+        }
         if(generation===epoch&&mode)timer=setTimeout(()=>void hostStep(generation,step+1),delay());
     }
     async function poll(generation){
