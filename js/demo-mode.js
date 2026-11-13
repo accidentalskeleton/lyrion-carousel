@@ -1,4 +1,4 @@
-import { createDemoGuide } from './demo-guide.js?v=1';
+import { createDemoGuide, DEMO_SCENES } from './demo-guide.js?v=2';
 /* Browser-independent, opt-in visual demo. It never sends LMS RPCs.
  * Remote viewers join voluntarily with a session code, not by autoplay.
  */
@@ -66,13 +66,13 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
             source:selection.source,album_id:selection.album_id});
         if(generation!==epoch||!mode)return;
         stepIndex=step;
-        say((controller?'Shared demo':'Visual demo')+' · scene '+(step+1)+'/8'+(code?' · code '+code:''));
+        say((controller?'Shared demo':'Visual demo')+' · scene '+(step+1)+'/'+DEMO_SCENES.length+(code?' · code '+code:''));
         const target=await onStep(step,selection);
         if(generation===epoch&&mode)guide.show(step,target);
     }
     async function hostStep(generation,step=0){
         if(generation!==epoch||!mode)return;
-        if(step>=8){
+        if(step>=DEMO_SCENES.length){
             if(repeatInput?.checked)step=0;
             else{await stop();return}
         }
