@@ -614,7 +614,6 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     def do_GET(self)->None:
         """Serve status, prepared catalogues and artwork, or fall through to static files."""
         path=urlsplit(self.path).path
-        if path=='/api/demo': self._demo_get(); return
         if path=='/api/cache/warm':
             self._send_payload(200,json.dumps({**ARTWORK_WARMER.snapshot(),'cache':self._cache_usage()}).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
         if path.startswith(('/api/art/','/api/art-meta/')):
@@ -660,6 +659,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 code=data.get('code','')
                 if not isinstance(code,str) or len(code)!=8 or not all(c in '0123456789ABCDEF' for c in code): raise ValueError
                 payload=DEMO_SESSIONS.join(code)
+            elif action=='state':
+                code=data.get('code','')
+                token=data.get('viewer','')
+                if not isinstance(code,str) or not isinstance(token,str) or len(token)>100: raise ValueError
+                payload=DEMO_SESSIONS.state(code,token)
             elif action in ('step','stop'):
                 code=data.get('code','')
                 token=data.get('controller','')
@@ -670,16 +674,6 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             self.send_error(400,'Invalid demo request'); return
         if payload is None:
             self.send_error(403,'Demo session unavailable or unauthorised'); return
-        self._send_payload(200,json.dumps(payload).encode(),'application/json; charset=utf-8',cache_control='no-store')
-
-    def _demo_get(self)->None:
-        query=parse_qs(urlsplit(self.path).query)
-        code=query.get('code',[''])[0]; viewer=query.get('viewer',[''])[0]
-        if len(code)!=8 or not isinstance(viewer,str) or len(viewer)>100:
-            self.send_error(400,'Invalid demo credentials'); return
-        payload=DEMO_SESSIONS.state(code,viewer)
-        if payload is None:
-            self.send_error(403,'Demo session unavailable'); return
         self._send_payload(200,json.dumps(payload).encode(),'application/json; charset=utf-8',cache_control='no-store')
 
     def _lms_rpc(self,player_id:str,command:list[object])->dict:
