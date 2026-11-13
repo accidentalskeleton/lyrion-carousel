@@ -57,3 +57,4 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/shelf-playwright.mjs http://127.0.0.1:8089/
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/demo-browser-playwright.mjs http://127.0.0.1:8089/
