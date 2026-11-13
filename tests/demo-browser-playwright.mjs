@@ -43,7 +43,11 @@ try{
                 r.top>=s.top-1&&r.bottom<=s.bottom+1};
         });
         if(!state.visible||!state.within)throw Error('Fast navigator is clipped at '+viewport.width+': '+JSON.stringify(state));
-        await page.locator('.bf-fast-nav-range').fill('1000');
+        await page.locator('.bf-fast-nav-range').evaluate(input=>{
+            input.value=input.max;
+            input.dispatchEvent(new Event('input',{bubbles:true}));
+            input.dispatchEvent(new Event('change',{bubbles:true}));
+        });
         const label=await page.locator('.bf-fast-nav-count').textContent();
         if(!label?.includes('5 / 5'))throw Error('Scrub did not reach last offline CD: '+label);
         await page.locator('.bf-fast-nav-close').click();
