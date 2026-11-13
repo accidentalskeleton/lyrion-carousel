@@ -6,7 +6,7 @@
 
 Open **Settings → Demo** to run a visual showcase of the current Carousel shelf. Demo Mode animates shelf scrolling and opening jewel cases; it does **not** send LMS playback, pause, power, queue or Spotify play commands. The currently playing music continues uninterrupted.
 
-- **Local demo:** choose Relaxed, Normal or Fast and select **Start local demo**. Only this browser moves; other Carousels are unaffected.
+- **Local demo:** choose Relaxed, Normal or Fast, optionally enable **Repeat showcase** for continuous filming, and select **Start local demo**. The host's Repeat setting also governs a shared demo. Only this browser moves; other Carousels are unaffected.
 - **Shared demo:** select **Create shared session** on the host browser. Note the eight-character code while Settings remains open. On each other browser, open Settings → Demo, enter the code and select **Join demo**. After all viewers have joined, select **Begin shared showcase** on the host. Each viewer follows the host's album ID and source when the item exists, with a fallback to a corresponding shelf position if its catalogue differs.
 - **Stop:** click or touch anywhere on a running demonstration, press Escape, or hover/focus the discreet top-right Stop control. Stopping the host stops the connected participants. Leaving the page also stops that browser's demo. The session is not persisted across server restarts.
 
