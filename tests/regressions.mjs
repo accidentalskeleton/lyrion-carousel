@@ -956,7 +956,7 @@ export async function runTests(sources) {
     'closing an idle album preview clears its detail heading');
 
 
-  const tabs=['display','browsing','demo','connection','genres','cache','about'].map(name=>{
+  const tabs=['display','browsing','connection','genres','cache','about','coffee','demo'].map(name=>{
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
   });
   window.fetch=async()=>{};
@@ -980,8 +980,17 @@ export async function runTests(sources) {
   assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
   assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
   assert(sources.index.includes('class="bf-about-browser-version"')&&
-    sources.index.includes('class="bf-about-build-match"'),
-    'About distinguishes browser-loaded code from installed server build');
+    sources.index.includes('class="bf-about-build-match"')&&
+    sources.index.includes('class="bf-about-build-card"')&&
+    ['bf-about-connection-heading','bf-about-build-heading','bf-about-project-heading','bf-about-updates-heading']
+        .every(id=>sources.index.includes('id="'+id+'"')),
+    'About groups connection, combined browser/server build, project and updates into labelled sections');
+  assert(sources.settingsCss.includes('.bf-about-build-card')&&
+    sources.settingsCss.includes('[data-build-status="mismatch"]'),
+    'About layout uses one responsive build card with a visible mismatch state');
+  assert(sources.index.includes('class="bf-demo-banner-note"')&&
+    sources.settingsCss.includes('.bf-demo-guide[data-compact="true"]'),
+    'Demo guide can move text into a compact banner instead of obscuring a popup');
   root.dataset.browserBuild='0.13.1~git0123456789';
   releaseInstalled='0.13.1~git0123456789';
   await settingsApi.loadVersion();
@@ -989,11 +998,15 @@ export async function runTests(sources) {
     element('.bf-about-version').textContent==='0.13.1~git0123456789'&&
     element('.bf-about-build-match').textContent==='Matched',
     'About confirms loaded browser and server use identical Git builds');
+  assert(element('.bf-about-build-card').dataset.buildStatus==='matched',
+    'combined build panel marks matching browser/server code');
   releaseInstalled='0.13.1~git9876543210';
   await settingsApi.loadVersion();
   assert(element('.bf-about-build-match').textContent.includes('Different builds')&&
     element('.bf-about-browser-version').textContent==='0.13.1~git0123456789',
     'server upgrade does not falsely upgrade JS already loaded in an old tab');
+  assert(element('.bf-about-build-card').dataset.buildStatus==='mismatch',
+    'combined build panel warns when the tab uses older JavaScript');
   assert(settingsApi.releaseIsNewer('v0.13.1','0.13.1~git0123456789'),
     'the final stable release supersedes a matching Git pre-release');
   root.dataset.browserBuild='development';releaseInstalled='0.10.0';
@@ -1100,15 +1113,15 @@ export async function runTests(sources) {
   Element.prototype.dispatchEvent.call(window,{type:'pageshow'});
   assert(!!settingsApi.state().timer,'restoring a suspended page resumes daily checks');
   autoRelease.checked=false;autoRelease.listeners.change[0]();
-  tabs[3].listeners.click[0]();
-  assert(tabs[3].getAttribute('aria-selected')==='true'&&tabs[3].tabIndex===0,'settings tab selected accessibly');
+  tabs[2].listeners.click[0]();
+  assert(tabs[2].getAttribute('aria-selected')==='true'&&tabs[2].tabIndex===0,'settings tab selected accessibly');
   assert(!element('#settings-panel-connection').hidden&&element('#settings-panel-display').hidden,'settings shows only selected panel');
   const key=key=>({key,preventDefault(){},stopPropagation(){}});
-  tabs[3].listeners.keydown[0](key('ArrowRight'));
+  tabs[2].listeners.keydown[0](key('ArrowRight'));
   assert(!element('#settings-panel-genres').hidden,'arrow key selects genres settings tab');
-  tabs[4].listeners.keydown[0](key('ArrowRight'));
+  tabs[3].listeners.keydown[0](key('ArrowRight'));
   assert(!element('#settings-panel-cache').hidden,'arrow key selects cache settings tab');
-  tabs[5].listeners.keydown[0](key('ArrowRight'));
+  tabs[4].listeners.keydown[0](key('ArrowRight'));
   assert(!element('#settings-panel-about').hidden,'arrow key selects about settings tab');
   assert(sources.index.includes('class="bf-project-link" href="https://github.com/accidentalskeleton/lyrion-carousel" target="_blank" rel="noopener noreferrer"'),
     'About links to the GitHub project in a protected new tab');
@@ -1119,9 +1132,9 @@ export async function runTests(sources) {
     sources.albumBrowserCss.includes('.bf-fast-nav-anchor')&&
     sources.albumBrowserCss.includes('align-items:center; justify-content:center'),
     'fast navigator is shelf-centred and has no permanently visible toggle');
-  assert(sources.index.includes('css/settings.css?v=demo-mode-1'),
+  assert(sources.index.includes('css/settings.css?v=about-sections-1'),
     'Demo styles invalidate the settings stylesheet cache');
-  tabs[6].listeners.keydown[0](key('Home'));
+  tabs[7].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
   assert(api.state().KEEP_PLAYING_OPEN===true,
     'the playing cover is permanently pinned regardless of old preferences');
@@ -1678,6 +1691,9 @@ export async function runTests(sources) {
       'Debian package excludes removed disc module while retaining photographic assets');
   }
 
+  assert(sources.index.indexOf('id="settings-tab-demo"')>
+    sources.index.indexOf('id="settings-tab-coffee"'),
+    'Demo is the final, secondary Settings tab after Coffee');
   assert(sources.index.includes('id="settings-tab-demo"')&&
     sources.index.includes('class="bf-demo-local"')&&
     sources.index.includes('class="bf-demo-join"')&&
@@ -1685,7 +1701,7 @@ export async function runTests(sources) {
     'Demo settings include local showcase, opt-in shared join and staged launch');
   assert(sources.app.includes("import { createDemoMode }")&&
     sources.app.includes("async prepareStep(step,remote)")&&
-    sources.app.includes("setCatalogueSource(desired,{manual:true,demo:true})"),
+    sources.app.includes("setCatalogueSource(desired,{manual:false,demo:true})"),
     'visual-only demo uses Carousel shelf navigation without changing LMS playback');
   assert(sources.app.includes("'tags:aluJenKNRAxE'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
@@ -1732,7 +1748,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=fast-nav-3'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=fast-nav-4')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=demo-tour-3')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

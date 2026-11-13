@@ -269,20 +269,20 @@ async function setCatalogueSource(source,{manual=false,demo=false}={}){
     if(source==='spotify'&&spottyAvailable===false)return;
     if(orderBusy||libraryRefreshing)return;
     if(source===catalogueSource){
-        if(manual){armSourceBrowseHold();if(MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
+        if(manual&&!demo){armSourceBrowseHold();if(MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
         return;
     }
     // Set the hold *before* loading the other catalogue, preventing live
     // player updates from immediately reversing an explicit user choice.
     const oldDeadline=sourceBrowseDeadline;
-    if(manual)armSourceBrowseHold();
+    if(manual&&!demo)armSourceBrowseHold();
     const previous=catalogueSource,previousDesired=desiredOrderMode;catalogueSource=source==='spotify'?'spotify':'library';desiredOrderMode=sourceOrderModes[catalogueSource];updateSourceButtons();sourceButtons.forEach(b=>b.disabled=true);
     try{
         if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();
         // Catalogue loading rebuilds the shelf. Retain live radio's virtual
         // jewel case even when the user switches Library/Spotify manually.
         syncExternalShelf();
-        try{localStorage.setItem('albumBrowserSource',catalogueSource)}catch(_){}
+        if(!demo)try{localStorage.setItem('albumBrowserSource',catalogueSource)}catch(_){}
         // A source switch replaces the catalogue, so resolve Now Playing again
         // against the newly loaded source. If that album exists here, move
         // straight to it and open/pin its jewel case.
@@ -306,7 +306,7 @@ async function setCatalogueSource(source,{manual=false,demo=false}={}){
         }
     }
     catch(error){catalogueSource=previous;desiredOrderMode=previousDesired;if(manual){clearSourceBrowseHold();if(oldDeadline>performance.now()){sourceBrowseDeadline=oldDeadline;scheduleSourceBrowseExpiry()}}updateSourceButtons();setConnection(error.message||'Could not change music source',false)}
-    finally{updateSourceButtons();updateBusyState();if(manual&&MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
+    finally{updateSourceButtons();updateBusyState();if(manual&&!demo&&MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
 }
 
 // Each browser has its own catalogue view, but playback belongs to the shared
@@ -361,7 +361,7 @@ async function setDisplayOrder(mode){
         if(mode!=='random')albums.sort((a,b)=>(mode==='album'?(a[0]+'\0'+a[1]):(a[1]+'\0'+a[0])).localeCompare(mode==='album'?(b[0]+'\0'+b[1]):(b[1]+'\0'+b[0])));
         // Re-sort only real Spotify records; radio is a temporary overlay.
         albums=albums.filter(album=>album?.[13]!=='external');totalAlbums=albums.length;
-        rebuildAlbumIndex();syncExternalShelf();const i=indexForAlbumId(selected);position=target=i>=0?i:0;rememberSourceOrder(orderMode);updateOrderToggle();renderAlbums();draw();return;
+        rebuildAlbumIndex();syncExternalShelf();const i=indexForAlbumId(selected);position=target=i>=0?i:0;if(!demoActive)rememberSourceOrder(orderMode);updateOrderToggle();renderAlbums();draw();return;
     }
     if(orderBusy||randomAnimating||!Object.prototype.hasOwnProperty.call(orderLabels,mode))return;
     const generation=catalogueGeneration,selected=albums[selectedIndex()]?.[6];
@@ -387,13 +387,13 @@ async function setDisplayOrder(mode){
         // Restoring the virtual CD must not depend on another status event.
         syncExternalShelf();
         loadedBatches=new Set(Array.from({length:batchCount()},(_,i)=>i));
-        rememberSourceOrder(mode);
+        if(!demoActive)rememberSourceOrder(mode);
         updateOrderToggle();
         const playingIndex=hasPlaybackAlbum()?playingCarouselIndex():-1;
         const nextIndex=playingIndex>=0?playingIndex:selected!=null?indexForAlbumId(selected):selectedIndex();
         if(nextIndex>=0)position=target=shelfPosition(nextIndex);
         hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();
-        if(playingIndex>=0){openFrontPreview(albums[playingIndex],playingIndex);target=nearestPositionForIndex(playingIndex);schedule()}
+        if(playingIndex>=0&&!demoActive){openFrontPreview(albums[playingIndex],playingIndex);target=nearestPositionForIndex(playingIndex);schedule()}
         if(mode==='colour')setConnection(albumCountLabel()+' · colour order',true);
     }finally{
         if(generation===catalogueGeneration){
@@ -402,7 +402,7 @@ async function setDisplayOrder(mode){
             else if(libraryRefreshPending&&!libraryRefreshing&&!randomAnimating){
                 handleLibraryEvent();
             }
-            if(hasPlaybackAlbum()&&playingSource!==catalogueSource)void followPlayingSource();
+            if(!demoActive&&hasPlaybackAlbum()&&playingSource!==catalogueSource)void followPlayingSource();
         }
     }
 }
@@ -829,7 +829,7 @@ function isPlayingCoverPinned(){
         (frontPreviewAlbum[6]!=null&&current[6]!=null&&
         String(frontPreviewAlbum[6])===String(current[6])));
 }
-async function ensurePlayingCover(){if(demoActive)return;
+async function ensurePlayingCover(){if(demoActive||fastNavigator.visible())return;
     syncExternalShelf();
     const request=++pinnedRequest,id=playingAlbumId,generation=catalogueGeneration;
     frontPreview.dataset.pinned=String(isPlayingCoverPinned());
@@ -1424,7 +1424,7 @@ function scrollToAlbumIndex(index,allowPointerMovement=false){
 }
 function armIdleReturn(delayOverride=null){clearTimeout(idleTimer);if(IDLE_RETURN_MS<=0)return;const elapsed=Date.now()-lastActivityAt,delay=delayOverride===null?Math.max(0,IDLE_RETURN_MS-elapsed):delayOverride;idleTimer=setTimeout(()=>returnToPlayingAlbum(),delay)}
 function noteUserActivity(event){if(demoActive)return;if(!discoveryBusy&&!(event?.type==='pointermove'&&followAnimation?.allowPointerMovement))cancelFollowAnimation();if(sourceBrowseHeld())armSourceBrowseHold();lastActivityAt=Date.now();idleReturnAlbumId=null;armIdleReturn()}
-async function returnToPlayingAlbum(immediate=false){if(demoActive)return;
+async function returnToPlayingAlbum(immediate=false){if(demoActive||fastNavigator.visible())return;
     clearTimeout(idleTimer);idleTimer=0;
     if(!immediate&&Date.now()-lastActivityAt<IDLE_RETURN_MS){armIdleReturn();return}
     if(randomAnimating||discoveryBusy||dragging||orderBusy||libraryRefreshing||root.querySelector('.bf-settings-overlay:not([hidden])')||!searchOverlay.hidden||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden){clearTimeout(idleTimer);idleTimer=setTimeout(()=>returnToPlayingAlbum(immediate),1000);return}
@@ -1873,7 +1873,7 @@ function scrollShelfWheel(e){
     lastWheelAt=now;lastWheelDirection=direction;
     const adjusted=acceleratedWheel(delta,{total:totalAlbums,streak:wheelStreak});
     target=position=shelfPosition(position+adjusted*.0028);
-    if(!suppressed&&shouldRevealForWheel({streak:wheelStreak,distance:wheelBurstDistance,total:totalAlbums}))fastNavigator.show();
+    if(!suppressed&&shouldRevealForWheel({streak:wheelStreak,distance:wheelBurstDistance,total:totalAlbums}))showFastNavigation();
     draw();clearTimeout(wheelTimer);
     wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110);
 }
@@ -1928,7 +1928,7 @@ function finishShelfDrag(cancelled=false){
         });
         target=snapShelfPosition(position-flick);
         if(!suppressNavigatorUntilBrowseIdle&&swipeNavigation.record({distance,duration,velocity,now,direction}))
-            fastNavigator.show();
+            showFastNavigation();
         else if(suppressNavigatorUntilBrowseIdle)swipeNavigation.reset();
         lastFlickVelocity=duration<850&&Math.abs(velocity)>=.55?velocity:0;
         lastFlickAt=now;
@@ -1972,6 +1972,19 @@ const fastNavigator=createFastNavigator(root,{
         if(orderMode==='artistAlbum'||orderMode==='album')void jumpToLetter(letter);
     }
 });
+// The navigator is a shelf-only control. A closing animation can be
+// interrupted by layout/scrolling, so enforce an immediate completed close
+// immediately before showing it, for both Demo Mode and normal browsing.
+// Keep playback untouched; suppress automatic Now Playing cover restoration
+// while the scrubber is visible.
+function showFastNavigation(options){
+    followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;
+    finishCoverOpening();
+    void closeFrontPreview(true,false);
+    if(!frontPreview.hidden)return false;
+    fastNavigator.show(options);
+    return fastNavigator.visible();
+}
 function resetFastNavigationOnAlbumSelection(){
     // A real CD selection cancels the overlay AND any accumulated gesture
     // history, including an outstanding scrub completion that could steal
@@ -1992,7 +2005,7 @@ stage.addEventListener('pointerdown',event=>{
 });
 stage.addEventListener('pointermove',event=>moveShelfDrag(event));
 stage.addEventListener('pointerup',()=>finishShelfDrag(false));
-stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(e.key==='Escape'&&fastNavigator.visible()){fastNavigator.hide();return}if(!typing&&e.key.toLowerCase()==='n'&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!randomAnimating&&searchOverlay.hidden){e.preventDefault();fastNavigator.show();return}if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{setPlayerPower(null);cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;clearSourceBrowseHold();sourceFollowAttempt='';sourceFollowAttemptAt=-Infinity;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{clearTimeout(newAlbumToastTimer);clearSourceBrowseHold();cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
+stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(e.key==='Escape'&&fastNavigator.visible()){fastNavigator.hide();return}if(!typing&&e.key.toLowerCase()==='n'&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!randomAnimating&&searchOverlay.hidden){e.preventDefault();showFastNavigation();return}if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{setPlayerPower(null);cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;clearSourceBrowseHold();sourceFollowAttempt='';sourceFollowAttemptAt=-Infinity;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{clearTimeout(newAlbumToastTimer);clearSourceBrowseHold();cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
 async function connectLyrion(){if(connecting)return;connecting=true;const connection=connectionGeneration;try{const result=await rpc('0',['players',0,100]),players=(result.players_loop||[]).filter(p=>String(p.connected)!=='0');if(connection!==connectionGeneration)return;playerSelect.replaceChildren();for(const p of players){const o=document.createElement('option');o.value=p.playerid;o.textContent=p.name||p.playerid;playerSelect.append(o)}let remembered='';try{remembered=localStorage.getItem('albumBrowserPlayer')||''}catch(_){}const selected=players.find(p=>p.playerid===remembered)||players.find(p=>String(p.isplaying)==='1')||players[0];if(playerId!==(selected?.playerid||''))resetQueuePosition();playerId=selected?.playerid||'';setPlayerPower(null);if(playerId)playerSelect.value=playerId;playerSelect.disabled=!players.length;updateBusyState();await checkSpottyAvailability();if(connection!==connectionGeneration)return;if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();if(connection!==connectionGeneration)return;const status=await getStatus();if(connection!==connectionGeneration)return;await selectStartupAlbum(status);if(connection!==connectionGeneration)return;await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();armIdleReturn();cometd.start(playerId);clearInterval(progressTimer);progressTimer=setInterval(updateProgressDisplay,500)}catch(error){if(connection!==connectionGeneration)return;console.warn(error);cometd.stop();root.dataset.liveUpdates='false';emitStatus();if(!liveCatalogue){albums=demoAlbums.slice();totalAlbums=libraryAlbumCount=albums.length;position=target=Math.floor(Math.random()*albums.length);renderAlbums();draw();root.classList.remove('is-starting');root.dataset.ready='true';playerSelect.innerHTML='<option>Demo mode</option>'}playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);root.classList.remove('is-starting');root.dataset.ready='true';playerId='';resetQueuePosition();playerSelect.disabled=true;updateBusyState();setConnection('Lyrion Music Server unavailable',false);scheduleReconnect()}finally{if(connection===connectionGeneration)connecting=false}}
 orderToggle.onclick=()=>orderMenu.hidden?openOrderMenu():closeOrderMenu();orderMenu.querySelectorAll('[data-order]').forEach(button=>button.onclick=()=>{closeOrderMenu();setDisplayOrder(button.dataset.order).catch(error=>{setConnection(error.message||'Could not change album order',false)}).finally(()=>{if(libraryRefreshPending)handleLibraryEvent()})});updateOrderToggle();
 previousTrack.onclick=()=>skipTrack(-1);nextTrack.onclick=()=>skipTrack(1);
@@ -2021,53 +2034,57 @@ stage.addEventListener('pointerup',event=>{
 stage.addEventListener('pointercancel',()=>{focusClickIndex=null},true);
 sourceButtons.forEach(button=>button.onclick=()=>setCatalogueSource(button.dataset.source,{manual:true}));updateSourceButtons();
 
-// Visual-only demonstration: browsing never plays or queues a track.
-// Each participant renders native animations and resolves stable album IDs.
-let demoActive=false, demoSceneGeneration=0;
+// Guided visual showcase: use real UI components, never any Play/Queue RPC.
+let demoActive=false,demoSceneGeneration=0,demoOriginalSource='',demoOriginalOrder='';
 const demoScenes=[
     {source:'library',fraction:.12,open:false},
     {source:'library',fraction:.32,open:false},
     {source:'library',fraction:.32,open:true},
-    {source:'library',fraction:.56,open:false},
-    {source:'library',fraction:.56,open:true},
-    {source:'spotify',fraction:.28,open:false},
+    {source:'library',fraction:.32,open:true},
+    {source:'library',fraction:.32,open:true},
+    {source:'library',fraction:.40,open:false,order:'album'},
+    {source:'library',fraction:.55,open:false,order:'artistAlbum'},
+    {source:'library',fraction:.77,open:false,order:'indexed'},
+    {source:'library',fraction:.25,open:false,random:true,order:'artistAlbum'},
+    {source:'library',fraction:.25,open:false,discovery:true},
+    {source:'library',fraction:.76,open:true,random:true},
+    {source:'library',fraction:.76,open:false,search:true},
+    {source:'library',fraction:.62,open:false},
     {source:'spotify',fraction:.28,open:true},
+    {source:'library',fraction:.68,open:false},
+    {source:'library',fraction:.54,open:false,fastNavigation:true},
     {source:'library',fraction:.78,open:true}
 ];
 const demoMode=createDemoMode({
     onActiveChange(value){
-        demoActive=value;
-        demoSceneGeneration++;
+        demoActive=value;demoSceneGeneration++;
         if(value){
-            clearTimeout(idleTimer);idleTimer=0;
-            clearSourceBrowseHold();
+            demoOriginalSource=catalogueSource;
+            demoOriginalOrder=orderMode;
+            clearTimeout(idleTimer);idleTimer=0;clearSourceBrowseHold();
             cancelFollowAnimation();pinnedRequest++;
-            closeAlbumMenu();closeOrderMenu();
+            closeAlbumMenu();closeOrderMenu();closeDiscoveryMenu();closeTrackList();
         }else{
-            cancelFollowAnimation();
-            clearSourceBrowseHold();
-            armIdleReturn();
+            cancelFollowAnimation();clearSourceBrowseHold();armIdleReturn();
         }
     },
     async prepareStep(step,remote){
         if(!demoActive)throw Error('Demo stopped');
         const scene=demoScenes[step];
         if(!scene)throw Error('Unknown demo scene');
-        // A host may switch to Spotify if available. Receiving viewers follow
-        // the host's selected source only within their own browsing session.
         const desired=remote?.source==='library'||remote?.source==='spotify'?
             remote.source:scene.source==='spotify'&&spottyAvailable===true?'spotify':'library';
-        if(desired!==catalogueSource){
-            await setCatalogueSource(desired,{manual:true,demo:true});
-        }
+        if(desired!==catalogueSource)await setCatalogueSource(desired,{manual:false,demo:true});
         if(!demoActive)throw Error('Demo stopped');
         let index=remote?.album_id!=null?indexForAlbumId(remote.album_id):-1;
         if(index<0&&remote?.album_id&&catalogueSource==='library'&&liveCatalogue)
             index=await locateAlbum(remote.album_id,false);
         if(index<0){
-            const valid=albums.map((album,i)=>album?.[13]!=='external'&&album?.[6]!=null?i:-1).filter(i=>i>=0);
+            const valid=albums.map((a,i)=>a?.[13]!=='external'&&a?.[6]!=null?i:-1).filter(i=>i>=0);
             if(!valid.length)throw Error('No albums available for demonstration');
-            index=valid[Math.round((valid.length-1)*scene.fraction)];
+            const pick=scene.random?Math.floor(Math.random()*valid.length):
+                Math.round((valid.length-1)*scene.fraction);
+            index=valid[pick];
         }
         const album=albums[index];
         if(!album||album[6]==null)throw Error('Demo album unavailable');
@@ -2076,21 +2093,86 @@ const demoMode=createDemoMode({
     async onStep(step,selection){
         if(!demoActive)return;
         const scene=demoScenes[step],request=demoSceneGeneration,albumId=selection.album_id;
+        if(!scene)return;
+        // Close previous presentation surfaces before the next animation.
+        closeAlbumMenu();closeOrderMenu();closeDiscoveryMenu();closeTrackList();fastNavigator.hide();
+        searchOverlay.hidden=true;
+        if(scene.order&&scene.order!==orderMode){
+            if(liveCatalogue||catalogueSource==='spotify'){
+                await setDisplayOrder(scene.order);
+            }else{
+                // The offline sample shelf has no prepared catalogue API.
+                albums=albums.filter(a=>a?.[13]!=='external').slice().sort((a,b)=>
+                    (scene.order==='album'?a[0]:a[1]).localeCompare(scene.order==='album'?b[0]:b[1]));
+                orderMode=desiredOrderMode=scene.order;
+                rebuildAlbumIndex();updateOrderToggle();renderAlbums();draw();
+            }
+        }
+        if(!demoActive||request!==demoSceneGeneration)return;
         let index=indexForAlbumId(albumId);
-        if(index<0)return;
-        // Even the "closed" scenes preserve a natural close animation.
-        // No synthetic clicks: on-screen interactions are ordinary Carousel UI.
+        if(index<0&&catalogueSource==='library'&&liveCatalogue)index=await locateAlbum(albumId,false);
+        if(index<0)return '.bf-stage';
+        const album=albums[index];
+        if(step===5||step===6||step===7){
+            await closeFrontPreview(true,true);
+            if(!demoActive||request!==demoSceneGeneration)return;
+            await scrollToAlbumIndex(index);
+            return '.bf-order-toggle';
+        }
+        if(step===8){
+            await closeFrontPreview(true,true);
+            if(!demoActive||request!==demoSceneGeneration)return;
+            await scrollToAlbumIndex(index);
+            return '.bf-random';
+        }
+        if(step===9){
+            openDiscoveryMenu();
+            return discoveryMenu.hidden?'.bf-random':'.bf-discovery-menu';
+        }
         if(!scene.open)await closeFrontPreview(true,true);
         if(!demoActive||request!==demoSceneGeneration)return;
         index=indexForAlbumId(albumId);
-        if(index<0)return;
+        if(index<0)return '.bf-stage';
         const arrived=await scrollToAlbumIndex(index);
         if(!demoActive||request!==demoSceneGeneration||!arrived)return;
         if(scene.open)openFrontPreview(albums[index],index,true);
+        if(scene.fastNavigation){
+            // The previous scene may have left an animated or pinned case.
+            // Force the demo onto the closed shelf before revealing the
+            // scrubber, then let the guide point to the unobstructed slider.
+            if(!showFastNavigation({keepOpen:true}))return '.bf-stage';
+            return '.bf-fast-nav-range';
+        }
+        if(step===3){
+            // Read-only LMS/Spotty metadata, never a playback action.
+            await showTrackList(albums[index]);
+            return '.bf-track-panel';
+        }
+        if(step===4){
+            const box=frontPreview.getBoundingClientRect();
+            await openAlbumMenu(albums[index],{clientX:box.left+box.width*.5,clientY:box.top+box.height*.5});
+            return '.bf-album-menu';
+        }
+        if(step===11){
+            searchOverlay.hidden=false;searchInput.value='';
+            searchStatus.textContent='Search albums or artists, or choose a letter';
+            return '.bf-search-open';
+        }
+        if(step===12||step===14)return '.bf-source-switch';
+        if(scene.open)return '.bf-front-case';
+        return '.bf-stage .bf-album[data-index="'+index+'"]';
     },
     onStop(){
-        // Keep the final cover visible for the camera. The ordinary preview
-        // timeout/idle behaviour resumes after the demo has been stopped.
+        fastNavigator.hide();closeAlbumMenu();closeOrderMenu();closeDiscoveryMenu();closeTrackList();searchOverlay.hidden=true;
+        // Put the user's own browsing choices back after the visual tour.
+        const source=demoOriginalSource,order=demoOriginalOrder;
+        if(source&&source!==catalogueSource){
+            void setCatalogueSource(source,{manual:false,demo:true})
+                .then(()=>{if(order&&order!==orderMode)return setDisplayOrder(order)})
+                .catch(error=>console.warn('Could not restore demo browsing source',error));
+        }else if(order&&order!==orderMode){
+            void setDisplayOrder(order).catch(error=>console.warn('Could not restore album order',error));
+        }
     }
 });
 

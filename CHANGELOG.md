@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Expand Demo Mode to a 17-scene visual feature tour including the newly merged fast navigator with a guided banner, responsive callouts and arrows; demonstrate album information, actions, sort choices, rediscovery, search and Spotify without starting music.
+
 - Add an 80%-width, shelf-centred translucent fast-scrub timeline hidden at rest; reveal after three quick swipes, five moderate swipes or eight sustained wheel events, or manually with N. Make circular scrub endpoints wrap first/last CDs by the shortest route; direct scrolling on CDs dismisses and suppresses the overlay until browsing pauses; selecting a CD hides the overlay immediately and resets accumulated gesture/wheel navigation history; Both alphabetical modes preserve native LMS order (`sort:artistalbum` and `sort:album`) and their A–Z `textkey` groups, respecting ARTISTSORT/ALBUMARTISTSORT and ALBUMSORT. Only the album ID and sort-key rank are cached separately from shared artwork metadata. Strengthen fast touch/mouse momentum and accelerate repeated mouse-wheel notches for 100+ CD libraries, preserving precise slow gestures, finite shelf bounds and visual-only navigation.
 
 - Dim the CD shelf and any open jewel case when the selected LMS player's power state is off; restore full brightness on power-on while leaving navigation and transport controls readable. Unknown power state is not treated as off.

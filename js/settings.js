@@ -179,8 +179,11 @@ async function loadVersion(signal){
     if(aboutBrowserVersion)aboutBrowserVersion.textContent=browserVersion;
     if(aboutBuildMatch){
         const comparable=browserVersion!=='development'&&!!serverVersion;
+        const matched=comparable&&browserVersion===serverVersion;
         aboutBuildMatch.textContent=!comparable?'Not verified (source/browser not stamped)':
-            browserVersion===serverVersion?'Matched':'Different builds — reload this page';
+            matched?'Matched':'Different builds — reload this page';
+        const card=root?.querySelector('.bf-about-build-card');
+        if(card)card.dataset.buildStatus=!comparable?'unknown':matched?'matched':'mismatch';
     }
 }
 function initialise(){shelfVariety.value=get(storage.shelfVariety,get('albumBrowserMultiDiscWidths','true'))==='false'?'false':'true';catalogueCodes.value=get(storage.catalogueCodes,'true')==='false'?'false':'true';coverSize.value=get(storage.coverSize,'512');idle.value=get(storage.idle,'30000');sourceBrowseTimeout.value=get(storage.sourceBrowseTimeout,'300000');newAlbumAction.value=['none','notify','preview'].includes(get(storage.newAlbumAction,'none'))?get(storage.newAlbumAction,'none'):'none';menuTimeout.value=get(storage.menuTimeout,'10000');frontTimeout.value=get(storage.frontTimeout,'10000');random.value=get(storage.random,'3000');displayCount.value=get(storage.displayCount,'30');cacheLimit.value=get(storage.cacheLimit,'512000000');window.__lyrionCarouselSettings={shelfVariety:shelfVariety.value,catalogueCodes:catalogueCodes.value,coverSize:Number(coverSize.value),idle:Number(idle.value),sourceBrowseTimeout:Number(sourceBrowseTimeout.value),newAlbumAction:newAlbumAction.value,menuTimeout:Number(menuTimeout.value),frontTimeout:Number(frontTimeout.value),random:Number(random.value),displayCount:Number(displayCount.value)};return loadVersion()}

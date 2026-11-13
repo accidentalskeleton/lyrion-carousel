@@ -91,10 +91,13 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
         cancelHide();
         if(opened&&!dragging)timer=setTimeout(hide,4200);
     }
-    function show(){
+    function show({keepOpen=false}={}){
         if(state().total<2)return;
         opened=true;shell.hidden=false;
-        render();armHide();
+        render();
+        // Demo Mode can hold the navigation control visible until its scene
+        // ends; user-invoked fast navigation retains the 4.2-second timeout.
+        if(keepOpen)cancelHide();else armHide();
     }
     function commit(value,final){
         const current=state(),index=scrubAlbumIndex(value,current.total,current.circular);

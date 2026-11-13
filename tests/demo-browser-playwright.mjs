@@ -110,16 +110,120 @@ try{
     if(await page.locator('.bf-fast-navigator').isVisible())
         throw Error('CD pointerdown must immediately hide fast navigation: '+JSON.stringify(cdClick));
     await page.mouse.up();
+    // The prior press only tested navigator dismissal and may occur while
+    // shelf momentum is still settling (which correctly ignores album
+    // selection). Perform a separate, deliberate click after the shelf stops.
+    await page.waitForTimeout(650);
+    const caseTarget=await page.evaluate(()=>{
+        const stage=document.querySelector('.bf-stage');
+        for(const album of stage.querySelectorAll('.bf-album')){
+            const box=album.getBoundingClientRect();
+            for(const fraction of [.25,.5,.75]){
+                const x=box.left+box.width/2,y=box.top+box.height*fraction;
+                if(document.elementFromPoint(x,y)?.closest('.bf-album')===album)
+                    return {x,y,index:album.dataset.index};
+            }
+        }
+        return null;
+    });
+    if(!caseTarget)throw Error('No accessible CD available to open before fast navigation');
+    await page.mouse.click(caseTarget.x,caseTarget.y);
+    await page.waitForFunction(()=>
+        document.querySelector('.bf-front-preview')?.hidden===false,null,{timeout:3000});
+    // Reopening fast navigation must close this confirmed-open case FIRST;
+    // simply raising its z-index would hide the underlying state bug.
+    await page.keyboard.press('n');
+    const shelfOnly=await page.evaluate(()=>{
+        const cover=document.querySelector('.bf-front-preview');
+        const navigator=document.querySelector('.bf-fast-navigator');
+        return {coverClosed:cover.hidden,caseOpening:cover.dataset.opening,
+            navVisible:!navigator.hidden,
+            coverDisplayed:getComputedStyle(cover).display};
+    });
+    if(!shelfOnly.coverClosed||!shelfOnly.navVisible||shelfOnly.caseOpening==='true')
+        throw Error('Fast navigator must appear on closed CD shelf, not underneath open case: '+JSON.stringify(shelfOnly));
+    await page.locator('.bf-fast-nav-close').click();
+    // Test the real overlay positioner against large functional surfaces.
+    // No screenshot heuristics: use measured rectangles across screen sizes.
+    for(const viewport of [{width:1280,height:720},{width:1024,height:768},{width:600,height:700}]){
+        await page.setViewportSize(viewport);
+        const geometry=await page.evaluate(async()=>{
+            const {createDemoGuide}=await import('/js/demo-guide.js');
+            const root=document.querySelector('#book-fan-browser');
+            const dialog=root.querySelector('.bf-track-overlay');
+            const search=root.querySelector('.bf-search-overlay');
+            const guide=createDemoGuide(root);
+            const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+            const overlap=(a,b)=>{
+                if(!a||!b)return 0;
+                const x=Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left));
+                const y=Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+                return x*y;
+            };
+            const snapshot=(selector)=>{
+                const card=root.querySelector('.bf-demo-callout');
+                const panel=root.querySelector(selector);
+                return {popup:selector,compact:root.querySelector('.bf-demo-guide').dataset.compact,
+                    calloutHidden:card.hidden,captionVisible:!root.querySelector('.bf-demo-banner-note').hidden,
+                    overlap:card.hidden?0:overlap(card.getBoundingClientRect(),panel.getBoundingClientRect())};
+            };
+            try{
+                dialog.hidden=false;
+                guide.start();guide.show(3,'.bf-track-panel');
+                await sleep(650);
+                const information=snapshot('.bf-track-panel');
+                dialog.hidden=true;
+                search.hidden=false;
+                guide.show(11,'.bf-search-panel');
+                await sleep(650);
+                const searching=snapshot('.bf-search-panel');
+                return {information,searching};
+            }finally{
+                guide.stop();dialog.hidden=true;search.hidden=true;
+            }
+        });
+        for(const result of Object.values(geometry)){
+            if(result.overlap>0)
+                throw Error('Guided annotation overlaps '+result.popup+' at '+viewport.width+': '+JSON.stringify(result));
+            if(result.compact==='true'&&(!result.calloutHidden||!result.captionVisible))
+                throw Error('Compact banner must replace obstructing callout at '+viewport.width+': '+JSON.stringify(result));
+        }
+    }
+    await page.setViewportSize({width:1280,height:720});
     await page.locator('.bf-settings-open').click();
+    await page.locator('#settings-tab-about').click();
+    const about=await page.locator('#settings-panel-about').evaluate(panel=>({
+        groups:[...panel.querySelectorAll('.bf-about-section')].map(x=>x.querySelector('h3')?.textContent),
+        buildCards:panel.querySelectorAll('.bf-about-build-card').length,
+        browserBuild:panel.querySelector('.bf-about-build-card .bf-about-browser-version')!==null,
+        serverBuild:panel.querySelector('.bf-about-build-card .bf-about-version')!==null,
+        buildStatus:panel.querySelector('.bf-about-build-card .bf-about-build-match')!==null
+    }));
+    if(JSON.stringify(about.groups)!==JSON.stringify(['Connection & library','Application & build','Project','Release updates'])||
+        about.buildCards!==1||!about.browserBuild||!about.serverBuild||!about.buildStatus)
+        throw Error('About sections and combined build panel incorrect: '+JSON.stringify(about));
     await page.locator('#settings-tab-demo').click();
     if(!await page.locator('.bf-demo-local').isVisible())throw Error('Local demo button unavailable');
     await page.locator('.bf-demo-local').click();
     await page.waitForFunction(()=>document.querySelector('#book-fan-browser')?.dataset.demoActive==='true',{timeout:5000});
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1000);    await page.waitForFunction(()=>
+        document.querySelector('.bf-demo-guide')?.hidden===false&&
+        document.querySelector('.bf-demo-banner-progress')?.textContent.includes('Scene 1 of 17')&&
+        document.querySelector('.bf-demo-callout')?.hidden===false,null,{timeout:8000});
+    const annotations=await page.evaluate(()=>({
+        banner:document.querySelector('.bf-demo-banner')?.getBoundingClientRect().width,
+        title:document.querySelector('.bf-demo-callout-title')?.textContent,
+        arrow:document.querySelector('.bf-demo-arrow-path')?.getAttribute('d')
+    }));
+    if(!(annotations.banner>0&&annotations.title&&annotations.arrow?.startsWith('M ')))
+        throw Error('Guided callout/arrow missing: '+JSON.stringify(annotations));
+
     if(await page.locator('.bf-settings-overlay').isVisible())throw Error('Settings obscures the active demo');
     const point=await page.locator('.bf-stage').boundingBox();
     await page.mouse.click(point.x+point.width*.5,point.y+point.height*.5);
     await page.waitForFunction(()=>document.querySelector('#book-fan-browser')?.dataset.demoActive==='false',{timeout:5000});
+    if(await page.locator('.bf-demo-guide').isVisible())
+        throw Error('Demo guide remains on screen after stopping');
     if(errors.length)throw Error('Browser exceptions: '+errors.join(' | '));
     console.log('Local Demo Mode browser smoke test passed');
 }finally{await browser.close();}
