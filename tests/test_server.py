@@ -395,7 +395,7 @@ class ServerTests(unittest.TestCase):
         old=[{'id':1,'artist':'A','album':'Album','artwork_track_id':'a'}]
         self.handler.runtime_config={'lms_url':self.handler.lms_url}
         with patch.object(self.handler,'_catalogue_pages',return_value=iter([old])):
-            self.handler.path='/api/catalogue?order=album'
+            self.handler.path='/api/catalogue?order=artistAlbum'
             self.handler._serve_catalogue()
         server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
         with patch.object(self.handler,'_catalogue_pages',return_value=iter([old])):
@@ -528,25 +528,33 @@ class ServerTests(unittest.TestCase):
             {'id':2,'artist':'Radiohead','album':'OK Computer','textkey':'R'},
             {'id':3,'artist':'Chris Rea','album':'Road To Hell','textkey':'R'},
         ]
-        with patch.object(self.handler,'_catalogue_pages',return_value=iter([rows])) as pages:
+        def pages(genre_id=None,sort='artistalbum'):
+            return iter([rows if sort=='artistalbum' else [
+                dict(rows[1],textkey='O'),dict(rows[2],textkey='R'),
+                dict(rows[0],textkey='Z')]])
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages) as fetch:
             self.handler.path='/api/catalogue?order=artistAlbum'
             self.handler._serve_catalogue()
             self.handler.path='/api/catalogue?order=album'
             self.handler._serve_catalogue()
-        self.assertEqual(pages.call_count,1)
+        self.assertEqual(fetch.call_count,2)
+        self.assertEqual(fetch.call_args_list[0].kwargs,{})
+        self.assertEqual(fetch.call_args_list[1].kwargs,{'sort':'album'})
         self.assertEqual([a['id'] for a in json.loads(self.responses[0][1])['albums_loop']],[1,2,3],
                          'Artist order must preserve LMS sort keys, not visible first names')
         self.assertEqual([a['id'] for a in json.loads(self.responses[1][1])['albums_loop']],[2,3,1],
                          'Album order still sorts titles independently of LMS artist sort')
 
-    def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
-        # _catalogue_pages already returns this order from LMS artflow.
-        pages=[[{'id':2,'artist':'Alpha','album':'Zulu','artwork_track_id':'b'},
-                {'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'}]]
+    def test_catalogue_snapshot_reuses_native_lms_album_ranking(self):
+        # The base artistalbum page includes complete metadata. The first
+        # album-title switch fetches only a second native ID/textkey ranking.
+        artist_pages=[[{'id':2,'artist':'Alpha','album':'Zulu','artwork_track_id':'b','textkey':'A'},
+                       {'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a','textkey':'Z'}]]
+        album_pages=[[{'id':1,'textkey':'A'},{'id':2,'textkey':'Z'}]]
         calls=[]
-        def fetch_pages(genre_id=None):
-            calls.append(genre_id)
-            return iter(pages)
+        def fetch_pages(genre_id=None,sort='artistalbum'):
+            calls.append((genre_id,sort))
+            return iter(album_pages if sort=='album' else artist_pages)
         with patch.object(self.handler,'_catalogue_pages',side_effect=fetch_pages):
             self.handler.path='/api/catalogue?order=artistAlbum'
             self.handler._serve_catalogue()
@@ -554,18 +562,30 @@ class ServerTests(unittest.TestCase):
             self.handler._serve_catalogue()
             self.handler.path='/api/catalogue?order=artistAlbum'
             self.handler._serve_catalogue()
-        self.assertEqual(calls,[None])
-        self.assertEqual([a['id'] for a in json.loads(self.responses[0][1])['albums_loop']],[2,1])
-        self.assertEqual([a['id'] for a in json.loads(self.responses[1][1])['albums_loop']],[1,2])
+        self.assertEqual(calls,[(None,'artistalbum'),(None,'album')])
+        first=json.loads(self.responses[0][1])['albums_loop']
+        second=json.loads(self.responses[1][1])['albums_loop']
+        self.assertEqual([a['id'] for a in first],[2,1])
+        self.assertEqual([a['id'] for a in second],[1,2])
+        self.assertEqual([a['textkey'] for a in second],['A','Z'])
+        self.assertEqual(second[0]['artwork_track_id'],'a')
         self.assertEqual(self.responses[0][1],self.responses[2][1])
-        self.assertIsNotNone(self.stored_catalogue())
+        persisted=self.stored_catalogue()
+        self.assertEqual(persisted['lms_orders']['album']['ids'],['1','2'])
+        self.assertEqual(persisted['lms_orders']['album']['textkeys'],['A','Z'])
+        self.assertEqual([a['id'] for a in persisted['albums']],[2,1])
+        server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
+        with patch.object(self.handler,'_catalogue_pages',side_effect=AssertionError('Repeated LMS sort request')):
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,2])
 
     def test_recently_added_uses_lms_date_added_ranking_and_genre_exclusions(self):
         base=[{'id':1,'artist':'A','album':'Older'},
               {'id':2,'artist':'B','album':'Newest'},
               {'id':3,'artist':'C','album':'Middle'}]
         calls=[]
-        def pages(genre_id=None,sort='artflow'):
+        def pages(genre_id=None,sort='artistalbum')
             calls.append((genre_id,sort))
             if sort=='new':
                 return iter([[{'id':2},{'id':3},{'id':1}]])
@@ -579,7 +599,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual([row['id'] for row in response['albums_loop']],[2,1])
         self.assertEqual(response['library_count'],3)
         self.assertEqual(self.responses[0][1],self.responses[1][1])
-        self.assertEqual(calls,[(None,'artflow'),(None,'new')],
+        self.assertEqual(calls,[(None,'artistalbum'),(None,'new')],
                          'cached recently-added order must not repeatedly query LMS')
 
     def test_recently_indexed_is_distinct_from_native_recent_and_respects_genres(self):
@@ -587,7 +607,7 @@ class ServerTests(unittest.TestCase):
               {'id':2,'artist':'B','album':'New compilation'},
               {'id':3,'artist':'C','album':'New greatest hits'}]
         calls=[]
-        def pages(genre_id=None,sort='artflow'):
+        def pages(genre_id=None,sort='artistalbum')
             if sort=='new':
                 return iter([[{'id':1},{'id':2},{'id':3}]])
             return iter([base])
@@ -614,7 +634,7 @@ class ServerTests(unittest.TestCase):
     def test_snapshot_survives_memory_reset_and_recovers_when_invalidated(self):
         pages=[[{'id':1,'artist':'Z','album':'First'}]]
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)) as upstream:
-            self.handler.path='/api/catalogue?order=album'
+            self.handler.path='/api/catalogue?order=artistAlbum'
             self.handler._serve_catalogue()
         upstream.assert_called_once()
         key=self.handler._catalogue_snapshot_key()
@@ -632,8 +652,8 @@ class ServerTests(unittest.TestCase):
     def test_excluded_genres_are_indexed_once_and_persisted(self):
         albums=[{'id':i,'artist':'Artist','album':str(i)} for i in (1,2,3,4)]
         calls=[]
-        def pages(genre_id=None):
-            calls.append(genre_id)
+        def pages(genre_id=None,sort='artistalbum'):
+            calls.append((genre_id,sort))
             if genre_id is None:return iter([albums])
             if genre_id==7:return iter([[albums[1],albums[2]]])
             if genre_id==9:return iter([[albums[2]]])
@@ -644,7 +664,8 @@ class ServerTests(unittest.TestCase):
             self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],[1,4])
             self.handler.path='/api/catalogue?order=artistAlbum&exclude_genre_id=7&exclude_genre_id=9'
             self.handler._serve_catalogue()
-        self.assertEqual(calls,[None,7,9])
+        self.assertEqual(calls,[(None,'artistalbum'),(7,'artistalbum'),
+                                (None,'album'),(9,'artistalbum')])
         server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
         with patch.object(self.handler,'_catalogue_pages',side_effect=AssertionError('Unexpected genre rescan')):
             self.handler._serve_catalogue()
@@ -656,7 +677,7 @@ class ServerTests(unittest.TestCase):
                                  self.handler.lms_url, {'created':0,'version':-1})
         pages=[[{'id':5,'artist':'A','album':'Recovered'}]]
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
-            self.handler.path='/api/catalogue?order=album'
+            self.handler.path='/api/catalogue?order=artistAlbum'
             self.handler._serve_catalogue()
         self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['id'],5)
         self.assertEqual(self.stored_catalogue()['version'],server.CATALOGUE_SNAPSHOT_VERSION)
@@ -757,19 +778,21 @@ class ServerTests(unittest.TestCase):
             rebuilt=self.handler._load_catalogue_snapshot()
         self.assertEqual(rebuilt['recent_new_album_ids'],['12'])
 
-    def test_large_catalogue_sorting_does_not_rescan_upstream(self):
+    def test_large_catalogue_reuses_native_album_order_cache(self):
         rows=[{'id':i,'artist':f'Artist {i%79:03d}','album':f'Album {10000-i:05d}'}
               for i in range(10000)]
         calls=[]
-        def pages(genre_id=None):
-            calls.append(genre_id)
-            for start in range(0,len(rows),200):yield rows[start:start+200]
+        def pages(genre_id=None,sort='artistalbum'):
+            calls.append(sort)
+            items=sorted(rows,key=lambda a:a['album']) if sort=='album' else rows
+            for start in range(0,len(items),200):yield items[start:start+200]
         with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
             self.handler.path='/api/catalogue?order=artistAlbum'
             self.handler._serve_catalogue()
             self.handler.path='/api/catalogue?order=album'
             self.handler._serve_catalogue()
-        self.assertEqual(calls,[None])
+            self.handler._serve_catalogue()
+        self.assertEqual(calls,['artistalbum','album'])
         self.assertEqual(json.loads(self.responses[-1][1])['count'],10000)
         self.assertEqual(len(json.loads(self.responses[-1][1])['albums_loop']),10000)
 
@@ -1060,14 +1083,16 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(Image.open(io.BytesIO(self.responses[-1][1])).format,'JPEG')
 
     def test_server_catalogue_ordering(self):
-        albums=[{'id':1,'album':'Z','artist':'A','artwork_track_id':1},{'id':2,'album':'A','artist':'Z','artwork_track_id':2}]
-        for mode,expected in [('artistAlbum',[1,2]),('album',[2,1]),('colour',[2,1])]:
-            self.handler.path='/api/catalogue?order='+mode
-            response=io.BytesIO(json.dumps({'result':{'count':2,'albums_loop':albums}}).encode())
-            response.headers={}
-            with patch.object(server,'urlopen',return_value=response),patch.object(self.handler,'_artwork_metadata',side_effect=lambda i:{'colour_index':3-int(i)}):
-                self.handler._serve_catalogue()
-            self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],expected)
+        albums=[{'id':1,'album':'Z','artist':'A','artwork_track_id':1},
+                {'id':2,'album':'A','artist':'Z','artwork_track_id':2}]
+        def pages(genre_id=None,sort='artistalbum'):
+            return iter([list(reversed(albums)) if sort=='album' else albums])
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            for mode,expected in [('artistAlbum',[1,2]),('album',[2,1]),('colour',[2,1])]:
+                self.handler.path='/api/catalogue?order='+mode
+                with patch.object(self.handler,'_artwork_metadata',side_effect=lambda i:{'colour_index':3-int(i)}):
+                    self.handler._serve_catalogue()
+                self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],expected)
 
     def test_server_catalogue_excludes_requested_genres(self):
         albums=[{'id':1,'album':'Keep','artist':'A'},{'id':2,'album':'Hide','artist':'B'}]
