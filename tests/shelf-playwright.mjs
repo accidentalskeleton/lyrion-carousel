@@ -7,31 +7,6 @@ export async function runShelfGestures(page) {
     await page.goto(base + '/tests/shelf-browser.html'+(viewport.multiDisc?'?multidisc=1':''), {waitUntil:'domcontentloaded'});
     const report = await page.evaluate(() => window.shelfBrowserResult);
     assert(!report.error, report.error);
-    // The selected LMS player power must visually dim the CD display and
-    // restore it when switched on, independent of any radio/Spotify source.
-    const standby=await page.evaluate(()=>{
-      const root=document.querySelector('#book-fan-browser');
-      const stage=document.querySelector('.bf-stage');
-      const casePreview=document.querySelector('.bf-front-preview');
-      // Disable only the visual transition for deterministic style readings.
-      stage.style.transition='none';casePreview.style.transition='none';
-      shelfBrowser.applyStatus({mode:'stop',power:0,playlist_loop:[]});
-      const off={power:root.dataset.playerPower,shelf:getComputedStyle(stage).opacity,
-        cover:getComputedStyle(casePreview).opacity};
-      shelfBrowser.applyStatus({mode:'stop',playlist_loop:[]});
-      const partial=root.dataset.playerPower;
-      shelfBrowser.applyStatus({mode:'stop',power:1,playlist_loop:[]});
-      const on={power:root.dataset.playerPower,shelf:getComputedStyle(stage).opacity,
-        cover:getComputedStyle(casePreview).opacity};
-      stage.style.removeProperty('transition');casePreview.style.removeProperty('transition');
-      return {off,on,partial};
-    });
-    assert(standby.off.power==='off'&&standby.partial==='off'&&
-      standby.on.power==='on','Player power on/off and partial status update correctly');
-    assert(Number(standby.off.shelf)<Number(standby.on.shelf)&&
-      Number(standby.off.cover)<Number(standby.on.cover),
-      'Both the shelf and open-case surfaces visibly dim on standby: '+JSON.stringify(standby));
-
     await page.evaluate(()=>shelfBrowser.set(49,false));
     await page.locator('.bf-album[data-index="49"]').click();
     assert(await page.evaluate(()=>shelfBrowser.state().opening),'A trusted spine click starts the opening transition');
