@@ -1,3 +1,4 @@
+import { createDemoMode } from './demo-mode.js?v=1';
 import { rpc, CometDClient, resetRpcSession } from './lms.js?v=source-sync-1';
 import { buildAlbumPositionIndex, locateAlbum as locateIndexedAlbum } from './catalogue.js?v=display-choice-1';
 import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPosition } from './browser.js?v=display-choice-1';
@@ -316,7 +317,7 @@ async function resolveSpotifyPlayingAlbum(){
     }catch(_){/* Keep playback independent of a temporary Spotty lookup failure. */}
 }
 
-async function followPlayingSource(){
+async function followPlayingSource(){if(demoActive)return;
     if(!hasPlaybackAlbum()||!playerId||!['library','spotify'].includes(playingSource))return;
     if(catalogueSource===playingSource){sourceFollowAttempt='';await resolveSpotifyPlayingAlbum();return}
     if(sourceBrowseHeld())return;
@@ -810,7 +811,7 @@ function isPlayingCoverPinned(){
         (frontPreviewAlbum[6]!=null&&current[6]!=null&&
         String(frontPreviewAlbum[6])===String(current[6])));
 }
-async function ensurePlayingCover(){
+async function ensurePlayingCover(){if(demoActive)return;
     syncExternalShelf();
     const request=++pinnedRequest,id=playingAlbumId,generation=catalogueGeneration;
     frontPreview.dataset.pinned=String(isPlayingCoverPinned());
@@ -1374,8 +1375,8 @@ function scrollToAlbumIndex(index,allowPointerMovement=false){
     });
 }
 function armIdleReturn(delayOverride=null){clearTimeout(idleTimer);if(IDLE_RETURN_MS<=0)return;const elapsed=Date.now()-lastActivityAt,delay=delayOverride===null?Math.max(0,IDLE_RETURN_MS-elapsed):delayOverride;idleTimer=setTimeout(()=>returnToPlayingAlbum(),delay)}
-function noteUserActivity(event){if(!discoveryBusy&&!(event?.type==='pointermove'&&followAnimation?.allowPointerMovement))cancelFollowAnimation();if(sourceBrowseHeld())armSourceBrowseHold();lastActivityAt=Date.now();idleReturnAlbumId=null;armIdleReturn()}
-async function returnToPlayingAlbum(immediate=false){
+function noteUserActivity(event){if(demoActive)return;if(!discoveryBusy&&!(event?.type==='pointermove'&&followAnimation?.allowPointerMovement))cancelFollowAnimation();if(sourceBrowseHeld())armSourceBrowseHold();lastActivityAt=Date.now();idleReturnAlbumId=null;armIdleReturn()}
+async function returnToPlayingAlbum(immediate=false){if(demoActive)return;
     clearTimeout(idleTimer);idleTimer=0;
     if(!immediate&&Date.now()-lastActivityAt<IDLE_RETURN_MS){armIdleReturn();return}
     if(randomAnimating||discoveryBusy||dragging||orderBusy||libraryRefreshing||root.querySelector('.bf-settings-overlay:not([hidden])')||!searchOverlay.hidden||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden){clearTimeout(idleTimer);idleTimer=setTimeout(()=>returnToPlayingAlbum(immediate),1000);return}
@@ -1859,4 +1860,51 @@ stage.addEventListener('pointerup',event=>{
 },true);
 stage.addEventListener('pointercancel',()=>{focusClickIndex=null},true);
 sourceButtons.forEach(button=>button.onclick=()=>setCatalogueSource(button.dataset.source,{manual:true}));updateSourceButtons();
+
+// Visual-only demonstration controls. No method below calls LMS playlist,
+// transport, power or play APIs. Step numbers are stable across browsers;
+// each viewer resolves them against its own shelf and screen size.
+let demoActive=false, demoPreviousSource='library';
+const demoMode=createDemoMode({
+    onActiveChange(value){
+        demoActive=value;
+        if(value){
+            demoPreviousSource=catalogueSource;
+            clearTimeout(idleTimer);idleTimer=0;
+            clearSourceBrowseHold();
+            cancelFollowAnimation();
+            pinnedRequest++;
+            closeAlbumMenu();closeOrderMenu();
+        }else{
+            cancelFollowAnimation();
+            armIdleReturn();
+        }
+    },
+    async onStep(step){
+        if(!demoActive||!albums.length)return;
+        const scene=[
+            {fraction:0.12,open:false},
+            {fraction:0.32,open:false},
+            {fraction:0.32,open:true},
+            {fraction:0.56,open:false},
+            {fraction:0.56,open:true},
+            {fraction:0.74,open:false},
+            {fraction:0.86,open:false},
+            {fraction:0.86,open:true}
+        ][step];
+        if(!scene)return;
+        const id=catalogueGeneration;
+        // Close without requesting the pinned playback cover to reopen.
+        if(!scene.open)await closeFrontPreview(true,true);
+        if(!demoActive||catalogueGeneration!==id)return;
+        const index=Math.max(0,Math.min(albums.length-1,Math.round((albums.length-1)*scene.fraction)));
+        const arrived=await scrollToAlbumIndex(index);
+        if(!demoActive||catalogueGeneration!==id||!arrived)return;
+        if(scene.open)openFrontPreview(albums[index],index,true);
+    },
+    onStop(){
+        void closeFrontPreview(true,true);
+    }
+});
+
 async function start(){await window.__lyrionLmsConfigReady;await loadRuntimeConfig();await seedObservedLibraryRevision();try{catalogueSource=localStorage.getItem('albumBrowserSource')==='spotify'?'spotify':'library'}catch(_){}updateSourceButtons();appStarted=true;setConnection('Connecting to Lyrion Music Server…',false);connectLyrion()}start();
