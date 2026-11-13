@@ -255,7 +255,7 @@ function armSourceBrowseHold(){
     scheduleSourceBrowseExpiry();
 }
 
-async function setCatalogueSource(source,{manual=false}={}){
+async function setCatalogueSource(source,{manual=false,demo=false}={}){
     if(source==='spotify'&&spottyAvailable===false)return;
     if(orderBusy||libraryRefreshing)return;
     if(source===catalogueSource){
@@ -273,7 +273,7 @@ async function setCatalogueSource(source,{manual=false}={}){
         // A source switch replaces the catalogue, so resolve Now Playing again
         // against the newly loaded source. If that album exists here, move
         // straight to it and open/pin its jewel case.
-        if(hasPlaybackAlbum()){
+        if(hasPlaybackAlbum()&&!demo){
             let i=playingCarouselIndex();
             if(i<0&&catalogueSource==='library'&&playingAlbumId)i=await locateAlbum(playingAlbumId,false);
             if(i>=0){
@@ -1861,49 +1861,76 @@ stage.addEventListener('pointerup',event=>{
 stage.addEventListener('pointercancel',()=>{focusClickIndex=null},true);
 sourceButtons.forEach(button=>button.onclick=()=>setCatalogueSource(button.dataset.source,{manual:true}));updateSourceButtons();
 
-// Visual-only demonstration controls. No method below calls LMS playlist,
-// transport, power or play APIs. Step numbers are stable across browsers;
-// each viewer resolves them against its own shelf and screen size.
-let demoActive=false, demoPreviousSource='library';
+// Visual-only demonstration: browsing never plays or queues a track.
+// Each participant renders native animations and resolves stable album IDs.
+let demoActive=false, demoSceneGeneration=0;
+const demoScenes=[
+    {source:'library',fraction:.12,open:false},
+    {source:'library',fraction:.32,open:false},
+    {source:'library',fraction:.32,open:true},
+    {source:'library',fraction:.56,open:false},
+    {source:'library',fraction:.56,open:true},
+    {source:'spotify',fraction:.28,open:false},
+    {source:'spotify',fraction:.28,open:true},
+    {source:'library',fraction:.78,open:true}
+];
 const demoMode=createDemoMode({
     onActiveChange(value){
         demoActive=value;
+        demoSceneGeneration++;
         if(value){
-            demoPreviousSource=catalogueSource;
             clearTimeout(idleTimer);idleTimer=0;
             clearSourceBrowseHold();
-            cancelFollowAnimation();
-            pinnedRequest++;
+            cancelFollowAnimation();pinnedRequest++;
             closeAlbumMenu();closeOrderMenu();
         }else{
             cancelFollowAnimation();
+            clearSourceBrowseHold();
             armIdleReturn();
         }
     },
-    async onStep(step){
-        if(!demoActive||!albums.length)return;
-        const scene=[
-            {fraction:0.12,open:false},
-            {fraction:0.32,open:false},
-            {fraction:0.32,open:true},
-            {fraction:0.56,open:false},
-            {fraction:0.56,open:true},
-            {fraction:0.74,open:false},
-            {fraction:0.86,open:false},
-            {fraction:0.86,open:true}
-        ][step];
-        if(!scene)return;
-        const id=catalogueGeneration;
-        // Close without requesting the pinned playback cover to reopen.
+    async prepareStep(step,remote){
+        if(!demoActive)throw Error('Demo stopped');
+        const scene=demoScenes[step];
+        if(!scene)throw Error('Unknown demo scene');
+        // A host may switch to Spotify if available. Receiving viewers follow
+        // the host's selected source only within their own browsing session.
+        const desired=remote?.source==='library'||remote?.source==='spotify'?
+            remote.source:scene.source==='spotify'&&spottyAvailable===true?'spotify':'library';
+        if(desired!==catalogueSource){
+            await setCatalogueSource(desired,{manual:true,demo:true});
+        }
+        if(!demoActive)throw Error('Demo stopped');
+        let index=remote?.album_id!=null?indexForAlbumId(remote.album_id):-1;
+        if(index<0&&remote?.album_id&&catalogueSource==='library'&&liveCatalogue)
+            index=await locateAlbum(remote.album_id,false);
+        if(index<0){
+            const valid=albums.map((album,i)=>album?.[13]!=='external'&&album?.[6]!=null?i:-1).filter(i=>i>=0);
+            if(!valid.length)throw Error('No albums available for demonstration');
+            index=valid[Math.round((valid.length-1)*scene.fraction)];
+        }
+        const album=albums[index];
+        if(!album||album[6]==null)throw Error('Demo album unavailable');
+        return {source:catalogueSource,album_id:String(album[6])};
+    },
+    async onStep(step,selection){
+        if(!demoActive)return;
+        const scene=demoScenes[step],request=demoSceneGeneration,albumId=selection.album_id;
+        let index=indexForAlbumId(albumId);
+        if(index<0)return;
+        // Even the "closed" scenes preserve a natural close animation.
+        // No synthetic clicks: on-screen interactions are ordinary Carousel UI.
         if(!scene.open)await closeFrontPreview(true,true);
-        if(!demoActive||catalogueGeneration!==id)return;
-        const index=Math.max(0,Math.min(albums.length-1,Math.round((albums.length-1)*scene.fraction)));
+        if(!demoActive||request!==demoSceneGeneration)return;
+        index=indexForAlbumId(albumId);
+        if(index<0)return;
         const arrived=await scrollToAlbumIndex(index);
-        if(!demoActive||catalogueGeneration!==id||!arrived)return;
+        if(!demoActive||request!==demoSceneGeneration||!arrived)return;
         if(scene.open)openFrontPreview(albums[index],index,true);
     },
     onStop(){
-        void closeFrontPreview(true,true);
+        // Keep the final cover visible for the camera. The ordinary preview
+        // timeout/idle behaviour resumes after the demo has been stopped.
     }
 });
 
