@@ -1260,7 +1260,11 @@ function showNewAlbumToast(message){
 function canPreviewNewAlbum(){
     // Passive catalogue events never steal an active user's place, change
     // source, interrupt radio, or replace an explicitly opened cover.
-    return catalogueSource==='library'&&playingSource!=='external'&&!sourceBrowseHeld()&&
+    // A manual Library source hold prevents automatic Library/Spotify
+    // switching, not an explicitly opted-in new-CD preview on this same
+    // Library shelf. Recent interaction (15s) and open menus still protect
+    // active browsing.
+    return catalogueSource==='library'&&playingSource!=='external'&&
         Date.now()-lastActivityAt>=15000&&
         !randomAnimating&&!discoveryBusy&&!dragging&&!orderBusy&&!sourceFollowPending&&
         !root.querySelector('.bf-settings-overlay:not([hidden])')&&
