@@ -261,7 +261,7 @@ async function setCatalogueSource(source,{manual=false,demo=false}={}){
     if(source==='spotify'&&spottyAvailable===false)return;
     if(orderBusy||libraryRefreshing)return;
     if(source===catalogueSource){
-        if(manual){armSourceBrowseHold();if(MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
+        if(manual&&!demo){armSourceBrowseHold();if(MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
         return;
     }
     // Set the hold *before* loading the other catalogue, preventing live
@@ -298,7 +298,7 @@ async function setCatalogueSource(source,{manual=false,demo=false}={}){
         }
     }
     catch(error){catalogueSource=previous;desiredOrderMode=previousDesired;if(manual){clearSourceBrowseHold();if(oldDeadline>performance.now()){sourceBrowseDeadline=oldDeadline;scheduleSourceBrowseExpiry()}}updateSourceButtons();setConnection(error.message||'Could not change music source',false)}
-    finally{updateSourceButtons();updateBusyState();if(manual&&MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
+    finally{updateSourceButtons();updateBusyState();if(manual&&!demo&&MANUAL_SOURCE_IDLE_MS===0)void followPlayingSource()}
 }
 
 // Each browser has its own catalogue view, but playback belongs to the shared
@@ -384,7 +384,7 @@ async function setDisplayOrder(mode){
         const nextIndex=playingIndex>=0?playingIndex:selected!=null?indexForAlbumId(selected):selectedIndex();
         if(nextIndex>=0)position=target=shelfPosition(nextIndex);
         hoveredAlbumIndex=-1;lastSelected=-1;renderAlbums();draw();
-        if(playingIndex>=0){openFrontPreview(albums[playingIndex],playingIndex);target=nearestPositionForIndex(playingIndex);schedule()}
+        if(playingIndex>=0&&!demoActive){openFrontPreview(albums[playingIndex],playingIndex);target=nearestPositionForIndex(playingIndex);schedule()}
         if(mode==='colour')setConnection(albumCountLabel()+' · colour order',true);
     }finally{
         if(generation===catalogueGeneration){
@@ -393,7 +393,7 @@ async function setDisplayOrder(mode){
             else if(libraryRefreshPending&&!libraryRefreshing&&!randomAnimating){
                 handleLibraryEvent();
             }
-            if(hasPlaybackAlbum()&&playingSource!==catalogueSource)void followPlayingSource();
+            if(!demoActive&&hasPlaybackAlbum()&&playingSource!==catalogueSource)void followPlayingSource();
         }
     }
 }
