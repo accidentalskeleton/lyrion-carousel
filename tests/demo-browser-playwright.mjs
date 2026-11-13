@@ -9,6 +9,28 @@ try{
     page.on('pageerror',error=>errors.push(error.message));
     await page.goto(url,{waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>document.querySelector('#book-fan-browser')?.dataset.ready==='true',{timeout:15000});
+    // Exercise actual rendered CD surfaces, not the synthetic shelf-geometry
+    // harness (which deliberately starts with its front case hidden).
+    const dim=await page.evaluate(()=>{
+        const root=document.querySelector('#book-fan-browser');
+        const shelf=root.querySelector('.bf-stage');
+        const cover=root.querySelector('.bf-front-preview');
+        const hidden=cover.hidden,visible=cover.dataset.visible;
+        const previous=root.dataset.playerPower;
+        shelf.style.transition='none';cover.style.transition='none';
+        cover.hidden=false;cover.dataset.visible='true';
+        root.dataset.playerPower='off';
+        const off=[Number(getComputedStyle(shelf).opacity),Number(getComputedStyle(cover).opacity)];
+        root.dataset.playerPower='on';
+        const on=[Number(getComputedStyle(shelf).opacity),Number(getComputedStyle(cover).opacity)];
+        root.dataset.playerPower=previous||'unknown';
+        cover.hidden=hidden;
+        if(visible===undefined)delete cover.dataset.visible;else cover.dataset.visible=visible;
+        shelf.style.removeProperty('transition');cover.style.removeProperty('transition');
+        return {off,on};
+    });
+    if(!(dim.off[0]<dim.on[0]&&dim.off[1]<dim.on[1]))
+        throw Error('Power-off CD shelf/case opacity regression: '+JSON.stringify(dim));
     await page.locator('.bf-settings-open').click();
     await page.locator('#settings-tab-demo').click();
     if(!await page.locator('.bf-demo-local').isVisible())throw Error('Local demo button unavailable');
