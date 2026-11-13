@@ -953,3 +953,44 @@ body {
 #book-fan-browser[data-player-power="off"][data-external-playback="true"] .bf-front-preview[data-pinned="true"] {
     opacity:.30;
 }
+
+/* Contextual fast navigator: hidden until rapid/repeated browsing, centred
+   over the CD shelf itself (not the player controls). */
+.bf-fast-nav-anchor {
+    position:absolute; z-index:160; top:52px; right:0; bottom:82px; left:0;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none; color:#edf4ef;
+}
+.bf-fast-nav-close,.bf-fast-nav-letters button {
+    color:inherit; font:inherit; cursor:pointer; touch-action:manipulation;
+}
+.bf-fast-navigator {
+    pointer-events:none; width:80%; box-sizing:border-box;
+    padding:11px 16px 12px; border:1px solid rgba(166,218,186,.46);
+    border-radius:14px; background:rgba(13,27,25,.86);
+    box-shadow:0 12px 36px rgba(0,0,0,.55);
+    backdrop-filter:blur(13px); -webkit-backdrop-filter:blur(13px);
+    display:flex; flex-direction:column; gap:8px;
+}
+.bf-fast-navigator[hidden] {display:none!important}
+/* The panel frame lets pointer/wheel gestures reach CDs underneath;
+   only real controls intercept input. */
+.bf-fast-nav-range,.bf-fast-nav-close,.bf-fast-nav-letters button {pointer-events:auto}
+.bf-fast-nav-heading {display:flex;align-items:center;gap:10px;min-width:0}
+.bf-fast-nav-label {flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.bf-fast-nav-count {font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums;color:#b5d4c4}
+.bf-fast-nav-close {background:none;border:0;padding:0 2px;font-size:22px;line-height:1.1}
+.bf-fast-nav-range {display:block;width:100%;margin:4px 0 1px;cursor:ew-resize;accent-color:#9bcbb2;touch-action:none}
+.bf-fast-nav-letters {display:flex;justify-content:space-between;gap:0;overflow-x:auto;scrollbar-width:thin}
+.bf-fast-nav-letters[hidden] {display:none!important}
+.bf-fast-nav-letters button {flex:1 0 auto;min-width:18px;min-height:27px;background:none;border:0;border-radius:4px;font-size:10px;padding:3px 1px}
+.bf-fast-nav-letters button:hover,.bf-fast-nav-letters button:focus-visible {background:rgba(155,203,178,.24)}
+.bf-fast-navigator :focus-visible {outline:2px solid #a7ddbd;outline-offset:2px}
+@media(max-width:560px) {
+    .bf-fast-nav-anchor {top:42px;bottom:62px}
+    .bf-fast-navigator {width:80%;padding:8px 10px}
+    .bf-fast-nav-letters button {min-width:19px}
+}
+@media(prefers-reduced-motion:reduce) {
+    .bf-fast-navigator {backdrop-filter:none;-webkit-backdrop-filter:none}
+}

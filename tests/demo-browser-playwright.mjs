@@ -31,6 +31,85 @@ try{
     });
     if(!(dim.off[0]<dim.on[0]&&dim.off[1]<dim.on[1]))
         throw Error('Power-off CD shelf/case opacity regression: '+JSON.stringify(dim));
+    // Fast scrubber is contextual, shelf-centred and never occupies player space.
+    if(await page.locator('.bf-fast-navigator').isVisible())
+        throw Error('Fast navigator must start hidden');
+    if(await page.locator('.bf-fast-nav-toggle').count())
+        throw Error('Permanent Navigate pill should not exist');
+    for(const viewport of [{width:2560,height:720},{width:1024,height:768},{width:1280,height:720}]){
+        await page.setViewportSize(viewport);
+        await page.keyboard.press('n');
+        const state=await page.evaluate(()=>{
+            const panel=document.querySelector('.bf-fast-navigator');
+            const stage=document.querySelector('.bf-stage');
+            const screen=document.querySelector('.bf-screen');
+            const r=panel.getBoundingClientRect(),s=screen.getBoundingClientRect(),shelf=stage.getBoundingClientRect();
+            return {visible:!panel.hidden,within:r.left>=s.left-1&&r.right<=s.right+1&&
+                r.top>=s.top-1&&r.bottom<=s.bottom+1,
+                centred:Math.abs((r.top+r.bottom)/2-(shelf.top+shelf.bottom)/2)<4,
+                widthRatio:r.width/shelf.width};
+        });
+        if(!state.visible||!state.within||!state.centred||Math.abs(state.widthRatio-.8)>.015)
+            throw Error('Fast navigator must be centred and 80% of shelf width at '+viewport.width+': '+JSON.stringify(state));
+        const range=await page.locator('.bf-fast-nav-range').evaluate(input=>({min:Number(input.min),max:Number(input.max)}));
+        if(range.min!==-1||range.max!==5)
+            throw Error('Circular shelf requires wrap endpoints: '+JSON.stringify(range));
+        for(const [value,label] of [[4,'5 / 5'],[5,'1 / 5'],[-1,'5 / 5']]){
+            await page.locator('.bf-fast-nav-range').evaluate((input,value)=>{
+                input.value=String(value);
+                input.dispatchEvent(new Event('input',{bubbles:true}));
+                input.dispatchEvent(new Event('change',{bubbles:true}));
+            },value);
+            if(!(await page.locator('.bf-fast-nav-count').textContent())?.includes(label))
+                throw Error('Circular scrub seam '+value+' did not select '+label);
+        }
+        // Scrolling the CD shelf itself dismisses the floating navigator.
+        await page.locator('.bf-stage').evaluate(stage=>
+            stage.dispatchEvent(new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true})));
+        if(await page.locator('.bf-fast-navigator').isVisible())
+            throw Error('Direct CD wheel browsing must hide fast navigation');
+        await page.keyboard.press('n');
+        const bounds=await page.locator('.bf-stage').boundingBox();
+        // Begin outside the slider/letter hit targets; those are intentionally
+        // interactive even though the rest of the panel lets CD input through.
+        const startX=bounds.x+bounds.width*.04,startY=bounds.y+bounds.height*.55;
+        const hit=await page.evaluate(({x,y})=>{
+            const element=document.elementFromPoint(x,y);
+            return {name:element?.className||'',insideNavigator:!!element?.closest('.bf-fast-navigator')};
+        },{x:startX,y:startY});
+        if(hit.insideNavigator)throw Error('CD drag start intercepted by navigator: '+JSON.stringify(hit));
+        await page.mouse.move(startX,startY);
+        await page.mouse.down();
+        await page.mouse.move(startX+95,startY,{steps:5});
+        await page.mouse.up();
+        if(await page.locator('.bf-fast-navigator').isVisible())
+            throw Error('Direct CD pointer scrolling must hide fast navigation; hit='+JSON.stringify(hit));
+    }
+    // An actual pointer press on a CD closes the overlay immediately,
+    // without requiring a drag or waiting for the case animation.
+    await page.setViewportSize({width:1280,height:720});
+    await page.keyboard.press('n');
+    if(!await page.locator('.bf-fast-navigator').isVisible())
+        throw Error('Fast navigation could not be opened for CD-click test');
+    const cdClick=await page.evaluate(()=>{
+        const stage=document.querySelector('.bf-stage'),bounds=stage.getBoundingClientRect();
+        for(const album of stage.querySelectorAll('.bf-album')){
+            const rect=album.getBoundingClientRect();
+            for(const fraction of [.22,.52,.78]){
+                const x=rect.left+rect.width/2,y=rect.top+rect.height*fraction;
+                if(x<=bounds.left+4||x>=bounds.right-4||y<=bounds.top+4||y>=bounds.bottom-4)continue;
+                if(document.elementFromPoint(x,y)?.closest('.bf-album')===album)
+                    return {x,y,album:album.dataset.index};
+            }
+        }
+        return null;
+    });
+    if(!cdClick)throw Error('No directly clickable CD is visible for navigator dismissal test');
+    await page.mouse.move(cdClick.x,cdClick.y);
+    await page.mouse.down();
+    if(await page.locator('.bf-fast-navigator').isVisible())
+        throw Error('CD pointerdown must immediately hide fast navigation: '+JSON.stringify(cdClick));
+    await page.mouse.up();
     await page.locator('.bf-settings-open').click();
     await page.locator('#settings-tab-demo').click();
     if(!await page.locator('.bf-demo-local').isVisible())throw Error('Local demo button unavailable');

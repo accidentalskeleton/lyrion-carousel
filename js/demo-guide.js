@@ -99,7 +99,9 @@ export function createDemoGuide(root){
       typeof callout?.getBoundingClientRect==='function';
     function locate(){
         if(!active||!canMeasure())return;
-        const selected=root.querySelector(targetSelector)||
+        // The first animation frame may run before any scene target exists.
+        // An empty CSS selector throws; use a safe fallback until scene one.
+        const selected=(targetSelector?root.querySelector(targetSelector):null)||
           root.querySelector(DEMO_SCENES[currentStep]?.target||'.bf-stage');
         if(!selected||typeof selected.getBoundingClientRect!=='function')return;
         const outer=root.getBoundingClientRect(),anchor=selected.getBoundingClientRect();
