@@ -35,13 +35,15 @@ jobs:
       - name: Install Python test dependencies
         run: python -m pip install "Pillow>=10,<13"
       - name: Check Python syntax
-        run: python -m py_compile server.py indexed_order.py metadata_db.py tests/test_server.py tests/test_indexed_order.py tests/test_metadata_db.py
+        run: python -m py_compile server.py demo_sessions.py indexed_order.py metadata_db.py tests/test_demo_sessions.py tests/test_server.py tests/test_indexed_order.py tests/test_metadata_db.py
       - name: Check Raspberry Pi kiosk scripts
         run: |
           bash tests/test_pi_kiosk.sh
           bash tests/test_corsair_calibration.sh
       - name: Test JavaScript
-        run: node tests/regressions.mjs
+        run: |
+          node tests/regressions.mjs
+          node tests/demo-mode.mjs
       - name: Test Python
         run: python -W always::ResourceWarning -m unittest discover -s tests -p 'test_*.py'
       - name: Install browser test tools
