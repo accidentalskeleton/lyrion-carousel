@@ -2079,6 +2079,26 @@ export async function runTests(sources) {
   assert(api.sourceForTest()==='spotify'&&root.dataset.externalPlayback==='true'&&
     api.state().albums.some(a=>a?.[13]==='external'),
     'switching to radio dims the current shelf and adds exactly one temporary CD');
+  // Source switching rebuilds the catalogue. It must not silently discard
+  // the radio CD and wait for another (possibly absent) playerstatus update.
+  await settle(sourceButtonsForTest[0].onclick());
+  assert(api.sourceForTest()==='library'&&
+    api.state().albums.filter(a=>a?.[13]==='external').length===1&&
+    api.state().frontPreviewAlbum?.[13]==='external'&&!preview.hidden,
+    'manual switch to Library preserves and opens the current radio CD');
+  await settle(api.setDisplayOrder('album'));
+  assert(api.state().albums.filter(a=>a?.[13]==='external').length===1&&
+    api.state().frontPreviewAlbum?.[13]==='external',
+    'reordering the Library preserves the virtual radio CD');
+  await settle(sourceButtonsForTest[1].onclick());
+  assert(api.sourceForTest()==='spotify'&&
+    api.state().albums.filter(a=>a?.[13]==='external').length===1&&
+    api.state().frontPreviewAlbum?.[13]==='external',
+    'manual switch back to Spotify preserves and opens the radio CD');
+  await settle(api.setDisplayOrder('album'));
+  assert(api.state().albums.filter(a=>a?.[13]==='external').length===1,
+    'reordering Spotify never loses or duplicates the radio CD');
+
   api.applyStatus({mode:'play',playlist_loop:[{
     album_id:20,album:'Album 020',title:'Local song',url:'file:///music/local.flac'
   }]});
