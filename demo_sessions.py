@@ -9,6 +9,7 @@ import threading
 import time
 
 MAX_AGE = 30 * 60
+DEMO_SCENE_COUNT = 16
 
 class DemoSessions:
     def __init__(self):
@@ -60,7 +61,7 @@ class DemoSessions:
             if action == "stop":
                 session["active"] = False
                 session["seq"] += 1
-            elif (action == "step" and session["active"] and type(step) is int and 0 <= step < 8
+            elif (action == "step" and session["active"] and type(step) is int and 0 <= step < DEMO_SCENE_COUNT
                   and source in ("library", "spotify") and isinstance(album_id, str)
                   and 0 < len(album_id) <= 128):
                 session["seq"] += 1
