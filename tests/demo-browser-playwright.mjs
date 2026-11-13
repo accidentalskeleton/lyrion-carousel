@@ -110,10 +110,28 @@ try{
     if(await page.locator('.bf-fast-navigator').isVisible())
         throw Error('CD pointerdown must immediately hide fast navigation: '+JSON.stringify(cdClick));
     await page.mouse.up();
-    // Real CD selection opens a jewel case. Reopening fast navigation must
-    // close that case FIRST; simply raising z-index hides the underlying bug.
+    // The prior press only tested navigator dismissal and may occur while
+    // shelf momentum is still settling (which correctly ignores album
+    // selection). Perform a separate, deliberate click after the shelf stops.
+    await page.waitForTimeout(650);
+    const caseTarget=await page.evaluate(()=>{
+        const stage=document.querySelector('.bf-stage');
+        for(const album of stage.querySelectorAll('.bf-album')){
+            const box=album.getBoundingClientRect();
+            for(const fraction of [.25,.5,.75]){
+                const x=box.left+box.width/2,y=box.top+box.height*fraction;
+                if(document.elementFromPoint(x,y)?.closest('.bf-album')===album)
+                    return {x,y,index:album.dataset.index};
+            }
+        }
+        return null;
+    });
+    if(!caseTarget)throw Error('No accessible CD available to open before fast navigation');
+    await page.mouse.click(caseTarget.x,caseTarget.y);
     await page.waitForFunction(()=>
         document.querySelector('.bf-front-preview')?.hidden===false,null,{timeout:3000});
+    // Reopening fast navigation must close this confirmed-open case FIRST;
+    // simply raising its z-index would hide the underlying state bug.
     await page.keyboard.press('n');
     const shelfOnly=await page.evaluate(()=>{
         const cover=document.querySelector('.bf-front-preview');
