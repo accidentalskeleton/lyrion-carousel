@@ -122,14 +122,23 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
     });
     stopButton?.addEventListener('click',()=>void stop());
     floatingStop?.addEventListener('click',()=>void stop());
+    let swallowClickUntil=0;
     document.addEventListener('pointerdown',event=>{
         if(mode&&mode!=='ready'&&event.isTrusted&&!event.target.closest?.('.bf-demo-controls')){
+            // A filming stop tap must not fall through to a live Play button.
+            swallowClickUntil=Date.now()+800;
+            event.preventDefault?.();event.stopImmediatePropagation?.();
             void stop();
         }
     },{capture:true});
+    document.addEventListener('click',event=>{
+        if(event.isTrusted&&Date.now()<swallowClickUntil){
+            event.preventDefault?.();event.stopImmediatePropagation?.();
+        }
+    },{capture:true});
     document.addEventListener('keydown',event=>{
-        if(mode&&event.isTrusted&&event.key==='Escape'){
-            event.preventDefault();void stop();
+        if(mode&&mode!=='ready'&&event.isTrusted&&event.key==='Escape'){
+            event.preventDefault();event.stopImmediatePropagation?.();void stop();
         }
     },{capture:true});
     window.addEventListener('pagehide',()=>{void stop()});
