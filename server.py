@@ -876,6 +876,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         snapshot=_CATALOGUE_MEMORY.get(key)
         if snapshot and 0<=now-snapshot['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS:
             return snapshot
+        previous=snapshot if snapshot and isinstance(snapshot.get('albums'),list) else None
         try:
             data=metadata_db.snapshot_get(self._metadata_db_path(),self.lms_url)
             if data is None: raise ValueError('No snapshot')
@@ -896,9 +897,31 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                       'recent_new_album_ids':data.get('recent_new_album_ids',[]),
                       'orders':OrderedDict()}
         except (OSError,ValueError,TypeError,AttributeError,UnicodeError,sqlite3.Error):
+            # Cache expiry is not evidence of a new baseline. Retain the
+            # previous album identities from SQLite even when too old to
+            # serve, because another viewer might refresh the shelf before
+            # the scan-completion callback reaches /reconcile.
+            if previous is None:
+                try:
+                    old=metadata_db.snapshot_get(self._metadata_db_path(),self.lms_url)
+                    if (isinstance(old,dict) and old.get('version')==CATALOGUE_SNAPSHOT_VERSION
+                            and old.get('lms_url')==self.lms_url and
+                            isinstance(old.get('albums'),list) and
+                            all(isinstance(a,dict) for a in old['albums'])):
+                        previous=old
+                except (OSError,sqlite3.Error,ValueError,TypeError):
+                    pass
             albums=[album for page in self._catalogue_pages() for album in page]
+            recent=[]
+            if previous is not None:
+                prior={str(a.get('id')) for a in previous['albums'] if a.get('id') is not None}
+                recent=[str(a['id']) for a in albums
+                        if a.get('id') is not None and str(a['id']) not in prior][:25]
+                if not recent and self._catalogue_fingerprint(albums)==self._catalogue_revision(previous):
+                    recent=previous.get('recent_new_album_ids',[])
             snapshot={'created':time.time(),'albums':albums,'genres':{},
-                      'colours':self._load_colour_index(),'orders':OrderedDict()}
+                      'colours':self._load_colour_index(),
+                      'recent_new_album_ids':recent,'orders':OrderedDict()}
             try:self._save_catalogue_snapshot(snapshot)
             except (OSError,sqlite3.Error,ValueError):pass  # Serving the live catalogue takes priority.
         _CATALOGUE_MEMORY[key]=snapshot
