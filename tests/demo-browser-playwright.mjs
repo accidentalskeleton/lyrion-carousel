@@ -36,11 +36,24 @@ try{
     if(!await page.locator('.bf-demo-local').isVisible())throw Error('Local demo button unavailable');
     await page.locator('.bf-demo-local').click();
     await page.waitForFunction(()=>document.querySelector('#book-fan-browser')?.dataset.demoActive==='true',{timeout:5000});
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1000);    await page.waitForFunction(()=>
+        document.querySelector('.bf-demo-guide')?.hidden===false&&
+        document.querySelector('.bf-demo-banner-progress')?.textContent.includes('Scene 1 of 16')&&
+        document.querySelector('.bf-demo-callout')?.hidden===false,{timeout:8000});
+    const annotations=await page.evaluate(()=>({
+        banner:document.querySelector('.bf-demo-banner')?.getBoundingClientRect().width,
+        title:document.querySelector('.bf-demo-callout-title')?.textContent,
+        arrow:document.querySelector('.bf-demo-arrow-path')?.getAttribute('d')
+    }));
+    if(!(annotations.banner>0&&annotations.title&&annotations.arrow?.startsWith('M ')))
+        throw Error('Guided callout/arrow missing: '+JSON.stringify(annotations));
+
     if(await page.locator('.bf-settings-overlay').isVisible())throw Error('Settings obscures the active demo');
     const point=await page.locator('.bf-stage').boundingBox();
     await page.mouse.click(point.x+point.width*.5,point.y+point.height*.5);
     await page.waitForFunction(()=>document.querySelector('#book-fan-browser')?.dataset.demoActive==='false',{timeout:5000});
+    if(await page.locator('.bf-demo-guide').isVisible())
+        throw Error('Demo guide remains on screen after stopping');
     if(errors.length)throw Error('Browser exceptions: '+errors.join(' | '));
     console.log('Local Demo Mode browser smoke test passed');
 }finally{await browser.close();}
