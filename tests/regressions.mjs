@@ -1009,11 +1009,11 @@ export async function runTests(sources) {
   assert(tabs[3].getAttribute('aria-selected')==='true'&&tabs[3].tabIndex===0,'settings tab selected accessibly');
   assert(!element('#settings-panel-connection').hidden&&element('#settings-panel-display').hidden,'settings shows only selected panel');
   const key=key=>({key,preventDefault(){},stopPropagation(){}});
-  tabs[5].listeners.keydown[0](key('ArrowRight'));
-  assert(!element('#settings-panel-genres').hidden,'arrow key selects genres settings tab');
   tabs[3].listeners.keydown[0](key('ArrowRight'));
-  assert(!element('#settings-panel-cache').hidden,'arrow key selects cache settings tab');
+  assert(!element('#settings-panel-genres').hidden,'arrow key selects genres settings tab');
   tabs[4].listeners.keydown[0](key('ArrowRight'));
+  assert(!element('#settings-panel-cache').hidden,'arrow key selects cache settings tab');
+  tabs[5].listeners.keydown[0](key('ArrowRight'));
   assert(!element('#settings-panel-about').hidden,'arrow key selects about settings tab');
   assert(sources.index.includes('class="bf-project-link" href="https://github.com/accidentalskeleton/lyrion-carousel" target="_blank" rel="noopener noreferrer"'),
     'About links to the GitHub project in a protected new tab');
