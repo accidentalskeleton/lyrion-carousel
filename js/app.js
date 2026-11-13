@@ -1950,6 +1950,11 @@ const demoMode=createDemoMode({
         const arrived=await scrollToAlbumIndex(index);
         if(!demoActive||request!==demoSceneGeneration||!arrived)return;
         if(scene.open)openFrontPreview(albums[index],index,true);
+        // Give the presentation layer an actual screen element to follow.
+        // This is visual-only and never invokes the element's click handler.
+        if(step===5)return '.bf-source-switch';
+        if(scene.open)return '.bf-front-case';
+        return '.bf-stage .bf-album[data-index="'+index+'"]';
     },
     onStop(){
         // Keep the final cover visible for the camera. The ordinary preview
