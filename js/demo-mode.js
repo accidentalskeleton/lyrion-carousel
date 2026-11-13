@@ -75,9 +75,7 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
     async function poll(generation){
         if(mode!=='viewer'||generation!==epoch)return;
         try{
-            const response=await fetch('/api/demo?'+new URLSearchParams({code,viewer}),{cache:'no-store'});
-            if(!response.ok)throw Error('Session ended or unavailable');
-            const state=await response.json();
+            const state=await request({action:'state',code,viewer});
             if(generation!==epoch)return;
             if(!state.active){cleanup('Shared demo ended');return}
             if(Number.isInteger(state.seq)&&state.seq>sequence){
