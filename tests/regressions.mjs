@@ -1618,8 +1618,8 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=sort-labels-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=new-album-notify-race-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
-    'Cross-browser source following invalidates the app module cache');
+  assert(sources.index.includes('js/app.js?v=demo-mode-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+    'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
   assert(sources.app.includes("if(album[13]==='spotify')await loadAlbum(album);else await playAlbumNow(album);"),
