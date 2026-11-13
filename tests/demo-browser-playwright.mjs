@@ -31,6 +31,24 @@ try{
     });
     if(!(dim.off[0]<dim.on[0]&&dim.off[1]<dim.on[1]))
         throw Error('Power-off CD shelf/case opacity regression: '+JSON.stringify(dim));
+    // Fast scrubber floats over the shelf without extending its height.
+    for(const viewport of [{width:2560,height:720},{width:1024,height:768},{width:1280,height:720}]){
+        await page.setViewportSize(viewport);
+        await page.locator('.bf-fast-nav-toggle').click();
+        const state=await page.evaluate(()=>{
+            const panel=document.querySelector('.bf-fast-navigator');
+            const screen=document.querySelector('.bf-screen');
+            const r=panel.getBoundingClientRect(),s=screen.getBoundingClientRect();
+            return {visible:!panel.hidden,within:r.left>=s.left-1&&r.right<=s.right+1&&
+                r.top>=s.top-1&&r.bottom<=s.bottom+1};
+        });
+        if(!state.visible||!state.within)throw Error('Fast navigator is clipped at '+viewport.width+': '+JSON.stringify(state));
+        await page.locator('.bf-fast-nav-range').fill('1000');
+        const label=await page.locator('.bf-fast-nav-count').textContent();
+        if(!label?.includes('5 / 5'))throw Error('Scrub did not reach last offline CD: '+label);
+        await page.locator('.bf-fast-nav-close').click();
+        if(await page.locator('.bf-fast-navigator').isVisible())throw Error('Scrubber did not close');
+    }
     await page.locator('.bf-settings-open').click();
     await page.locator('#settings-tab-demo').click();
     if(!await page.locator('.bf-demo-local').isVisible())throw Error('Local demo button unavailable');
