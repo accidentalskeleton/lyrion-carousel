@@ -2,6 +2,8 @@
 
 [← Project overview](../README.md)
 
+When the selected LMS player is powered off, Carousel dims the CD shelf and any open jewel case while keeping the power control and Settings legible. Turning the player back on restores the display. An unknown power state does not trigger dimming.
+
 ## Demonstration mode (Windows, iPad and Raspberry Pi)
 
 Open **Settings → Demo** to run a visual showcase of the current Carousel shelf. Demo Mode animates shelf scrolling and opening jewel cases; it does **not** send LMS playback, pause, power, queue or Spotify play commands. The currently playing music continues uninterrupted.
