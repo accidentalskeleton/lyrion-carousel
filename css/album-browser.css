@@ -954,32 +954,23 @@ body {
     opacity:.30;
 }
 
-/* On-demand navigator floats above the spine shelf: zero extra vertical space. */
+/* Contextual fast navigator: hidden until rapid/repeated browsing, centred
+   over the CD shelf itself (not the player controls). */
 .bf-fast-nav-anchor {
-    position:absolute; z-index:160; bottom:50px; left:50%;
-    width:min(620px,calc(100% - 38px)); transform:translateX(-50%);
-    pointer-events:none; display:flex; flex-direction:column; align-items:center;
-    gap:5px; color:#edf4ef;
+    position:absolute; z-index:160; top:52px; right:0; bottom:82px; left:0;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none; color:#edf4ef;
 }
-.bf-fast-nav-toggle,.bf-fast-nav-close,.bf-fast-nav-letters button {
+.bf-fast-nav-close,.bf-fast-nav-letters button {
     color:inherit; font:inherit; cursor:pointer; touch-action:manipulation;
 }
-.bf-fast-nav-toggle {
-    pointer-events:auto; display:flex; align-items:center; gap:7px;
-    min-height:26px; padding:3px 13px; border:1px solid rgba(165,207,181,.34);
-    border-radius:30px; background:rgba(15,25,24,.65);
-    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-    color:#cadbd2; font-size:11px;
-}
-.bf-fast-nav-toggle:hover,.bf-fast-nav-toggle:focus-visible,
-.bf-fast-nav-toggle[aria-expanded="true"] {background:rgba(24,48,40,.93);color:#f4fff8}
 .bf-fast-navigator {
-    pointer-events:auto; width:100%; box-sizing:border-box;
-    padding:10px 15px 9px; border:1px solid rgba(166,218,186,.53);
-    border-radius:12px; background:rgba(13,27,25,.86);
-    box-shadow:0 8px 30px rgba(0,0,0,.48);
-    backdrop-filter:blur(11px); -webkit-backdrop-filter:blur(11px);
-    display:flex; flex-direction:column; gap:7px;
+    pointer-events:auto; width:min(560px,calc(100% - 40px)); box-sizing:border-box;
+    padding:11px 16px 12px; border:1px solid rgba(166,218,186,.46);
+    border-radius:14px; background:rgba(13,27,25,.86);
+    box-shadow:0 12px 36px rgba(0,0,0,.55);
+    backdrop-filter:blur(13px); -webkit-backdrop-filter:blur(13px);
+    display:flex; flex-direction:column; gap:8px;
 }
 .bf-fast-navigator[hidden] {display:none!important}
 .bf-fast-nav-heading {display:flex;align-items:center;gap:10px;min-width:0}
@@ -992,11 +983,11 @@ body {
 .bf-fast-nav-letters button {flex:1 0 auto;min-width:18px;min-height:27px;background:none;border:0;border-radius:4px;font-size:10px;padding:3px 1px}
 .bf-fast-nav-letters button:hover,.bf-fast-nav-letters button:focus-visible {background:rgba(155,203,178,.24)}
 .bf-fast-navigator :focus-visible {outline:2px solid #a7ddbd;outline-offset:2px}
-@media(max-width:700px) {
-    .bf-fast-nav-anchor {bottom:38px;width:calc(100% - 18px)}
-    .bf-fast-navigator {padding:8px 10px}
+@media(max-width:560px) {
+    .bf-fast-nav-anchor {top:42px;bottom:62px}
+    .bf-fast-navigator {width:calc(100% - 18px);padding:8px 10px}
     .bf-fast-nav-letters button {min-width:19px}
 }
 @media(prefers-reduced-motion:reduce) {
-    .bf-fast-navigator,.bf-fast-nav-toggle {backdrop-filter:none;-webkit-backdrop-filter:none}
+    .bf-fast-navigator {backdrop-filter:none;-webkit-backdrop-filter:none}
 }

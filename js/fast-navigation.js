@@ -1,4 +1,4 @@
-/* Large-library navigation: all selection operations are visual-only. */
+/* Gesture-aware fast navigation. All actions remain visual-only. */
 export const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
 export function scrubIndex(ratio,total){
     return Math.round(clamp(Number(ratio)||0,0,1)*Math.max(0,total-1));
@@ -6,20 +6,44 @@ export function scrubIndex(ratio,total){
 export function scrubRatio(index,total){
     return total>1?clamp(index/(total-1),0,1):0;
 }
-// Preserve exact existing low-speed flick behaviour. Only deliberately fast,
-// repeated gestures gain distance. Reversing direction resets the boost.
+// Velocity is measured in pixels per millisecond. A quick gesture now
+// provides useful inertia even on a ~169-CD shelf; normal drags retain their
+// original precisely controlled momentum. Reversed flicks do not chain.
 export function acceleratedFlick(velocity,{previousVelocity=0,elapsed=Infinity,total=0,enabled=true}={}){
     const baseline=velocity*1.35;
-    if(!enabled||total<100||Math.abs(velocity)<.7)return baseline;
+    if(!enabled||total<100||Math.abs(velocity)<.55)return baseline;
+    const intensity=clamp((Math.abs(velocity)-.55)/1.5,0,1);
+    const travel=Math.abs(velocity)*(240/175)*(1+intensity*4);
     const sameDirection=Math.sign(velocity)===Math.sign(previousVelocity);
-    const repeat=sameDirection&&elapsed<750?Math.min(2.6,1+(750-elapsed)/470):1;
-    const intensity=clamp((Math.abs(velocity)-.7)/2.5,0,1);
-    return Math.sign(baseline)*Math.min(Math.max(1,total*.28),
-        Math.abs(baseline)*(1+intensity*5)*repeat);
+    const repeat=sameDirection&&elapsed<1000?1+1.25*(1-elapsed/1000):1;
+    const limit=Math.min(48,Math.max(6,total*.32));
+    return Math.sign(velocity)*Math.max(Math.abs(baseline),Math.min(limit,travel*repeat));
+}
+// A scroll-wheel notch is different from a precise trackpad movement.
+// Only repeated wheel notches are boosted; small deltas stay exactly as before.
+export function acceleratedWheel(delta,{total=0,streak=0}={}){
+    if(total<100||Math.abs(delta)<65||streak<2)return delta;
+    return Math.sign(delta)*Math.min(Math.abs(delta)*(1+Math.min(6,streak-1)*1.25),1500);
+}
+// Gesture counting is independent of rendering and does not hijack normal
+// taps, slow drags, or changes of direction.
+export function createSwipeNavigationDetector(){
+    let count=0,lastAt=-Infinity,lastDirection=0;
+    return {
+        record({distance=0,duration=Infinity,velocity=0,now=0,direction=0}={}){
+            if(distance<55||duration>850||direction===0){count=0;return false}
+            if(now-lastAt>2200||direction!==lastDirection)count=0;
+            count++;lastAt=now;lastDirection=direction;
+            const speed=Math.abs(velocity);
+            return (speed>=1.5&&distance>=140)||
+                (speed>=.9&&distance>=90&&count>=2)||
+                count>=3;
+        },
+        reset(){count=0;lastAt=-Infinity;lastDirection=0}
+    };
 }
 export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
     const shell=root.querySelector('.bf-fast-navigator');
-    const handle=root.querySelector('.bf-fast-nav-toggle');
     const slider=root.querySelector('.bf-fast-nav-range');
     const caption=root.querySelector('.bf-fast-nav-label');
     const count=root.querySelector('.bf-fast-nav-count');
@@ -33,30 +57,28 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
     }
     function render(){
         const {total,index,mode,album}=state();
-        // The slider's native value is an *album index*, not a fixed 0–1000
-        // percentage. Keyboard/assistive navigation can therefore select
-        // every individual CD even in libraries containing 10,000+ titles.
         slider.max=String(Math.max(0,total-1));
-        slider.value=String(clamp(index,0,Math.max(0,total-1)));
+        if(!dragging)slider.value=String(clamp(index,0,Math.max(0,total-1)));
         slider.disabled=total<2;
-        count.textContent=total?(Math.min(index,total-1)+1).toLocaleString()+' / '+total.toLocaleString()+' CDs':'No CDs';
-        caption.textContent=album?(album[1]+' — '+album[0]):modeLabel(mode);
+        if(!dragging){
+            count.textContent=total?(Math.min(index,total-1)+1).toLocaleString()+' / '+total.toLocaleString()+' CDs':'No CDs';
+            caption.textContent=album?(album[1]+' — '+album[0]):modeLabel(mode);
+        }
         letters.hidden=!(mode==='artistAlbum'||mode==='album');
         root.dataset.fastNavOrder=mode;
     }
     function cancelHide(){clearTimeout(timer);timer=0}
     function hide(){
         if(dragging)return;
-        opened=false;shell.hidden=true;handle.setAttribute('aria-expanded','false');
+        cancelHide();opened=false;shell.hidden=true;
     }
     function armHide(){
         cancelHide();
-        if(opened&&!dragging)timer=setTimeout(hide,3200);
+        if(opened&&!dragging)timer=setTimeout(hide,4200);
     }
     function show(){
         if(state().total<2)return;
         opened=true;shell.hidden=false;
-        handle.setAttribute('aria-expanded','true');
         render();armHide();
     }
     function commit(value,final){
@@ -69,7 +91,6 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
         count.textContent=(index+1).toLocaleString()+' / '+current.total.toLocaleString()+' CDs';
         if(final)armHide();
     }
-    handle.addEventListener('click',()=>opened?hide():show());
     exit.addEventListener('click',hide);
     slider.addEventListener('pointerdown',()=>{dragging=true;cancelHide()});
     slider.addEventListener('input',()=>commit(slider.value,false));
@@ -84,11 +105,9 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
     function release(){if(dragging){dragging=false;commit(slider.value,true)}}
     slider.addEventListener('pointerup',release);
     slider.addEventListener('pointercancel',release);
-    shell.addEventListener('pointerenter',cancelHide);
-    shell.addEventListener('pointerleave',armHide);
-    shell.addEventListener('focusin',cancelHide);
-    shell.addEventListener('focusout',armHide);
+    shell.addEventListener('pointerdown',cancelHide);
+    shell.addEventListener('pointerup',armHide);
+    shell.addEventListener('keydown',armHide);
     window.addEventListener('pagehide',cancelHide);
-    handle.setAttribute('aria-expanded','false');
-    return {render(){if(opened)render()},show,hide,active:()=>dragging};
+    return {render(){if(opened)render()},show,hide,visible:()=>opened,active:()=>dragging};
 }

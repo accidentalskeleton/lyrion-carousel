@@ -3,7 +3,7 @@ import {buildAlbumPositionIndex, locateAlbum} from '../js/catalogue.js';
 import {createLmsProvider} from '../js/providers/lms-provider.js';
 import {createSpotifyProvider} from '../js/providers/spotify-provider.js';
 import {spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl} from '../js/spotify.js';
-import {acceleratedFlick} from '../js/fast-navigation.js';
+import {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector} from '../js/fast-navigation.js';
 
 export async function runShelfBrowserTests() {
   const [html, source] = await Promise.all([
@@ -37,8 +37,8 @@ export async function runShelfBrowserTests() {
     // Dedicated Demo Mode tests exercise the real module; shelf gesture
     // geometry tests remain isolated from session/network behaviour.
     createDemoMode:()=>({active:()=>false,stop:async()=>{}}),
-    acceleratedFlick,
-    createFastNavigator:()=>({render(){},active:()=>false,show(){},hide(){}}),
+    acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,
+    createFastNavigator:()=>({render(){},active:()=>false,show(){},hide(){},visible:()=>false}),
     fetch:async url => url.startsWith('/api/catalogue')
       ? {ok:true, json:async () => ({albums_loop:catalogue, library_count:catalogue.length})}
       : {ok:false}

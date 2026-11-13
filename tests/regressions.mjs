@@ -173,7 +173,7 @@ export async function runTests(sources) {
   // Discovery must choose a different album when the test requires scrolling.
   // A real random draw can select the centred album and legitimately skip it.
   const appMath=Object.create(Math);appMath.random=()=>.37;
-  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,scrubIndex,scrubRatio};')();
+  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,scrubIndex,scrubRatio};')();
   assert(navigation.scrubIndex(.5,1001)===500,'large library scrub ratio selects index 500');
   assert(navigation.scrubIndex(2,1001)===1000&&navigation.scrubIndex(-1,1001)===0,
     'scrub ratio clamps collection endpoints');
@@ -184,6 +184,32 @@ export async function runTests(sources) {
     'repeated fast flicks accelerate and reverse resets the boost');
   assert(navigation.acceleratedFlick(2,{total:25})===2*1.35,
     'small libraries keep existing swiping physics');
+  assert(navigation.acceleratedFlick(1.6,{total:169})>5,
+    '169 albums receive noticeable single-flick momentum');
+  assert(navigation.acceleratedFlick(1.6,{total:169,previousVelocity:1.6,elapsed:150})>
+    navigation.acceleratedFlick(1.6,{total:169}),
+    'rapid same-direction flicks travel further even with 169 albums');
+  assert(navigation.acceleratedFlick(-1.6,{total:169,previousVelocity:1.6,elapsed:150})===
+    navigation.acceleratedFlick(-1.6,{total:169}),
+    'reverse flick does not inherit previous momentum');
+  assert(navigation.acceleratedWheel(120,{total:169,streak:5})>navigation.acceleratedWheel(120,{total:169,streak:1}),
+    'repeated wheel notches gain speed on 169 albums');
+  assert(navigation.acceleratedWheel(12,{total:169,streak:8})===12&&
+    navigation.acceleratedWheel(120,{total:50,streak:8})===120,
+    'precise wheel movement and small libraries retain original speed');
+  const swipeDetect=navigation.createSwipeNavigationDetector();
+  assert(!swipeDetect.record({distance:110,duration:400,velocity:1.1,now:1000,direction:1}),
+    'one ordinary swipe leaves navigator hidden');
+  assert(swipeDetect.record({distance:120,duration:400,velocity:1.1,now:1400,direction:1}),
+    'two quick swipes reveal contextual navigator');
+  swipeDetect.reset();
+  assert(!swipeDetect.record({distance:90,duration:500,velocity:.35,now:2200,direction:1})&&
+    !swipeDetect.record({distance:90,duration:500,velocity:.35,now:2800,direction:1})&&
+    swipeDetect.record({distance:90,duration:500,velocity:.35,now:3400,direction:1}),
+    'three repeated moderate swipes reveal navigator');
+  swipeDetect.reset();
+  assert(!swipeDetect.record({distance:20,duration:100,velocity:2,now:4000,direction:1}),
+    'a short tap or tiny drag never opens navigator');
   const env={Math:appMath,document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
     ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>{
       if(url==='/api/catalogue/invalidate'){
@@ -207,7 +233,9 @@ export async function runTests(sources) {
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createDemoMode:()=>({active:()=>false,stop:async()=>{}}),
     acceleratedFlick:navigation.acceleratedFlick,
-    createFastNavigator:()=>({render(){},active:()=>false,show(){},hide(){}}),
+    acceleratedWheel:navigation.acceleratedWheel,
+    createSwipeNavigationDetector:navigation.createSwipeNavigationDetector,
+    createFastNavigator:()=>({render(){},active:()=>false,show(){},hide(){},visible:()=>false}),
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
@@ -1033,9 +1061,10 @@ export async function runTests(sources) {
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
   assert(sources.index.includes('class="bf-fast-nav-range"')&&
-    sources.index.includes('class="bf-fast-nav-toggle"')&&
-    sources.albumBrowserCss.includes('.bf-fast-nav-anchor'),
-    'fast navigator is a translucent overlay over the existing CD shelf');
+    !sources.index.includes('class="bf-fast-nav-toggle"')&&
+    sources.albumBrowserCss.includes('.bf-fast-nav-anchor')&&
+    sources.albumBrowserCss.includes('align-items:center; justify-content:center'),
+    'fast navigator is shelf-centred and has no permanently visible toggle');
   assert(sources.index.includes('css/settings.css?v=demo-mode-1'),
     'Demo styles invalidate the settings stylesheet cache');
   tabs[6].listeners.keydown[0](key('Home'));

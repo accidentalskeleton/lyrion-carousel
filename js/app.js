@@ -5,7 +5,7 @@ import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPositio
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=stable-spotify-album-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=stable-spotify-album-1';
-import { createFastNavigator, acceleratedFlick } from './fast-navigation.js?v=1';
+import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector } from './fast-navigation.js?v=2';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
@@ -1831,11 +1831,30 @@ function updateMeta(force=false){
     meta.replaceChildren(...content);updateProgressDisplay();
 }
 function draw(){if(raf){cancelAnimationFrame(raf);raf=0}target=shelfPosition(target);position=shelfPosition(position);if(!dragging){const error=target-position;if(followAnimation){const animation=followAnimation,p=clamp((performance.now()-animation.start)/animation.duration,0,1);position=animation.from+(animation.to-animation.from)*(1-Math.pow(1-p,3));if(p>=1){position=target=animation.to;followAnimation=null;animation.resolve(true)}}else if(randomAnimating&&randomAnimationDuration>0){const p=clamp((performance.now()-randomAnimationStart)/randomAnimationDuration,0,1),e=1-Math.pow(1-p,3);position=shelfPosition(randomAnimationFrom+(randomAnimationTo-randomAnimationFrom)*e);if(p>=1)position=target}else{position+=error*.135;if(Math.abs(error)<.0004)position=target}}updateShelfWindow();updateMeta();prefetchAround(selectedIndex());prefetchCoverWindow(boundedShelf()?selectedIndex():modulo(Math.round(target),totalAlbums));syncShelfDom();fastNavigator.render();if(coverOpening||followAnimation||dragging||Math.abs(target-position)>.0004)raf=requestAnimationFrame(draw);else raf=0}function schedule(){if(!raf)raf=requestAnimationFrame(draw)}
-// Chain momentum only across deliberate, high-speed flicks.
+// Chain momentum across quick flicks. Wheel and touch have independent history.
 let lastFlickVelocity=0,lastFlickAt=-Infinity;
+let dragStartedAt=0,dragSamples=[];
+const swipeNavigation=createSwipeNavigationDetector();
+let lastWheelAt=-Infinity,lastWheelDirection=0,wheelStreak=0,wheelBurstDistance=0;
 let lastShelfScrollAt=-Infinity;
 function shelfIsScrolling(){return dragging&&moved||!!followAnimation||randomAnimating||Math.abs(target-position)>.04||performance.now()-lastShelfScrollAt<160}
-function scrollShelfWheel(e){if(randomAnimating)return;lastFlickVelocity=0;e.preventDefault();finishCoverOpening();lastShelfScrollAt=performance.now();followingNowPlaying=false;cancelFollowAnimation();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=shelfPosition(position+delta*.0028);draw();clearTimeout(wheelTimer);wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110)}
+function scrollShelfWheel(e){
+    if(randomAnimating)return;
+    lastFlickVelocity=0;e.preventDefault();finishCoverOpening();
+    const now=performance.now();
+    lastShelfScrollAt=now;followingNowPlaying=false;cancelFollowAnimation();
+    const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
+    const direction=Math.sign(delta),sameDirection=direction===lastWheelDirection;
+    const continuous=sameDirection&&now-lastWheelAt<650;
+    wheelStreak=continuous&&Math.abs(delta)>=65?Math.min(8,wheelStreak+1):Math.abs(delta)>=65?1:0;
+    wheelBurstDistance=continuous?wheelBurstDistance+Math.abs(delta):Math.abs(delta);
+    lastWheelAt=now;lastWheelDirection=direction;
+    const adjusted=acceleratedWheel(delta,{total:totalAlbums,streak:wheelStreak});
+    target=position=shelfPosition(position+adjusted*.0028);
+    if(totalAlbums>=100&&(wheelStreak>=4||wheelBurstDistance>=1100))fastNavigator.show();
+    draw();clearTimeout(wheelTimer);
+    wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110);
+}
 // Shared pointer physics for shelf spines and the enlarged closed cover.
 function beginShelfDrag(event,pressedIndex=null,captureTarget=stage){
     if(randomAnimating)return false;
@@ -1844,6 +1863,7 @@ function beginShelfDrag(event,pressedIndex=null,captureTarget=stage){
     dragging=true;moved=false;pressedAlbumIndex=pressedIndex;
     startX=lastX=event.clientX;startPosition=position;target=position;
     lastTime=performance.now();pointerVelocity=0;
+    dragStartedAt=lastTime;dragSamples=[{x:startX,t:lastTime}];
     stage.classList.add('is-dragging');
     captureTarget?.setPointerCapture(event.pointerId);
     schedule();
@@ -1859,22 +1879,33 @@ function moveShelfDrag(event,closePreviewOnMove=true){
         followingNowPlaying=false;cancelFollowAnimation();
     }
     position=shelfPosition(shelfIndexAt(shelfSpace(startPosition)-dx/(boundedShelf()?finiteShelfLayout().scrollPitch:175)));target=position;
-    pointerVelocity=(event.clientX-lastX)/Math.max(1,now-lastTime);
+    dragSamples.push({x:event.clientX,t:now});
+    while(dragSamples.length>2&&now-dragSamples[0].t>115)dragSamples.shift();
+    const oldest=dragSamples[0];
+    pointerVelocity=(event.clientX-oldest.x)/Math.max(1,now-oldest.t);
     lastX=event.clientX;lastTime=now;
 }
 function finishShelfDrag(cancelled=false){
     if(!dragging)return;
     dragging=false;stage.classList.remove('is-dragging');
-    if(cancelled){target=snapShelfPosition(position);lastFlickVelocity=0}
+    if(cancelled){target=snapShelfPosition(position);lastFlickVelocity=0;swipeNavigation.reset()}
     else if(moved){
         const now=performance.now(),elapsed=now-lastFlickAt;
-        const flick=acceleratedFlick(pointerVelocity,{
-            previousVelocity:lastFlickVelocity,elapsed,total:totalAlbums
+        const duration=now-dragStartedAt,distance=Math.abs(lastX-startX);
+        const averageVelocity=(lastX-startX)/Math.max(1,lastTime-dragStartedAt);
+        // Don't mistake a noisy final pointer event for a deliberately fast
+        // gesture, or lose a fast flick because the final event was delayed.
+        const direction=Math.sign(lastX-startX);
+        const velocity=Math.sign(pointerVelocity)===direction?
+            direction*Math.max(Math.abs(pointerVelocity),Math.abs(averageVelocity)*.75):
+            averageVelocity*.75;
+        const flick=acceleratedFlick(velocity,{
+            previousVelocity:lastFlickVelocity,elapsed,total:totalAlbums,
+            enabled:duration<850
         });
-        // A reversed flick instantly brakes momentum; the new direction
-        // becomes the start of a fresh sequence instead of compounding it.
         target=snapShelfPosition(position-flick);
-        lastFlickVelocity=Math.abs(pointerVelocity)>=.7?pointerVelocity:0;
+        if(swipeNavigation.record({distance,duration,velocity,now,direction}))fastNavigator.show();
+        lastFlickVelocity=duration<850&&Math.abs(velocity)>=.55?velocity:0;
         lastFlickAt=now;
     }
     pressedAlbumIndex=null;schedule();
@@ -1929,7 +1960,7 @@ stage.addEventListener('pointerdown',event=>{
 });
 stage.addEventListener('pointermove',event=>moveShelfDrag(event));
 stage.addEventListener('pointerup',()=>finishShelfDrag(false));
-stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{setPlayerPower(null);cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;clearSourceBrowseHold();sourceFollowAttempt='';sourceFollowAttemptAt=-Infinity;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{clearTimeout(newAlbumToastTimer);clearSourceBrowseHold();cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
+stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(e.key==='Escape'&&fastNavigator.visible()){fastNavigator.hide();return}if(!typing&&e.key.toLowerCase()==='n'&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!randomAnimating&&searchOverlay.hidden){e.preventDefault();fastNavigator.show();return}if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{setPlayerPower(null);cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;clearSourceBrowseHold();sourceFollowAttempt='';sourceFollowAttemptAt=-Infinity;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{clearTimeout(newAlbumToastTimer);clearSourceBrowseHold();cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
 async function connectLyrion(){if(connecting)return;connecting=true;const connection=connectionGeneration;try{const result=await rpc('0',['players',0,100]),players=(result.players_loop||[]).filter(p=>String(p.connected)!=='0');if(connection!==connectionGeneration)return;playerSelect.replaceChildren();for(const p of players){const o=document.createElement('option');o.value=p.playerid;o.textContent=p.name||p.playerid;playerSelect.append(o)}let remembered='';try{remembered=localStorage.getItem('albumBrowserPlayer')||''}catch(_){}const selected=players.find(p=>p.playerid===remembered)||players.find(p=>String(p.isplaying)==='1')||players[0];if(playerId!==(selected?.playerid||''))resetQueuePosition();playerId=selected?.playerid||'';setPlayerPower(null);if(playerId)playerSelect.value=playerId;playerSelect.disabled=!players.length;updateBusyState();await checkSpottyAvailability();if(connection!==connectionGeneration)return;if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();if(connection!==connectionGeneration)return;const status=await getStatus();if(connection!==connectionGeneration)return;await selectStartupAlbum(status);if(connection!==connectionGeneration)return;await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();armIdleReturn();cometd.start(playerId);clearInterval(progressTimer);progressTimer=setInterval(updateProgressDisplay,500)}catch(error){if(connection!==connectionGeneration)return;console.warn(error);cometd.stop();root.dataset.liveUpdates='false';emitStatus();if(!liveCatalogue){albums=demoAlbums.slice();totalAlbums=libraryAlbumCount=albums.length;position=target=Math.floor(Math.random()*albums.length);renderAlbums();draw();root.classList.remove('is-starting');root.dataset.ready='true';playerSelect.innerHTML='<option>Demo mode</option>'}playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);root.classList.remove('is-starting');root.dataset.ready='true';playerId='';resetQueuePosition();playerSelect.disabled=true;updateBusyState();setConnection('Lyrion Music Server unavailable',false);scheduleReconnect()}finally{if(connection===connectionGeneration)connecting=false}}
 orderToggle.onclick=()=>orderMenu.hidden?openOrderMenu():closeOrderMenu();orderMenu.querySelectorAll('[data-order]').forEach(button=>button.onclick=()=>{closeOrderMenu();setDisplayOrder(button.dataset.order).catch(error=>{setConnection(error.message||'Could not change album order',false)}).finally(()=>{if(libraryRefreshPending)handleLibraryEvent()})});updateOrderToggle();
 previousTrack.onclick=()=>skipTrack(-1);nextTrack.onclick=()=>skipTrack(1);

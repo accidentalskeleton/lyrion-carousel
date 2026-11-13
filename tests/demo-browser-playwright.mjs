@@ -31,18 +31,25 @@ try{
     });
     if(!(dim.off[0]<dim.on[0]&&dim.off[1]<dim.on[1]))
         throw Error('Power-off CD shelf/case opacity regression: '+JSON.stringify(dim));
-    // Fast scrubber floats over the shelf without extending its height.
+    // Fast scrubber is contextual, shelf-centred and never occupies player space.
+    if(await page.locator('.bf-fast-navigator').isVisible())
+        throw Error('Fast navigator must start hidden');
+    if(await page.locator('.bf-fast-nav-toggle').count())
+        throw Error('Permanent Navigate pill should not exist');
     for(const viewport of [{width:2560,height:720},{width:1024,height:768},{width:1280,height:720}]){
         await page.setViewportSize(viewport);
-        await page.locator('.bf-fast-nav-toggle').click();
+        await page.keyboard.press('n');
         const state=await page.evaluate(()=>{
             const panel=document.querySelector('.bf-fast-navigator');
+            const stage=document.querySelector('.bf-stage');
             const screen=document.querySelector('.bf-screen');
-            const r=panel.getBoundingClientRect(),s=screen.getBoundingClientRect();
+            const r=panel.getBoundingClientRect(),s=screen.getBoundingClientRect(),shelf=stage.getBoundingClientRect();
             return {visible:!panel.hidden,within:r.left>=s.left-1&&r.right<=s.right+1&&
-                r.top>=s.top-1&&r.bottom<=s.bottom+1};
+                r.top>=s.top-1&&r.bottom<=s.bottom+1,
+                centred:Math.abs((r.top+r.bottom)/2-(shelf.top+shelf.bottom)/2)<4};
         });
-        if(!state.visible||!state.within)throw Error('Fast navigator is clipped at '+viewport.width+': '+JSON.stringify(state));
+        if(!state.visible||!state.within||!state.centred)
+            throw Error('Fast navigator must be centred inside shelf at '+viewport.width+': '+JSON.stringify(state));
         await page.locator('.bf-fast-nav-range').evaluate(input=>{
             input.value=input.max;
             input.dispatchEvent(new Event('input',{bubbles:true}));
