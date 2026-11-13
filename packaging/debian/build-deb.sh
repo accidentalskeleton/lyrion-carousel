@@ -4,7 +4,22 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 CANONICAL_VERSION=$(tr -d '[:space:]' < "$PROJECT_DIR/VERSION")
-VERSION=${1:-$CANONICAL_VERSION}
+# Untagged pre-release builds identify the precise source commit.
+if ! COMMIT=$(git -C "$PROJECT_DIR" rev-parse --verify HEAD 2>/dev/null); then
+    echo "A Git checkout is required to identify the source commit" >&2; exit 2
+fi
+SHORT_COMMIT=$(printf %s "$COMMIT" | cut -c1-10)
+if ! git -C "$PROJECT_DIR" diff --quiet HEAD --; then
+    echo "Commit tracked changes before making a commit-identified .deb" >&2; exit 2
+fi
+EXACT_TAG=$(git -C "$PROJECT_DIR" tag --points-at HEAD | grep -E "^v?$CANONICAL_VERSION$" | head -n 1 || :)
+if [ -n "${1:-}" ]; then
+    VERSION=$1
+elif [ -n "$EXACT_TAG" ]; then
+    VERSION=$CANONICAL_VERSION
+else
+    VERSION="${CANONICAL_VERSION}~git${SHORT_COMMIT}"
+fi
 PACKAGE=lyrion-carousel
 STAGE="$PROJECT_DIR/.deb-build/${PACKAGE}_${VERSION}_all"
 OUTPUT="$PROJECT_DIR/dist/${PACKAGE}_${VERSION}_all.deb"
@@ -27,6 +42,7 @@ install -Dm0644 "$PROJECT_DIR/README.md" "$STAGE/usr/share/doc/$PACKAGE/README.m
 install -Dm0644 "$PROJECT_DIR/LICENSE" "$STAGE/usr/share/doc/$PACKAGE/LICENSE"
 install -Dm0644 "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" "$STAGE/usr/share/doc/$PACKAGE/THIRD_PARTY_NOTICES.md"
 cp -a "$PROJECT_DIR/assets" "$PROJECT_DIR/css" "$PROJECT_DIR/js" "$STAGE/opt/$PACKAGE/"
+python3 "$SCRIPT_DIR/stamp-build.py" "$STAGE/opt/$PACKAGE" "$VERSION" "$COMMIT" "$CANONICAL_VERSION"
 install -Dm0644 "$SCRIPT_DIR/lyrion-carousel.service" "$STAGE/lib/systemd/system/lyrion-carousel.service"
 install -Dm0644 "$SCRIPT_DIR/lyrion-carousel.default" "$STAGE/etc/default/lyrion-carousel"
 sed "s/@VERSION@/$VERSION/g" "$SCRIPT_DIR/control.in" > "$STAGE/DEBIAN/control"

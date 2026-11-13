@@ -173,6 +173,68 @@ export async function runTests(sources) {
   // Discovery must choose a different album when the test requires scrolling.
   // A real random draw can select the centred album and legitimately skip it.
   const appMath=Object.create(Math);appMath.random=()=>.37;
+  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,shouldRevealForWheel,scrubIndex,scrubRatio,scrubRange,scrubAlbumIndex};')();
+  assert(navigation.scrubIndex(.5,1001)===500,'large library scrub ratio selects index 500');
+  assert(navigation.scrubIndex(2,1001)===1000&&navigation.scrubIndex(-1,1001)===0,
+    'scrub ratio clamps collection endpoints');
+  const wrapRange=navigation.scrubRange(169,true),finiteRange=navigation.scrubRange(169,false);
+  assert(wrapRange.min===-1&&wrapRange.max===169&&finiteRange.min===0&&finiteRange.max===168,
+    'circular scrubber gains two wrap points while bounded shelves retain finite limits');
+  assert(navigation.scrubAlbumIndex(-1,169,true)===168&&
+    navigation.scrubAlbumIndex(169,169,true)===0&&
+    navigation.scrubAlbumIndex(168,169,true)===168&&
+    navigation.scrubAlbumIndex(169,169,false)===168&&
+    navigation.scrubAlbumIndex(-1,169,false)===0,
+    'both circular seam positions wrap to the adjacent album, bounded endpoints clamp');
+  assert(geometry.nearestPositionForIndex(0,168,169)===169&&
+    geometry.nearestPositionForIndex(168,0,169)===-1,
+    'seam navigation preserves the shortest circular shelf route');
+  assert(navigation.acceleratedFlick(.3,{total:1500})===.3*1.35,
+    'slow existing swipe preserves original momentum');
+  assert(Math.abs(navigation.acceleratedFlick(2,{total:1500,previousVelocity:2,elapsed:100}))>
+    Math.abs(navigation.acceleratedFlick(2,{total:1500,elapsed:Infinity})),
+    'repeated fast flicks accelerate and reverse resets the boost');
+  assert(navigation.acceleratedFlick(2,{total:25})===2*1.35,
+    'small libraries keep existing swiping physics');
+  assert(navigation.acceleratedFlick(1.6,{total:169})>5,
+    '169 albums receive noticeable single-flick momentum');
+  assert(navigation.acceleratedFlick(1.6,{total:169,previousVelocity:1.6,elapsed:150})>
+    navigation.acceleratedFlick(1.6,{total:169}),
+    'rapid same-direction flicks travel further even with 169 albums');
+  assert(navigation.acceleratedFlick(-1.6,{total:169,previousVelocity:1.6,elapsed:150})===
+    navigation.acceleratedFlick(-1.6,{total:169}),
+    'reverse flick does not inherit previous momentum');
+  assert(navigation.acceleratedWheel(120,{total:169,streak:5})>navigation.acceleratedWheel(120,{total:169,streak:1}),
+    'repeated wheel notches gain speed on 169 albums');
+  assert(navigation.acceleratedWheel(12,{total:169,streak:8})===12&&
+    navigation.acceleratedWheel(120,{total:50,streak:8})===120,
+    'precise wheel movement and small libraries retain original speed');
+  const swipeDetect=navigation.createSwipeNavigationDetector();
+  assert([1000,1350].every(now=>!swipeDetect.record({
+    distance:120,duration:300,velocity:1.1,now,direction:1
+  })),'first two fast swipes leave the panel hidden');
+  assert(swipeDetect.record({distance:120,duration:300,velocity:1.1,now:1700,direction:1}),
+    'three consecutive quick swipes reveal the panel');
+  swipeDetect.reset();
+  assert([2500,3000,3500,4000].every(now=>!swipeDetect.record({
+    distance:90,duration:500,velocity:.35,now,direction:1
+  })),'four moderate swipes leave the panel hidden');
+  assert(swipeDetect.record({distance:90,duration:500,velocity:.35,now:4500,direction:1}),
+    'five consecutive moderate swipes reveal the panel');
+  swipeDetect.reset();
+  assert(!swipeDetect.record({distance:120,duration:300,velocity:1.1,now:5500,direction:1})&&
+    !swipeDetect.record({distance:120,duration:300,velocity:1.1,now:5700,direction:-1}),
+    'a change in swipe direction resets the reveal streak');
+  swipeDetect.reset();
+  assert(!swipeDetect.record({distance:20,duration:100,velocity:2,now:6000,direction:1}),
+    'a short tap or tiny drag never opens navigator');
+  assert(!navigation.shouldRevealForWheel({total:169,streak:7,distance:1500})&&
+    !navigation.shouldRevealForWheel({total:169,streak:8,distance:850})&&
+    navigation.shouldRevealForWheel({total:169,streak:8,distance:960}),
+    'wheel browsing requires sustained scrolling, not a few notches or one huge event');
+  assert(!navigation.shouldRevealForWheel({total:50,streak:16,distance:5000}),
+    'small libraries do not automatically reveal the fast navigator');
+  const navigatorMock={opened:false,hideCount:0};
   const env={Math:appMath,document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
     ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>{
       if(url==='/api/catalogue/invalidate'){
@@ -195,12 +257,24 @@ export async function runTests(sources) {
     },rpc,CometDClient:class{stop(){}start(){}resetLibraryState(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createDemoMode:()=>({active:()=>false,stop:async()=>{}}),
+    acceleratedFlick:navigation.acceleratedFlick,
+    acceleratedWheel:navigation.acceleratedWheel,
+    createSwipeNavigationDetector:navigation.createSwipeNavigationDetector,
+    shouldRevealForWheel:navigation.shouldRevealForWheel,
+    createFastNavigator:()=>({
+      render(){},active:()=>false,
+      show(){navigatorMock.opened=true},
+      hide(){navigatorMock.opened=false;navigatorMock.hideCount++},
+      visible:()=>navigatorMock.opened
+    }),
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {recordSwipeForTest:options=>swipeNavigation.record(options),
+      fastGestureStateForTest:()=>({wheelStreak,wheelBurstDistance,lastFlickVelocity}),
+      setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       preparedStateForTest:()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated,revision:preparedCatalogueRevision,live:libraryAlbumCount}),
       arrivalStateForTest:()=>({mode:newAlbumAction,revision:observedLibraryRevision}),
       manualSourceStateForTest:()=>({timeout:MANUAL_SOURCE_IDLE_MS,until:sourceBrowseDeadline,timer:sourceBrowseTimer,held:sourceBrowseHeld()}),
@@ -905,6 +979,27 @@ export async function runTests(sources) {
   const releaseNotice=element('.bf-update-notice');
   assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
   assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
+  assert(sources.index.includes('class="bf-about-browser-version"')&&
+    sources.index.includes('class="bf-about-build-match"'),
+    'About distinguishes browser-loaded code from installed server build');
+  root.dataset.browserBuild='0.13.1~git0123456789';
+  releaseInstalled='0.13.1~git0123456789';
+  await settingsApi.loadVersion();
+  assert(element('.bf-about-browser-version').textContent==='0.13.1~git0123456789'&&
+    element('.bf-about-version').textContent==='0.13.1~git0123456789'&&
+    element('.bf-about-build-match').textContent==='Matched',
+    'About confirms loaded browser and server use identical Git builds');
+  releaseInstalled='0.13.1~git9876543210';
+  await settingsApi.loadVersion();
+  assert(element('.bf-about-build-match').textContent.includes('Different builds')&&
+    element('.bf-about-browser-version').textContent==='0.13.1~git0123456789',
+    'server upgrade does not falsely upgrade JS already loaded in an old tab');
+  assert(settingsApi.releaseIsNewer('v0.13.1','0.13.1~git0123456789'),
+    'the final stable release supersedes a matching Git pre-release');
+  root.dataset.browserBuild='development';releaseInstalled='0.10.0';
+  await settingsApi.loadVersion();
+  assert(element('.bf-about-build-match').textContent.includes('Not verified'),
+    'source checkouts are not incorrectly labelled as matching a package');
   const toastCss=sources.settingsCss.match(/\.bf-new-album-toast:not\(\[hidden\]\)\s*\{([^}]+)\}/)?.[1]||'';
   assert(/z-index:\s*900\s*;/.test(toastCss)&&/top:\s*8px\s*;/.test(toastCss),
     'new album notice appears above open cases and menus at the top of the viewer');
@@ -1019,6 +1114,11 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
+  assert(sources.index.includes('class="bf-fast-nav-range"')&&
+    !sources.index.includes('class="bf-fast-nav-toggle"')&&
+    sources.albumBrowserCss.includes('.bf-fast-nav-anchor')&&
+    sources.albumBrowserCss.includes('align-items:center; justify-content:center'),
+    'fast navigator is shelf-centred and has no permanently visible toggle');
   assert(sources.index.includes('css/settings.css?v=demo-mode-1'),
     'Demo styles invalidate the settings stylesheet cache');
   tabs[6].listeners.keydown[0](key('Home'));
@@ -1364,10 +1464,24 @@ export async function runTests(sources) {
     'spine press during wheel scrolling cannot replace the open cover');
   time+=250;
   api.set({position:Math.round(wheelPosition)});
+  // Two swipes are not enough to reveal the panel, and selecting a CD
+  // must clear this history. If already visible it closes on pointerdown,
+  // before the case starts its opening animation.
+  assert(!api.recordSwipeForTest({distance:120,duration:300,velocity:1.1,now:10100,direction:1})&&
+    !api.recordSwipeForTest({distance:120,duration:300,velocity:1.1,now:10400,direction:1}),
+    'two quick swipes accumulate without showing fast navigation');
+  navigatorMock.opened=true;
+  const navigatorHideCount=navigatorMock.hideCount;
   stage.dispatchEvent({type:'pointerdown',button:0,target:idleTarget,pointerId:52,clientX:100,clientY:80});
+  assert(!navigatorMock.opened&&navigatorMock.hideCount===navigatorHideCount+1,
+    'pressing a CD immediately dismisses fast navigation');
   stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:52,clientX:100,clientY:80,stopImmediatePropagation(){}});
   assert(api.state().frontPreviewAlbum===api.state().albums[idleIndex]&&!preview.hidden,
     'deliberate spine click opens its cover once scrolling has stopped');
+  assert([11000,11300].every(now=>!api.recordSwipeForTest({
+    distance:120,duration:300,velocity:1.1,now,direction:1
+  }))&&api.recordSwipeForTest({distance:120,duration:300,velocity:1.1,now:11600,direction:1}),
+    'clicking a CD resets the fast navigation gesture streak to zero');
   // A subsequent spine drag must preserve the manually selected preview and
   // should never promote the spine under the pointer at release.
   api.set({playing:false,position:10});
@@ -1616,9 +1730,9 @@ export async function runTests(sources) {
     sources.albumBrowserCss.includes('[data-mode="recent"] .bf-order-icon.lms-history'),
     'LMS New Music uses a distinct history clock while Recently Added keeps the calendar');
 
-  assert(sources.index.includes('css/album-browser.css?v=player-standby-dim-1'),
+  assert(sources.index.includes('css/album-browser.css?v=fast-nav-3'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=demo-mode-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=fast-nav-4')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -1653,6 +1767,34 @@ export async function runTests(sources) {
   [largeAlbums[1],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[1]];
   assert(api.indexForAlbumId('large-19999')===1&&api.indexForAlbumId('large-1')===19999,
     'album index cache detects reordered positions and self-corrects');
+  // The shelf is in LMS order, not the visible artist's first-letter
+  // order: Bowie under B, Radiohead and Chris Rea under R.
+  // LMS album textkey is a single sort-key initial, not the full surname.
+  const visibleAlbums=[
+    ['Greatest Hits','David Bowie',null,null,null,null,'bowie',null,null,'B'],
+    ['OK Computer','Radiohead',null,null,null,null,'radiohead',null,null,'R'],
+    ['Road To Hell','Chris Rea',null,null,null,null,'chris',null,null,'R']
+  ];
+  api.setOrderForTest('artistAlbum');api.replaceAlbumsForTest(visibleAlbums);
+  assert(api.letterIndex().get('B')===0&&api.letterIndex().get('R')===1&&
+    !api.letterIndex().has('C'),
+    'Artist A–Z follows the LMS letter sort groups, with Chris Rea under R');
+  api.set({position:0});await api.jumpToLetter('R');
+  assert(api.state().target===1,
+    'R jumps to the beginning of the LMS R section, not to visible-name C');
+  // Album mode has a DIFFERENT one-letter key from LMS's sort:album
+  // response (e.g. ALBUMSORT can place a visible 'The Wall' under W).
+  const byAlbumTitle=visibleAlbums.map(album=>album.slice());
+  byAlbumTitle[0][9]='Z';byAlbumTitle[1][9]='O';byAlbumTitle[2][9]='R';
+  api.setOrderForTest('album');api.replaceAlbumsForTest(byAlbumTitle);
+  assert(api.letterIndex().get('Z')===0&&api.letterIndex().get('O')===1&&
+    api.letterIndex().get('R')===2,
+    'Album A–Z uses its own LMS ALBUMSORT keys, not artist keys');
+  byAlbumTitle[0][0]='The Wall';byAlbumTitle[0][9]='W';
+  api.replaceAlbumsForTest(byAlbumTitle);
+  assert(api.letterIndex().get('W')===0,
+    'LMS album-sort initial W overrides the displayed album-title T');
+  api.setOrderForTest('artistAlbum');
   // Letter jumps should not fetch or scan 20,000 entries on each click.
   // The index tracks the first position in the *current* ordered catalogue.
   largeAlbums[0][9]='A';
@@ -2399,6 +2541,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.lmsProvider=await readFile(new URL('../js/providers/lms-provider.js',import.meta.url),'utf8');
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
+  sources.fastNavigation=await readFile(new URL('../js/fast-navigation.js',import.meta.url),'utf8');
   sources.shelfCss=await readFile(new URL('../css/shelf.css',import.meta.url),'utf8');
   sources.settingsCss=await readFile(new URL('../css/settings.css',import.meta.url),'utf8');
   sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
