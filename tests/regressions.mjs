@@ -173,6 +173,17 @@ export async function runTests(sources) {
   // Discovery must choose a different album when the test requires scrolling.
   // A real random draw can select the centred album and legitimately skip it.
   const appMath=Object.create(Math);appMath.random=()=>.37;
+  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,scrubIndex,scrubRatio};')();
+  assert(navigation.scrubIndex(.5,1001)===500,'large library scrub ratio selects index 500');
+  assert(navigation.scrubIndex(2,1001)===1000&&navigation.scrubIndex(-1,1001)===0,
+    'scrub ratio clamps collection endpoints');
+  assert(navigation.acceleratedFlick(.3,{total:1500})===.3*1.35,
+    'slow existing swipe preserves original momentum');
+  assert(Math.abs(navigation.acceleratedFlick(2,{total:1500,previousVelocity:2,elapsed:100}))>
+    Math.abs(navigation.acceleratedFlick(2,{total:1500,elapsed:Infinity})),
+    'repeated fast flicks accelerate and reverse resets the boost');
+  assert(navigation.acceleratedFlick(2,{total:25})===2*1.35,
+    'small libraries keep existing swiping physics');
   const env={Math:appMath,document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
     ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>{
       if(url==='/api/catalogue/invalidate'){
@@ -195,6 +206,8 @@ export async function runTests(sources) {
     },rpc,CometDClient:class{stop(){}start(){}resetLibraryState(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
     createDemoMode:()=>({active:()=>false,stop:async()=>{}}),
+    acceleratedFlick:navigation.acceleratedFlick,
+    createFastNavigator:()=>({render(){},active:()=>false,show(){},hide(){}}),
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
@@ -1019,6 +1032,10 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
+  assert(sources.index.includes('class="bf-fast-nav-range"')&&
+    sources.index.includes('class="bf-fast-nav-toggle"')&&
+    sources.albumBrowserCss.includes('.bf-fast-nav-anchor'),
+    'fast navigator is a translucent overlay over the existing CD shelf');
   assert(sources.index.includes('css/settings.css?v=demo-mode-1'),
     'Demo styles invalidate the settings stylesheet cache');
   tabs[6].listeners.keydown[0](key('Home'));
@@ -1618,7 +1635,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=player-standby-dim-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=demo-mode-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=fast-nav-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
@@ -2373,6 +2390,7 @@ if (typeof process !== 'undefined' && process.argv?.[1]?.endsWith('regressions.m
   sources.lmsProvider=await readFile(new URL('../js/providers/lms-provider.js',import.meta.url),'utf8');
   sources.index=await readFile(new URL('../index.html',import.meta.url),'utf8');
   sources.albumBrowserCss=await readFile(new URL('../css/album-browser.css',import.meta.url),'utf8');
+  sources.fastNavigation=await readFile(new URL('../js/fast-navigation.js',import.meta.url),'utf8');
   sources.shelfCss=await readFile(new URL('../css/shelf.css',import.meta.url),'utf8');
   sources.settingsCss=await readFile(new URL('../css/settings.css',import.meta.url),'utf8');
   sources.server=await readFile(new URL('../server.py',import.meta.url),'utf8');
