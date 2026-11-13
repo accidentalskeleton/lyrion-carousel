@@ -62,6 +62,23 @@ await flush();
 assert(host.root.dataset.demoActive==='false','trusted touch interrupts local demo');
 assert(host.node('.bf-demo-controls').hidden,'stop control hidden on stop');
 
+const repeatHost=surface(),repeatSteps=[];
+repeatHost.node('.bf-demo-repeat').checked=true;
+createDemoMode({prepareStep:async step=>({source:'library',album_id:'repeat:'+step}),
+    onStep:async step=>repeatSteps.push(step),
+    onActiveChange:()=>{},onStop:()=>{}});
+repeatHost.node('.bf-demo-local').click();await flush();
+for(let i=0;i<8;i++){
+    const entry=[...timers.entries()].at(-1);
+    assert(!!entry,'repeat showcase schedules its next scene');
+    timers.delete(entry[0]);await entry[1]();await flush();
+}
+assert(repeatSteps.length===9&&repeatSteps[0]===0&&repeatSteps[8]===0,
+    'enabled repeat restarts the eight-scene sequence without stopping');
+repeatHost.node('.bf-demo-stop').click();await flush();
+assert(repeatHost.root.dataset.demoActive==='false','repeat demo stops on request');
+
+
 const sharedHost=surface(),sharedHostSteps=[];
 createDemoMode({prepareStep:async step=>({source:'library',album_id:'shared:'+step}),
     onStep:async (step,selection)=>sharedHostSteps.push([step,selection]),
@@ -90,4 +107,15 @@ assert(!requests.some(r=>String(r.url).includes('/api/lms')),
     'demo never sends LMS playback or queue commands');
 sharedHost.node('.bf-demo-stop-floating').click();await flush();
 assert(sessions.get('00000001').active===false,'host stop ends shared session');
+
+const failingHost=surface();
+createDemoMode({prepareStep:async()=>{throw Error('Fixture preparation failed')},
+    onStep:async()=>{},onActiveChange:()=>{},onStop:()=>{}});
+failingHost.node('.bf-demo-shared').click();await flush();
+failingHost.node('.bf-demo-launch').click();await flush();
+assert(sessions.get('00000002').active===false,
+    'failed host scene sends stop to the server so joined viewers are released');
+assert(failingHost.root.dataset.demoActive==='false',
+    'failed host scene also exits its own visual demo');
+
 console.log('Demo controller local/shared flow passed');
