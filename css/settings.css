@@ -535,3 +535,49 @@
 @media(prefers-reduced-motion:reduce) {
     .bf-demo-banner,.bf-demo-callout { backdrop-filter:none; -webkit-backdrop-filter:none; }
 }
+
+/* About is a single tab with four semantic, visually grouped sections. */
+#settings-panel-about .bf-about-section + .bf-about-section { margin-top: 20px; }
+#settings-panel-about .bf-settings-group-title { margin-top: 9px; }
+.bf-about-section-description {
+    margin: 9px 0 0; color: #a9ada9; font-size: 11px; line-height: 1.5;
+}
+#settings-panel-about .bf-status-grid { margin-top: 10px; }
+.bf-about-build-card {
+    margin: 10px 0 0; padding: 0;
+    display: grid; grid-template-columns: repeat(2,minmax(0,1fr));
+    border-radius: 8px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.09);
+    background: rgba(255,255,255,.035);
+}
+.bf-about-build-card > div { min-width: 0; padding: 12px 13px; }
+.bf-about-build-card > div + div:not(.bf-about-build-status-row) {
+    border-left: 1px solid rgba(255,255,255,.08);
+}
+.bf-about-build-card dt {
+    margin: 0 0 5px; color: #8d9590; font-size: 10px;
+    letter-spacing: .06em; text-transform: uppercase;
+}
+.bf-about-build-card dd {
+    margin: 0; color: #ddd9d2; font-size: 12px; line-height: 1.5;
+    overflow-wrap: anywhere; font-variant-numeric: tabular-nums;
+}
+.bf-about-build-card .bf-about-build-status-row {
+    grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px;
+    border-top: 1px solid rgba(255,255,255,.09);
+    padding-top: 10px; padding-bottom: 10px;
+}
+.bf-about-build-status-row dt { margin: 0; flex: 0 0 auto; }
+.bf-about-build-card[data-build-status="matched"] .bf-about-build-match { color: #a5d3af; }
+.bf-about-build-card[data-build-status="mismatch"] .bf-about-build-match { color: #f5b08b; font-weight: 650; }
+.bf-about-project-card {
+    margin-top: 10px; padding: 12px 13px;
+    border-radius: 8px; background: rgba(255,255,255,.035);
+}
+#settings-panel-about .bf-release-controls { margin-top: 12px; }
+@media (max-width: 520px) {
+    .bf-about-build-card { grid-template-columns: minmax(0,1fr); }
+    .bf-about-build-card > div + div:not(.bf-about-build-status-row) {
+        border-left: 0; border-top: 1px solid rgba(255,255,255,.08);
+    }
+}

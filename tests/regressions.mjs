@@ -980,8 +980,11 @@ export async function runTests(sources) {
   assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
   assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
   assert(sources.index.includes('class="bf-about-browser-version"')&&
-    sources.index.includes('class="bf-about-build-match"'),
-    'About distinguishes browser-loaded code from installed server build');
+    sources.index.includes('class="bf-about-build-match"')&&
+    sources.index.includes('class="bf-about-build-card"')&&
+    ['bf-about-connection-heading','bf-about-build-heading','bf-about-project-heading','bf-about-updates-heading']
+        .every(id=>sources.index.includes('id="'+id+'"')),
+    'About groups connection, combined browser/server build, project and updates into labelled sections');
   root.dataset.browserBuild='0.13.1~git0123456789';
   releaseInstalled='0.13.1~git0123456789';
   await settingsApi.loadVersion();
@@ -989,11 +992,15 @@ export async function runTests(sources) {
     element('.bf-about-version').textContent==='0.13.1~git0123456789'&&
     element('.bf-about-build-match').textContent==='Matched',
     'About confirms loaded browser and server use identical Git builds');
+  assert(element('.bf-about-build-card').dataset.buildStatus==='matched',
+    'combined build panel marks matching browser/server code');
   releaseInstalled='0.13.1~git9876543210';
   await settingsApi.loadVersion();
   assert(element('.bf-about-build-match').textContent.includes('Different builds')&&
     element('.bf-about-browser-version').textContent==='0.13.1~git0123456789',
     'server upgrade does not falsely upgrade JS already loaded in an old tab');
+  assert(element('.bf-about-build-card').dataset.buildStatus==='mismatch',
+    'combined build panel warns when the tab uses older JavaScript');
   assert(settingsApi.releaseIsNewer('v0.13.1','0.13.1~git0123456789'),
     'the final stable release supersedes a matching Git pre-release');
   root.dataset.browserBuild='development';releaseInstalled='0.10.0';
@@ -1119,7 +1126,7 @@ export async function runTests(sources) {
     sources.albumBrowserCss.includes('.bf-fast-nav-anchor')&&
     sources.albumBrowserCss.includes('align-items:center; justify-content:center'),
     'fast navigator is shelf-centred and has no permanently visible toggle');
-  assert(sources.index.includes('css/settings.css?v=demo-guide-3'),
+  assert(sources.index.includes('css/settings.css?v=about-sections-1'),
     'Demo styles invalidate the settings stylesheet cache');
   tabs[7].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');

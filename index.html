@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="css/album-browser.css?v=fast-nav-3">
   <link rel="stylesheet" href="css/shelf.css?v=touch-selection-1">
   <link rel="stylesheet" href="css/realistic-case.css?v=shelf-only-1">
-  <link rel="stylesheet" href="css/settings.css?v=demo-guide-3">
+  <link rel="stylesheet" href="css/settings.css?v=about-sections-1">
 </head>
 <body>
 <div id="book-fan-browser" class="is-starting" data-ready="false" data-shelf-variety="true" aria-label="Lyrion Carousel album browser">
@@ -69,13 +69,38 @@
             <div class="bf-settings-about"><div class="bf-settings-copy"><strong>Album cache</strong><span>Cached original and resized cover images. Spine metadata and Recently Added dates are stored separately in SQLite.</span></div><div class="bf-settings-section"><div class="bf-settings-copy"><strong>Cache limit</strong><span>Maximum disk space used by cached original and prepared artwork.</span></div><select class="bf-cache-limit" aria-label="Artwork cache size limit"><option value="128000000">128 MB</option><option value="256000000">256 MB</option><option value="512000000">512 MB</option><option value="1000000000">1 GB</option><option value="2000000000">2 GB</option></select></div><dl class="bf-status-grid"><div><dt>Status</dt><dd class="bf-about-cache">—</dd></div><div><dt>Cache size</dt><dd class="bf-cache-size">Loading…</dd></div></dl><div class="bf-cache-actions"><button class="bf-clear-cache" type="button">Clear album cache</button><div class="bf-cache-confirm" hidden role="group" aria-labelledby="cache-confirm-title"><strong id="cache-confirm-title">Clear album cache?</strong><p>Remove cached artwork, spine colours, fonts and catalogue snapshots. These rebuild as albums load. Your saved Recently Added dates and music library are preserved.</p><div class="bf-cache-confirm-actions"><button class="bf-cache-cancel" type="button">Cancel</button><button class="bf-cache-confirm-clear" type="button">Clear cache</button></div></div><span class="bf-cache-feedback" role="status" aria-live="polite"></span></div></div>
           </div>
           <div class="bf-settings-tabpanel" id="settings-panel-about" role="tabpanel" aria-labelledby="settings-tab-about" hidden>
-            <div class="bf-settings-about"><div class="bf-settings-copy"><strong>Status / About</strong><span>Live information from this browser session.</span></div><dl class="bf-status-grid"><div><dt>LMS</dt><dd class="bf-about-connection">—</dd></div><div><dt>Live updates</dt><dd class="bf-about-live">—</dd></div><div><dt>Player</dt><dd class="bf-about-player">—</dd></div><div><dt>Library</dt><dd class="bf-about-library">—</dd></div><div><dt>Application</dt><dd>Lyrion Carousel</dd></div><div><dt>Browser build</dt><dd class="bf-about-browser-version">—</dd></div><div><dt>Server build</dt><dd class="bf-about-version">—</dd></div><div><dt>Build status</dt><dd class="bf-about-build-match">—</dd></div><div><dt>Project</dt><dd class="bf-project-links"><a class="bf-project-link" href="https://github.com/accidentalskeleton/lyrion-carousel" target="_blank" rel="noopener noreferrer" aria-label="GitHub project (opens in a new tab)">GitHub project <span aria-hidden="true">↗</span></a><a class="bf-project-link" href="https://forums.lyrion.org/forum/user-forums/3rd-party-software/1841038-lyrion-carousel-a-touchscreen-album-browser" target="_blank" rel="noopener noreferrer" aria-label="Lyrion forums announcement (opens in a new tab)">Lyrion forums announcement <span aria-hidden="true">↗</span></a></dd></div></dl></div>
-            <div class="bf-settings-section bf-release-updates">
-              <div class="bf-settings-copy"><strong>Release updates</strong></div>
+            <section class="bf-about-section" aria-labelledby="bf-about-connection-heading">
+              <h3 class="bf-settings-group-title" id="bf-about-connection-heading">Connection &amp; library</h3>
+              <p class="bf-about-section-description">Live status for this browser session and the selected player.</p>
+              <dl class="bf-status-grid">
+                <div><dt>LMS</dt><dd class="bf-about-connection">—</dd></div>
+                <div><dt>Live updates</dt><dd class="bf-about-live">—</dd></div>
+                <div><dt>Player</dt><dd class="bf-about-player">—</dd></div>
+                <div><dt>Library</dt><dd class="bf-about-library">—</dd></div>
+              </dl>
+            </section>
+            <section class="bf-about-section" aria-labelledby="bf-about-build-heading">
+              <h3 class="bf-settings-group-title" id="bf-about-build-heading">Application &amp; build</h3>
+              <p class="bf-about-section-description">Lyrion Carousel — comparing the code in this browser with the installed server.</p>
+              <dl class="bf-about-build-card" data-build-status="unknown">
+                <div><dt>Browser build</dt><dd class="bf-about-browser-version">—</dd></div>
+                <div><dt>Server build</dt><dd class="bf-about-version">—</dd></div>
+                <div class="bf-about-build-status-row"><dt>Build status</dt><dd class="bf-about-build-match" role="status" aria-live="polite">Checking…</dd></div>
+              </dl>
+            </section>
+            <section class="bf-about-section" aria-labelledby="bf-about-project-heading">
+              <h3 class="bf-settings-group-title" id="bf-about-project-heading">Project</h3>
+              <div class="bf-about-project-card bf-project-links">
+                <a class="bf-project-link" href="https://github.com/accidentalskeleton/lyrion-carousel" target="_blank" rel="noopener noreferrer" aria-label="GitHub project (opens in a new tab)">GitHub project <span aria-hidden="true">↗</span></a>
+                <a class="bf-project-link" href="https://forums.lyrion.org/forum/user-forums/3rd-party-software/1841038-lyrion-carousel-a-touchscreen-album-browser" target="_blank" rel="noopener noreferrer" aria-label="Lyrion forums announcement (opens in a new tab)">Lyrion forums announcement <span aria-hidden="true">↗</span></a>
+              </div>
+            </section>
+            <section class="bf-about-section bf-release-updates" aria-labelledby="bf-about-updates-heading">
+              <h3 class="bf-settings-group-title" id="bf-about-updates-heading">Release updates</h3>
               <div class="bf-release-controls"><label><input class="bf-release-auto" type="checkbox" checked> Check automatically (daily)</label><button class="bf-release-check" type="button">Check now</button></div>
               <p class="bf-release-status" role="status" aria-live="polite">Not checked yet.</p>
               <a class="bf-project-link bf-release-link" href="https://github.com/accidentalskeleton/lyrion-carousel/releases/latest" target="_blank" rel="noopener noreferrer" hidden>View release</a>
-            </div>
+            </section>
           </div>
           <div class="bf-settings-tabpanel" id="settings-panel-coffee" role="tabpanel" aria-labelledby="settings-tab-coffee" hidden>
             <div class="bf-coffee-panel">
