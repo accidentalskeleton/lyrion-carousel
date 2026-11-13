@@ -16,6 +16,12 @@ The sequence uses Library browsing and, if the Spotty plugin is available, brief
 
 **Security:** shared sessions are explicitly joined, use unpredictable controller and viewer tokens, expire after inactivity, and should only be used on a trusted network. The join code is a bearer invitation; don't expose the Carousel server or session code publicly. No browser is taken over just because another viewer starts a demo.
 
+## Navigating large CD collections
+
+For collections containing hundreds or thousands of CDs, select **Navigate** on the CD shelf to reveal a translucent fast-scrub timeline *over* the spines. The overlay does not consume extra screen height. Drag the slider (or use its keyboard controls) to travel by collection position; the label shows the artist, album and selected CD number. Release to settle on the destination and load its nearby artwork. The navigator closes itself after a short idle period; Close hides it immediately. A–Z shortcuts appear for Artist and Album ordering; other sorts use relative library position instead.
+
+**Accelerated swiping** is automatic when the collection contains at least 100 CDs. Slow drags retain their original precise feel; a quick flick travels further and repeated flicks in the same direction accumulate momentum. Reversing direction resets the acceleration and brakes the shelf. The existing finite endpoints for Recently Added/New Music are respected. Neither fast navigation nor swiping starts playback, changes the playlist, or automatically opens a CD case.
+
 ## Cloverleaf album discovery
 
 A short press of the cloverleaf continues to select and play a random album. Hold it for approximately 600 ms (or right-click / press Shift+F10 while focused) to open the discovery menu:
