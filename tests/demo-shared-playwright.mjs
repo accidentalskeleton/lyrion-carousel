@@ -29,9 +29,9 @@ try{
     await host.waitForFunction(()=>
         document.querySelector('#book-fan-browser')?.dataset.demoActive==='true');
     await host.waitForFunction(()=>
-        document.querySelector('.bf-demo-status')?.textContent.includes('scene 1/8'));
+        document.querySelector('.bf-demo-status')?.textContent.includes('scene 1/16'));
     await viewer.waitForFunction(()=>
-        document.querySelector('.bf-demo-status')?.textContent.includes('scene 1/8'),
+        document.querySelector('.bf-demo-status')?.textContent.includes('scene 1/16'),
         null,{timeout:12000});
     // Stop from the host; viewers must be released by the server session.
     await host.keyboard.press('Escape');
