@@ -5,6 +5,7 @@ import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPositio
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=stable-spotify-album-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=stable-spotify-album-1';
+import { createFastNavigator, acceleratedFlick } from './fast-navigation.js?v=1';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
@@ -1813,10 +1814,12 @@ function updateMeta(force=false){
     }
     meta.replaceChildren(...content);updateProgressDisplay();
 }
-function draw(){if(raf){cancelAnimationFrame(raf);raf=0}target=shelfPosition(target);position=shelfPosition(position);if(!dragging){const error=target-position;if(followAnimation){const animation=followAnimation,p=clamp((performance.now()-animation.start)/animation.duration,0,1);position=animation.from+(animation.to-animation.from)*(1-Math.pow(1-p,3));if(p>=1){position=target=animation.to;followAnimation=null;animation.resolve(true)}}else if(randomAnimating&&randomAnimationDuration>0){const p=clamp((performance.now()-randomAnimationStart)/randomAnimationDuration,0,1),e=1-Math.pow(1-p,3);position=shelfPosition(randomAnimationFrom+(randomAnimationTo-randomAnimationFrom)*e);if(p>=1)position=target}else{position+=error*.135;if(Math.abs(error)<.0004)position=target}}updateShelfWindow();updateMeta();prefetchAround(selectedIndex());prefetchCoverWindow(boundedShelf()?selectedIndex():modulo(Math.round(target),totalAlbums));syncShelfDom();if(coverOpening||followAnimation||dragging||Math.abs(target-position)>.0004)raf=requestAnimationFrame(draw);else raf=0}function schedule(){if(!raf)raf=requestAnimationFrame(draw)}
+function draw(){if(raf){cancelAnimationFrame(raf);raf=0}target=shelfPosition(target);position=shelfPosition(position);if(!dragging){const error=target-position;if(followAnimation){const animation=followAnimation,p=clamp((performance.now()-animation.start)/animation.duration,0,1);position=animation.from+(animation.to-animation.from)*(1-Math.pow(1-p,3));if(p>=1){position=target=animation.to;followAnimation=null;animation.resolve(true)}}else if(randomAnimating&&randomAnimationDuration>0){const p=clamp((performance.now()-randomAnimationStart)/randomAnimationDuration,0,1),e=1-Math.pow(1-p,3);position=shelfPosition(randomAnimationFrom+(randomAnimationTo-randomAnimationFrom)*e);if(p>=1)position=target}else{position+=error*.135;if(Math.abs(error)<.0004)position=target}}updateShelfWindow();updateMeta();prefetchAround(selectedIndex());prefetchCoverWindow(boundedShelf()?selectedIndex():modulo(Math.round(target),totalAlbums));syncShelfDom();fastNavigator.render();if(coverOpening||followAnimation||dragging||Math.abs(target-position)>.0004)raf=requestAnimationFrame(draw);else raf=0}function schedule(){if(!raf)raf=requestAnimationFrame(draw)}
+// Chain momentum only across deliberate, high-speed flicks.
+let lastFlickVelocity=0,lastFlickAt=-Infinity;
 let lastShelfScrollAt=-Infinity;
 function shelfIsScrolling(){return dragging&&moved||!!followAnimation||randomAnimating||Math.abs(target-position)>.04||performance.now()-lastShelfScrollAt<160}
-function scrollShelfWheel(e){if(randomAnimating)return;e.preventDefault();finishCoverOpening();lastShelfScrollAt=performance.now();followingNowPlaying=false;cancelFollowAnimation();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=shelfPosition(position+delta*.0028);draw();clearTimeout(wheelTimer);wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110)}
+function scrollShelfWheel(e){if(randomAnimating)return;lastFlickVelocity=0;e.preventDefault();finishCoverOpening();lastShelfScrollAt=performance.now();followingNowPlaying=false;cancelFollowAnimation();const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;target=position=shelfPosition(position+delta*.0028);draw();clearTimeout(wheelTimer);wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110)}
 // Shared pointer physics for shelf spines and the enlarged closed cover.
 function beginShelfDrag(event,pressedIndex=null,captureTarget=stage){
     if(randomAnimating)return false;
@@ -1846,10 +1849,52 @@ function moveShelfDrag(event,closePreviewOnMove=true){
 function finishShelfDrag(cancelled=false){
     if(!dragging)return;
     dragging=false;stage.classList.remove('is-dragging');
-    if(cancelled)target=snapShelfPosition(position);
-    else if(moved)target=snapShelfPosition(position-pointerVelocity*1.35);
+    if(cancelled){target=snapShelfPosition(position);lastFlickVelocity=0}
+    else if(moved){
+        const now=performance.now(),elapsed=now-lastFlickAt;
+        const flick=acceleratedFlick(pointerVelocity,{
+            previousVelocity:lastFlickVelocity,elapsed,total:totalAlbums
+        });
+        // A reversed flick instantly brakes momentum; the new direction
+        // becomes the start of a fresh sequence instead of compounding it.
+        target=snapShelfPosition(position-flick);
+        lastFlickVelocity=Math.abs(pointerVelocity)>=.7?pointerVelocity:0;
+        lastFlickAt=now;
+    }
     pressedAlbumIndex=null;schedule();
 }
+// The navigator changes shelf position only. It does not open or play CDs.
+const fastNavigator=createFastNavigator(root,{
+    state:()=>({
+        total:Math.max(0,totalAlbums-(externalShelfPosition>=0?1:0)),
+        index:Math.max(0,selectedIndex()-(externalShelfPosition>=0&&selectedIndex()>externalShelfPosition?1:0)),
+        mode:orderMode,
+        album:albums[selectedIndex()],
+        albumAt:index=>albums[catalogueSlot(index)]
+    }),
+    onActivity:()=>{noteUserActivity();lastFlickVelocity=0;},
+    jump:async(index,final,token)=>{
+        if(orderBusy||libraryRefreshing||randomAnimating||!totalAlbums)return;
+        const generation=catalogueGeneration,source=catalogueSource;
+        const slot=catalogueSlot(index);
+        if(slot<0||slot>=totalAlbums)return;
+        followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;
+        const destination=nearestPositionForIndex(slot);
+        // During input: track the finger instantly and render only the
+        // existing pooled shelf window. Final release loads the target page.
+        target=position=shelfPosition(destination);
+        lastShelfScrollAt=performance.now();
+        draw();
+        if(!final)return;
+        if(source==='library'&&liveCatalogue){
+            await fetchBatch(Math.floor(index/PAGE_SIZE));
+            if(generation!==catalogueGeneration||source!==catalogueSource)return;
+        }
+        target=snapShelfPosition(nearestPositionForIndex(slot));
+        schedule();
+    },
+    jumpLetter:letter=>{if(orderMode==='artistAlbum'||orderMode==='album')void jumpToLetter(letter)}
+});
 stage.addEventListener('pointerdown',event=>{
     const pressed=event.target.closest('.bf-album');
     beginShelfDrag(event,pressed?Number(pressed.dataset.index):null,stage);
