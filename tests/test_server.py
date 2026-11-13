@@ -585,7 +585,7 @@ class ServerTests(unittest.TestCase):
               {'id':2,'artist':'B','album':'Newest'},
               {'id':3,'artist':'C','album':'Middle'}]
         calls=[]
-        def pages(genre_id=None,sort='artistalbum')
+        def pages(genre_id=None,sort='artistalbum'):
             calls.append((genre_id,sort))
             if sort=='new':
                 return iter([[{'id':2},{'id':3},{'id':1}]])
@@ -607,7 +607,7 @@ class ServerTests(unittest.TestCase):
               {'id':2,'artist':'B','album':'New compilation'},
               {'id':3,'artist':'C','album':'New greatest hits'}]
         calls=[]
-        def pages(genre_id=None,sort='artistalbum')
+        def pages(genre_id=None,sort='artistalbum'):
             if sort=='new':
                 return iter([[{'id':1},{'id':2},{'id':3}]])
             return iter([base])
