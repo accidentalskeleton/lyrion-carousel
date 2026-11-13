@@ -985,6 +985,12 @@ export async function runTests(sources) {
     ['bf-about-connection-heading','bf-about-build-heading','bf-about-project-heading','bf-about-updates-heading']
         .every(id=>sources.index.includes('id="'+id+'"')),
     'About groups connection, combined browser/server build, project and updates into labelled sections');
+  assert(sources.settingsCss.includes('.bf-about-build-card')&&
+    sources.settingsCss.includes('[data-build-status="mismatch"]'),
+    'About layout uses one responsive build card with a visible mismatch state');
+  assert(sources.index.includes('class="bf-demo-banner-note"')&&
+    sources.settingsCss.includes('.bf-demo-guide[data-compact="true"]'),
+    'Demo guide can move text into a compact banner instead of obscuring a popup');
   root.dataset.browserBuild='0.13.1~git0123456789';
   releaseInstalled='0.13.1~git0123456789';
   await settingsApi.loadVersion();

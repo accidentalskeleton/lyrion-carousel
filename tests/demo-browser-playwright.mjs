@@ -110,7 +110,65 @@ try{
     if(await page.locator('.bf-fast-navigator').isVisible())
         throw Error('CD pointerdown must immediately hide fast navigation: '+JSON.stringify(cdClick));
     await page.mouse.up();
+    // Test the real overlay positioner against large functional surfaces.
+    // No screenshot heuristics: use measured rectangles across screen sizes.
+    for(const viewport of [{width:1280,height:720},{width:1024,height:768},{width:600,height:700}]){
+        await page.setViewportSize(viewport);
+        const geometry=await page.evaluate(async()=>{
+            const {createDemoGuide}=await import('/js/demo-guide.js');
+            const root=document.querySelector('#book-fan-browser');
+            const dialog=root.querySelector('.bf-track-overlay');
+            const search=root.querySelector('.bf-search-overlay');
+            const guide=createDemoGuide(root);
+            const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+            const overlap=(a,b)=>{
+                if(!a||!b)return 0;
+                const x=Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left));
+                const y=Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+                return x*y;
+            };
+            const snapshot=(selector)=>{
+                const card=root.querySelector('.bf-demo-callout');
+                const panel=root.querySelector(selector);
+                return {popup:selector,compact:root.querySelector('.bf-demo-guide').dataset.compact,
+                    calloutHidden:card.hidden,captionVisible:!root.querySelector('.bf-demo-banner-note').hidden,
+                    overlap:card.hidden?0:overlap(card.getBoundingClientRect(),panel.getBoundingClientRect())};
+            };
+            try{
+                dialog.hidden=false;
+                guide.start();guide.show(3,'.bf-track-panel');
+                await sleep(650);
+                const information=snapshot('.bf-track-panel');
+                dialog.hidden=true;
+                search.hidden=false;
+                guide.show(11,'.bf-search-panel');
+                await sleep(650);
+                const searching=snapshot('.bf-search-panel');
+                return {information,searching};
+            }finally{
+                guide.stop();dialog.hidden=true;search.hidden=true;
+            }
+        });
+        for(const result of Object.values(geometry)){
+            if(result.overlap>0)
+                throw Error('Guided annotation overlaps '+result.popup+' at '+viewport.width+': '+JSON.stringify(result));
+            if(result.compact==='true'&&(!result.calloutHidden||!result.captionVisible))
+                throw Error('Compact banner must replace obstructing callout at '+viewport.width+': '+JSON.stringify(result));
+        }
+    }
+    await page.setViewportSize({width:1280,height:720});
     await page.locator('.bf-settings-open').click();
+    await page.locator('#settings-tab-about').click();
+    const about=await page.locator('#settings-panel-about').evaluate(panel=>({
+        groups:[...panel.querySelectorAll('.bf-about-section')].map(x=>x.querySelector('h3')?.textContent),
+        buildCards:panel.querySelectorAll('.bf-about-build-card').length,
+        browserBuild:panel.querySelector('.bf-about-build-card .bf-about-browser-version')!==null,
+        serverBuild:panel.querySelector('.bf-about-build-card .bf-about-version')!==null,
+        buildStatus:panel.querySelector('.bf-about-build-card .bf-about-build-match')!==null
+    }));
+    if(JSON.stringify(about.groups)!==JSON.stringify(['Connection & library','Application & build','Project','Release updates'])||
+        about.buildCards!==1||!about.browserBuild||!about.serverBuild||!about.buildStatus)
+        throw Error('About sections and combined build panel incorrect: '+JSON.stringify(about));
     await page.locator('#settings-tab-demo').click();
     if(!await page.locator('.bf-demo-local').isVisible())throw Error('Local demo button unavailable');
     await page.locator('.bf-demo-local').click();

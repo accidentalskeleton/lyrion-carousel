@@ -3,7 +3,7 @@ import { createDemoMode } from '../js/demo-mode.js';
 
 const assert=(value,message)=>{if(!value)throw Error(message)};
 const listeners=new Map(),timers=new Map();let nextTimer=0;
-globalThis.setTimeout=fn=>{timers.set(++nextTimer,fn);return nextTimer};
+globalThis.setTimeout=(fn,ms)=>{fn.__delay=ms;timers.set(++nextTimer,fn);return nextTimer};
 globalThis.clearTimeout=id=>timers.delete(id);
 function element(){
     return {disabled:false,hidden:false,value:'normal',textContent:'',dataset:{},listeners:{},
@@ -71,6 +71,12 @@ repeatHost.node('.bf-demo-local').click();await flush();
 for(let i=0;i<17;i++){
     const entry=[...timers.entries()].at(-1);
     assert(!!entry,'repeat showcase schedules its next scene');
+    if([3,4,9,11,15].includes(i))
+        assert(entry[1].__delay===7500,
+            'popup scene '+i+' receives 3 seconds extra after its UI opens');
+    if([2,10,13,16].includes(i))
+        assert(entry[1].__delay===5500,
+            'open-cover scene '+i+' receives time to appreciate the artwork');
     timers.delete(entry[0]);await entry[1]();await flush();
 }
 assert(repeatSteps.length===18&&repeatSteps[0]===0&&repeatSteps[17]===0,
