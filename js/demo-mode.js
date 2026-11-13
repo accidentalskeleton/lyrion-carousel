@@ -1,8 +1,10 @@
+import { createDemoGuide } from './demo-guide.js?v=1';
 /* Browser-independent, opt-in visual demo. It never sends LMS RPCs.
  * Remote viewers join voluntarily with a session code, not by autoplay.
  */
 export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
     const root=document.getElementById('book-fan-browser');
+    const guide=createDemoGuide(root);
     const local=root.querySelector('.bf-demo-local');
     const shared=root.querySelector('.bf-demo-shared');
     const launch=root.querySelector('.bf-demo-launch');
@@ -38,7 +40,7 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
         if(!mode)return;
         clearTimeout(timer);timer=0;++epoch;
         mode='';code=viewer=controller='';stepIndex=-1;
-        toggle(false);onStop();say(message);
+        guide.stop();toggle(false);onStop();say(message);
     }
     async function stop(){
         if(!mode)return;
@@ -50,6 +52,7 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
         if(mode&&mode!=='ready')return -1;
         mode=modeName;stepIndex=-1;sequence=0;++epoch;
         toggle(true);
+        guide.start();
         // Display is unobstructed while showcasing; settings can be reopened
         // normally afterwards. The status text and code stay in settings.
         root.querySelector('.bf-settings-close')?.click?.();
@@ -64,7 +67,8 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
         if(generation!==epoch||!mode)return;
         stepIndex=step;
         say((controller?'Shared demo':'Visual demo')+' · scene '+(step+1)+'/8'+(code?' · code '+code:''));
-        await onStep(step,selection);
+        const target=await onStep(step,selection);
+        if(generation===epoch&&mode)guide.show(step,target);
     }
     async function hostStep(generation,step=0){
         if(generation!==epoch||!mode)return;
