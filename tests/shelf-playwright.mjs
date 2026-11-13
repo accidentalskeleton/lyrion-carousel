@@ -30,7 +30,7 @@ export async function runShelfGestures(page) {
       standby.on.power==='on','Player power on/off and partial status update correctly');
     assert(Number(standby.off.shelf)<Number(standby.on.shelf)&&
       Number(standby.off.cover)<Number(standby.on.cover),
-      'Both the shelf and open-case surfaces visibly dim on standby');
+      'Both the shelf and open-case surfaces visibly dim on standby: '+JSON.stringify(standby));
 
     await page.evaluate(()=>shelfBrowser.set(49,false));
     await page.locator('.bf-album[data-index="49"]').click();
