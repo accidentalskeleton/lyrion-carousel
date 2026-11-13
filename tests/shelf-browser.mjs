@@ -33,6 +33,9 @@ export async function runShelfBrowserTests() {
     clamp, modulo, circularDelta, nearestPosition:nearestPositionForIndex,
     buildAlbumPositionIndex, locateIndexedAlbum:locateAlbum,
     createLmsProvider, createSpotifyProvider, spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl,
+    // Dedicated Demo Mode tests exercise the real module; shelf gesture
+    // geometry tests remain isolated from session/network behaviour.
+    createDemoMode:()=>({active:()=>false,stop:async()=>{}}),
     fetch:async url => url.startsWith('/api/catalogue')
       ? {ok:true, json:async () => ({albums_loop:catalogue, library_count:catalogue.length})}
       : {ok:false}

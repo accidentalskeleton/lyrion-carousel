@@ -194,6 +194,7 @@ export async function runTests(sources) {
       return metadataFetch(url,...args);
     },rpc,CometDClient:class{stop(){}start(){}resetLibraryState(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
+    createDemoMode:()=>({active:()=>false,stop:async()=>{}}),
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
@@ -881,7 +882,7 @@ export async function runTests(sources) {
     'closing an idle album preview clears its detail heading');
 
 
-  const tabs=['display','browsing','connection','genres','cache','about'].map(name=>{
+  const tabs=['display','browsing','demo','connection','genres','cache','about'].map(name=>{
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
   });
   window.fetch=async()=>{};
@@ -1004,23 +1005,23 @@ export async function runTests(sources) {
   Element.prototype.dispatchEvent.call(window,{type:'pageshow'});
   assert(!!settingsApi.state().timer,'restoring a suspended page resumes daily checks');
   autoRelease.checked=false;autoRelease.listeners.change[0]();
-  tabs[2].listeners.click[0]();
-  assert(tabs[2].getAttribute('aria-selected')==='true'&&tabs[2].tabIndex===0,'settings tab selected accessibly');
+  tabs[3].listeners.click[0]();
+  assert(tabs[3].getAttribute('aria-selected')==='true'&&tabs[3].tabIndex===0,'settings tab selected accessibly');
   assert(!element('#settings-panel-connection').hidden&&element('#settings-panel-display').hidden,'settings shows only selected panel');
   const key=key=>({key,preventDefault(){},stopPropagation(){}});
-  tabs[2].listeners.keydown[0](key('ArrowRight'));
-  assert(!element('#settings-panel-genres').hidden,'arrow key selects genres settings tab');
   tabs[3].listeners.keydown[0](key('ArrowRight'));
-  assert(!element('#settings-panel-cache').hidden,'arrow key selects cache settings tab');
+  assert(!element('#settings-panel-genres').hidden,'arrow key selects genres settings tab');
   tabs[4].listeners.keydown[0](key('ArrowRight'));
+  assert(!element('#settings-panel-cache').hidden,'arrow key selects cache settings tab');
+  tabs[5].listeners.keydown[0](key('ArrowRight'));
   assert(!element('#settings-panel-about').hidden,'arrow key selects about settings tab');
   assert(sources.index.includes('class="bf-project-link" href="https://github.com/accidentalskeleton/lyrion-carousel" target="_blank" rel="noopener noreferrer"'),
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
-  assert(sources.index.includes('css/settings.css?v=new-album-toast-top-1'),
-    'project-link styles invalidate the settings stylesheet cache');
-  tabs[5].listeners.keydown[0](key('Home'));
+  assert(sources.index.includes('css/settings.css?v=demo-mode-1'),
+    'Demo styles invalidate the settings stylesheet cache');
+  tabs[6].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
   assert(api.state().KEEP_PLAYING_OPEN===true,
     'the playing cover is permanently pinned regardless of old preferences');
@@ -1563,6 +1564,15 @@ export async function runTests(sources) {
       'Debian package excludes removed disc module while retaining photographic assets');
   }
 
+  assert(sources.index.includes('id="settings-tab-demo"')&&
+    sources.index.includes('class="bf-demo-local"')&&
+    sources.index.includes('class="bf-demo-join"')&&
+    sources.index.includes('class="bf-demo-launch"'),
+    'Demo settings include local showcase, opt-in shared join and staged launch');
+  assert(sources.app.includes("import { createDemoMode }")&&
+    sources.app.includes("async prepareStep(step,remote)")&&
+    sources.app.includes("setCatalogueSource(desired,{manual:true,demo:true})"),
+    'visual-only demo uses Carousel shelf navigation without changing LMS playback');
   assert(sources.app.includes("'tags:aluJenKNRAxE'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
     'closed-cover interaction no longer dispatches open-case events');
@@ -1606,10 +1616,10 @@ export async function runTests(sources) {
     sources.albumBrowserCss.includes('[data-mode="recent"] .bf-order-icon.lms-history'),
     'LMS New Music uses a distinct history clock while Recently Added keeps the calendar');
 
-  assert(sources.index.includes('css/album-browser.css?v=sort-labels-1'),
+  assert(sources.index.includes('css/album-browser.css?v=player-standby-dim-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=new-album-notify-race-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
-    'Cross-browser source following invalidates the app module cache');
+  assert(sources.index.includes('js/app.js?v=demo-mode-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+    'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
   assert(sources.app.includes("if(album[13]==='spotify')await loadAlbum(album);else await playAlbumNow(album);"),
@@ -2195,6 +2205,19 @@ export async function runTests(sources) {
   assert(rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length===beforePassiveSwitch,
     'passive source-following on another viewer never issues playback commands');
 
+  // Power state affects the shelf only, not audio transport or source choice.
+  // A missing power field preserves the most recent confirmed power state.
+  api.applyStatus({mode:'stop',power:0,playlist_loop:[]});
+  assert(root.dataset.playerPower==='off'&&element('.bf-player-power').dataset.power==='off',
+    'player power off dims the shelf and open jewel case');
+  api.applyStatus({mode:'stop',playlist_loop:[]});
+  assert(root.dataset.playerPower==='off','partial status does not undo standby dimming');
+  api.applyStatus({mode:'stop',power:1,playlist_loop:[]});
+  assert(root.dataset.playerPower==='on','player power on restores normal shelf brightness');
+  assert(sources.albumBrowserCss.includes('[data-player-power="off"] .bf-stage')&&
+    sources.albumBrowserCss.includes('[data-player-power="off"] .bf-front-preview')&&
+    sources.albumBrowserCss.includes('[data-external-playback="true"] .bf-front-preview[data-pinned="true"]'),
+    'standby CSS dims the shelf and pinned radio jewel case but keeps transport visible');
   // A deliberate selection is a LOCAL browsing decision, not a playback
   // command. The user may browse Spotify while another viewer plays Library.
   const playbackWritesBeforeBrowse=rpcCalls.filter(cmd=>cmd[0]==='playlistcontrol'||(cmd[0]==='spotty'&&cmd[1]==='playlist')).length;

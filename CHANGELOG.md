@@ -4,6 +4,11 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Dim the CD shelf and any open jewel case when the selected LMS player's power state is off; restore full brightness on power-on while leaving navigation and transport controls readable. Unknown power state is not treated as off.
+
+
+- Add browser-native **Settings → Demo** visual showcase: local or code-joined shared sessions across Windows, iPad and Raspberry Pi. Coordinate shelf/album source IDs and native jewel-case animations without changing LMS playback or queue; offer speed choices, optional repeating scenes for filming, reliable host-error shutdown and touch/Escape stop. Package ephemeral, token-protected server coordination separately from normal player synchronisation.
+
 ## [0.13.0] - 2026-11-12
 
 - Document optional Corsair XENEON EDGE touchscreen calibration for Raspberry Pi kiosk clients. Add a separate guarded helper for device/output diagnostics, upstream virtual-environment preparation, configuration backup and explicit restoration; keep third-party calibration out of the default kiosk install and retain the restricted `carousel` account.

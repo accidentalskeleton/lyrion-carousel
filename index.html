@@ -10,10 +10,10 @@
   <title>Lyrion Carousel</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/lyrion-carousel-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/album-browser.css?v=sort-labels-1">
+  <link rel="stylesheet" href="css/album-browser.css?v=player-standby-dim-1">
   <link rel="stylesheet" href="css/shelf.css?v=touch-selection-1">
   <link rel="stylesheet" href="css/realistic-case.css?v=shelf-only-1">
-  <link rel="stylesheet" href="css/settings.css?v=new-album-toast-top-1">
+  <link rel="stylesheet" href="css/settings.css?v=demo-mode-1">
 </head>
 <body>
 <div id="book-fan-browser" class="is-starting" data-ready="false" data-shelf-variety="true" aria-label="Lyrion Carousel album browser">
@@ -28,6 +28,7 @@
         <div class="bf-settings-tabs" role="tablist" aria-label="Settings categories">
           <button type="button" class="bf-settings-tab" id="settings-tab-display" role="tab" aria-controls="settings-panel-display" aria-selected="true" tabindex="0" data-settings-tab="display">Display</button>
           <button type="button" class="bf-settings-tab" id="settings-tab-browsing" role="tab" aria-controls="settings-panel-browsing" aria-selected="false" tabindex="-1" data-settings-tab="browsing">Browsing</button>
+          <button type="button" class="bf-settings-tab" id="settings-tab-demo" role="tab" aria-controls="settings-panel-demo" aria-selected="false" tabindex="-1" data-settings-tab="demo">Demo</button>
           <button type="button" class="bf-settings-tab" id="settings-tab-connection" role="tab" aria-controls="settings-panel-connection" aria-selected="false" tabindex="-1" data-settings-tab="connection">Connection</button>
           <button type="button" class="bf-settings-tab" id="settings-tab-genres" role="tab" aria-controls="settings-panel-genres" aria-selected="false" tabindex="-1" data-settings-tab="genres">Genres</button>
           <button type="button" class="bf-settings-tab" id="settings-tab-cache" role="tab" aria-controls="settings-panel-cache" aria-selected="false" tabindex="-1" data-settings-tab="cache">Cache</button>
@@ -51,6 +52,20 @@
             <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Front preview timeout</strong><span>Return a clicked album cover to the shelf.</span></div><select class="bf-front-timeout" aria-label="Front preview timeout"><option value="0">Off</option><option value="5000">5 seconds</option><option value="10000">10 seconds</option><option value="20000">20 seconds</option><option value="30000">30 seconds</option></select></div>
             <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Album menu timeout</strong><span>Close the long-press album menu after inactivity.</span></div><select class="bf-album-menu-timeout" aria-label="Album menu timeout"><option value="0">Off</option><option value="5000">5 seconds</option><option value="10000">10 seconds</option><option value="20000">20 seconds</option><option value="30000">30 seconds</option></select></div>
             <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Maximum scroll duration</strong><span>Maximum time for random selection or idle return to reach its album.</span></div><select class="bf-random-duration" aria-label="Maximum scroll duration"><option value="1000">1 second</option><option value="2000">2 seconds</option><option value="3000">3 seconds</option></select></div>
+          </div>
+          <div class="bf-settings-tabpanel" id="settings-panel-demo" role="tabpanel" aria-labelledby="settings-tab-demo" hidden>
+            <h3 class="bf-settings-group-title">Visual showcase</h3>
+            <p class="bf-demo-description">Automatically browse the CD shelf and open albums. Visual only: no music starts, queues change or player controls are sent. Runs in Chrome, Edge and Safari.</p>
+            <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Demo speed</strong><span>Choose how long each scene stays on screen.</span></div><select class="bf-demo-speed" aria-label="Demonstration speed"><option value="relaxed">Relaxed</option><option value="normal" selected>Normal</option><option value="fast">Fast</option></select></div>
+            <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Repeat showcase</strong><span>Loop the sequence for longer filming sessions. Applies to this browser as host, or to your local demo.</span></div><label class="bf-demo-repeat-label"><input type="checkbox" class="bf-demo-repeat"> Repeat</label></div>
+            <h3 class="bf-settings-group-title">This browser</h3>
+            <div class="bf-demo-actions"><button type="button" class="bf-demo-local">Start local demo</button></div>
+            <h3 class="bf-settings-group-title">Synchronise other browsers</h3>
+            <p class="bf-demo-description">Start a shared session, then enter its eight-character code on each Windows, iPad or Pi browser you want to join. Other viewers are never taken over automatically.</p>
+            <div class="bf-demo-actions"><button type="button" class="bf-demo-shared">Create shared session</button><button type="button" class="bf-demo-launch" hidden>Begin shared showcase</button></div>
+            <div class="bf-demo-actions"><input class="bf-demo-code" type="text" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Session code" aria-label="Shared demo code"><button type="button" class="bf-demo-join">Join demo</button></div>
+            <div class="bf-demo-actions"><button type="button" class="bf-demo-stop" disabled>Stop demo</button></div>
+            <p class="bf-demo-status" role="status" aria-live="polite">Demo inactive. Touch, click or press Escape to stop an active demonstration.</p>
           </div>
           <div class="bf-settings-tabpanel" id="settings-panel-connection" role="tabpanel" aria-labelledby="settings-tab-connection" hidden>
             <div class="bf-settings-section"><div class="bf-settings-copy"><strong>Player</strong><span>Choose the Lyrion player controlled by this browser.</span></div><select class="bf-player-select" aria-label="Lyrion player" disabled><option>Discovering…</option></select></div>
@@ -125,6 +140,6 @@
   </section>
 </div>
 <script src="js/resilience.js?v=0.11.0"></script>
-<script type="module" src="js/settings.js?v=new-album-preview-1"></script><script type="module" src="js/app.js?v=new-album-notify-race-1"></script><script type="module" src="js/screen-sleep.js?v=0.11.0"></script><script type="module" src="js/performance.js?v=phase4-profiler-refresh-2"></script>
+<script type="module" src="js/settings.js?v=new-album-preview-1"></script><script type="module" src="js/app.js?v=demo-mode-1"></script><script type="module" src="js/screen-sleep.js?v=0.11.0"></script><script type="module" src="js/performance.js?v=phase4-profiler-refresh-2"></script>
 </body>
 </html>

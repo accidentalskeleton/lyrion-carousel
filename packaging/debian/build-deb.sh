@@ -22,6 +22,7 @@ install -Dm0644 "$PROJECT_DIR/manifest.webmanifest" "$STAGE/opt/$PACKAGE/manifes
 install -Dm0755 "$PROJECT_DIR/server.py" "$STAGE/opt/$PACKAGE/server.py"
 install -Dm0644 "$PROJECT_DIR/indexed_order.py" "$STAGE/opt/$PACKAGE/indexed_order.py"
 install -Dm0644 "$PROJECT_DIR/metadata_db.py" "$STAGE/opt/$PACKAGE/metadata_db.py"
+install -Dm0644 "$PROJECT_DIR/demo_sessions.py" "$STAGE/opt/$PACKAGE/demo_sessions.py"
 install -Dm0644 "$PROJECT_DIR/README.md" "$STAGE/usr/share/doc/$PACKAGE/README.md"
 install -Dm0644 "$PROJECT_DIR/LICENSE" "$STAGE/usr/share/doc/$PACKAGE/LICENSE"
 install -Dm0644 "$PROJECT_DIR/THIRD_PARTY_NOTICES.md" "$STAGE/usr/share/doc/$PACKAGE/THIRD_PARTY_NOTICES.md"

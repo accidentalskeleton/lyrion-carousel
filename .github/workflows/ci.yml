@@ -35,13 +35,15 @@ jobs:
       - name: Install Python test dependencies
         run: python -m pip install "Pillow>=10,<13"
       - name: Check Python syntax
-        run: python -m py_compile server.py indexed_order.py metadata_db.py tests/test_server.py tests/test_indexed_order.py tests/test_metadata_db.py
+        run: python -m py_compile server.py demo_sessions.py indexed_order.py metadata_db.py tests/test_demo_sessions.py tests/test_server.py tests/test_indexed_order.py tests/test_metadata_db.py
       - name: Check Raspberry Pi kiosk scripts
         run: |
           bash tests/test_pi_kiosk.sh
           bash tests/test_corsair_calibration.sh
       - name: Test JavaScript
-        run: node tests/regressions.mjs
+        run: |
+          node tests/regressions.mjs
+          node tests/demo-mode.mjs
       - name: Test Python
         run: python -W always::ResourceWarning -m unittest discover -s tests -p 'test_*.py'
       - name: Install browser test tools
@@ -55,3 +57,14 @@ jobs:
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/shelf-playwright.mjs http://127.0.0.1:8089/
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/demo-browser-playwright.mjs http://127.0.0.1:8089/
+      - name: Test synchronized Demo Mode against real Carousel server
+        run: |
+          python3 server.py --bind 127.0.0.1 --port 8090 --lms http://127.0.0.1:19999 --cache-dir "$RUNNER_TEMP/demo-cache/art" &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for i in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:8090/VERSION >/dev/null; then break; fi
+            sleep 0.1
+          done
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/demo-shared-playwright.mjs http://127.0.0.1:8090/

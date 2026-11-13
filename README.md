@@ -18,6 +18,7 @@ Current application version: **0.13.0**. The canonical version is stored in [`VE
 ## Features
 
 - connected LMS/Squeezebox/Squeezelite player discovery and selection;
+- optional browser-native visual Demo Mode, local or opt-in synchronized across Windows, iPad and Raspberry Pi without sending playback commands;
 - circular CD shelf with artwork-derived spine colours, stable readable font choices, and configurable displayed-album count;
 - optional shelf variety with stable title alignment, artist/title hierarchy, print treatments, subtle case wear, catalogue typography and 1.5× multi-disc spines;
 - shelf-only display with artist/album, album-only, spine colour, random, and two finite newest-first album orders: **Recently Added** (Carousel's current-library track indexing dates) and **New Music (LMS)** (LMS's original persistent-recording ordering); both chronological orders stop at the shelf ends instead of wrapping, while random order is retained across library refreshes within the session;
