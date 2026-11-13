@@ -33,8 +33,11 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
     }
     function render(){
         const {total,index,mode,album}=state();
-        const fraction=scrubRatio(index,total);
-        slider.value=String(Math.round(fraction*1000));
+        // The slider's native value is an *album index*, not a fixed 0–1000
+        // percentage. Keyboard/assistive navigation can therefore select
+        // every individual CD even in libraries containing 10,000+ titles.
+        slider.max=String(Math.max(0,total-1));
+        slider.value=String(clamp(index,0,Math.max(0,total-1)));
         slider.disabled=total<2;
         count.textContent=total?(Math.min(index,total-1)+1).toLocaleString()+' / '+total.toLocaleString()+' CDs':'No CDs';
         caption.textContent=album?(album[1]+' — '+album[0]):modeLabel(mode);
@@ -57,7 +60,7 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
         render();armHide();
     }
     function commit(value,final){
-        const current=state(),index=scrubIndex(Number(value)/1000,current.total);
+        const current=state(),index=clamp(Math.round(Number(value)||0),0,Math.max(0,current.total-1));
         ++request;
         onActivity();
         jump(index,final,request);
