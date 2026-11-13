@@ -23,8 +23,8 @@ Current application version: **0.13.1**. The canonical version is stored in [`VE
 - optional shelf variety with stable title alignment, artist/title hierarchy, print treatments, subtle case wear, catalogue typography and 1.5× multi-disc spines;
 - shelf-only display with artist/album, album-only, spine colour, random, and two finite newest-first album orders: **Recently Added** (Carousel's current-library track indexing dates) and **New Music (LMS)** (LMS's original persistent-recording ordering); both chronological orders stop at the shelf ends instead of wrapping, while random order is retained across library refreshes within the session;
 - startup directly on the currently playing album, or a randomly selected display album when nothing is playing;
-- server-prepared catalogue ordering using bounded LMS pages, with only nearby albums rendered; a 15-minute persistent catalogue snapshot avoids rescanning LMS for every sort or genre-filter change;
-- paged album-ID → `sort:artflow` position index for direct jumps, plus validated in-memory ID-to-index lookups during animation;
+- server-prepared catalogue ordering using bounded LMS pages and a 15-minute persistent snapshot; Artist → Album uses native LMS `sort:artistalbum`, while Album → Artist caches the native LMS `sort:album` album-ID/textkey ranking and shares the same album/artwork metadata across both orders;
+- paged album-ID → `sort:artistalbum` position index for direct jumps, plus validated in-memory ID-to-index lookups during animation;
 - one persistent SQLite metadata database for album-added dates, catalogue snapshots, and Library/Spotify spine colours, contrast, fonts and sort indexes; artwork images and resized covers (128–1024 px) remain disposable files, and local spine metadata is fetched in 64-ID batches with a bounded browser-side LRU;
 - browser-side caching of read-only LMS discovery and album RPCs; prepared ordering requires LMS connectivity;
 - event-driven library refresh after LMS scans complete, invalidating the server catalogue snapshot before reloading;
