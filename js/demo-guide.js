@@ -146,12 +146,15 @@ export function createDemoGuide(root){
         if(banner)banner.textContent='Starting showcase';
         if(!frame&&typeof requestAnimationFrame==='function')frame=requestAnimationFrame(animate);
     }
-    function show(step,selector){
+    function show(step,selector,selection){
         if(!active||!DEMO_SCENES[step])return;
         currentStep=step;targetSelector=selector||DEMO_SCENES[step].target;
         if(banner)banner.textContent=`Scene ${step+1} of ${DEMO_SCENES.length}`;
-        if(title)title.textContent=DEMO_SCENES[step].title;
-        if(detail)detail.textContent=DEMO_SCENES[step].detail;
+        const fallback=step===13&&selection?.source!=='spotify';
+        if(title)title.textContent=fallback?'Spotify integration':DEMO_SCENES[step].title;
+        if(detail)detail.textContent=fallback?
+            'Spotify browsing is available when Spotty is connected. Your local CD shelf stays available.':
+            DEMO_SCENES[step].detail;
         if(callout)callout.hidden=false;
         locate();
     }
