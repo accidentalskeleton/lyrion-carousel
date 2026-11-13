@@ -39,15 +39,14 @@ globalThis.fetch=async (url,options={})=>{
         state=sessions.get(body.code);
         if(!state)return {ok:false,status:403};
         if(body.action==='join')return {ok:true,json:async()=>({viewer:state.viewer})};
+        if(body.action==='state')return body.viewer===state.viewer?
+            {ok:true,json:async()=>({...state})}:{ok:false,status:403};
         if(body.controller!==state.controller)return {ok:false,status:403};
         if(body.action==='step'){Object.assign(state,{seq:state.seq+1,step:body.step,source:body.source,album_id:body.album_id})}
         else if(body.action==='stop'){Object.assign(state,{seq:state.seq+1,active:false})}
         return {ok:true,json:async()=>({...state})};
     }
-    const query=new URLSearchParams(String(url).split('?')[1]||'');
-    state=sessions.get(query.get('code'));
-    if(!state||state.viewer!==query.get('viewer'))return {ok:false,status:403};
-    return {ok:true,json:async()=>({...state})};
+    return {ok:false,status:404};
 };
 const flush=async()=>{for(let n=0;n<25;n++)await Promise.resolve()};
 const host=surface(),hostSteps=[],hostState=[];
