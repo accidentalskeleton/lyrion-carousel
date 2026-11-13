@@ -330,6 +330,26 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(snapshot['genres'])
         enqueue.assert_not_called()
 
+    def test_upgrade_from_old_artflow_snapshot_uses_native_lms_order(self):
+        # v2 snapshots may be in artflow order; reconcile must preserve the
+        # previous IDs/arrival event but create a fresh v3 artistalbum order.
+        old=[{'id':3,'artist':'Chris Rea','album':'Road To Hell','textkey':'R'},
+             {'id':1,'artist':'David Bowie','album':'Ziggy Stardust','textkey':'B'}]
+        native=list(reversed(old))
+        disk={'version':2,'lms_url':self.handler.lms_url,
+              'created':server.time.time(),'revision':self.handler._catalogue_fingerprint(old),
+              'recent_new_album_ids':['3'],'albums':old,'genres':{}}
+        metadata_db.snapshot_put(self.handler._metadata_db_path(),self.handler.lms_url,disk)
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([native])):
+            self.handler._reconcile_catalogue()
+        result=json.loads(self.responses[-1][1])
+        self.assertFalse(result['changed'])
+        self.assertEqual(result['recent_new_album_ids'],['3'])
+        saved=self.stored_catalogue()
+        self.assertEqual(saved['version'],server.CATALOGUE_SNAPSHOT_VERSION)
+        self.assertEqual([row['id'] for row in saved['albums']],[1,3])
+        self.assertEqual(saved['lms_orders'],{})
+
     def test_observed_changed_scan_refreshes_snapshot_and_indexes_new_covers(self):
         old=[{'id':1,'artist':'A','album':'First','artwork_track_id':'first'}]
         updated=[old[0],{'id':2,'artist':'B','album':'New','artwork_track_id':'new-cover'}]
