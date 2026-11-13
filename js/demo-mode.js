@@ -18,7 +18,9 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
     const controls=root.querySelector('.bf-demo-controls');
     let mode='',code='',viewer='',controller='',timer=0,sequence=0,epoch=0,stepIndex=-1;
     const delays={relaxed:7000,normal:4500,fast:2500};
-    const delay=()=>delays[speedInput?.value]||4500;
+    // Popup scenes need time to settle and to be read after the overlay
+    // appears. The extra dwell applies equally to local and shared hosts.
+    const delay=step=>(delays[speedInput?.value]||4500)+(DEMO_SCENES[step]?.extraMs||0);
     const say=message=>{if(status)status.textContent=message;};
     const active=()=>!!mode;
     function toggle(isActive){
@@ -87,7 +89,7 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
             }
             return;
         }
-        if(generation===epoch&&mode)timer=setTimeout(()=>void hostStep(generation,step+1),delay());
+        if(generation===epoch&&mode)timer=setTimeout(()=>void hostStep(generation,step+1),delay(step));
     }
     async function poll(generation){
         if(mode!=='viewer'||generation!==epoch)return;

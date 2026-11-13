@@ -581,3 +581,16 @@
         border-left: 0; border-top: 1px solid rgba(255,255,255,.08);
     }
 }
+
+/* For edge-to-edge popups, explain from the bottom banner instead of
+   covering the dialog. The top banner is kept compact during normal scenes. */
+.bf-demo-banner-note[hidden] { display: none!important; }
+.bf-demo-guide[data-compact="true"] .bf-demo-banner {
+    top:auto; bottom:8px; width:max-content; max-width:min(92%,640px);
+    white-space:normal; flex-wrap:wrap; border-radius:12px;
+    text-align:left; justify-content:flex-start;
+}
+.bf-demo-guide[data-compact="true"] .bf-demo-banner-note {
+    display:block; flex-basis:100%; font-size:12px;
+    line-height:1.45; color:#d1e6dd;
+}
