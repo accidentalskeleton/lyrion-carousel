@@ -1633,7 +1633,7 @@ export async function runTests(sources) {
     sources.albumBrowserCss.includes('[data-mode="recent"] .bf-order-icon.lms-history'),
     'LMS New Music uses a distinct history clock while Recently Added keeps the calendar');
 
-  assert(sources.index.includes('css/album-browser.css?v=player-standby-dim-1'),
+  assert(sources.index.includes('css/album-browser.css?v=fast-nav-1'),
     'sort menu icon CSS cache version is updated');
   assert(sources.index.includes('js/app.js?v=fast-nav-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
