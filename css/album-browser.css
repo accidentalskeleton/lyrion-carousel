@@ -965,7 +965,7 @@ body {
     color:inherit; font:inherit; cursor:pointer; touch-action:manipulation;
 }
 .bf-fast-navigator {
-    pointer-events:auto; width:80%; box-sizing:border-box;
+    pointer-events:none; width:80%; box-sizing:border-box;
     padding:11px 16px 12px; border:1px solid rgba(166,218,186,.46);
     border-radius:14px; background:rgba(13,27,25,.86);
     box-shadow:0 12px 36px rgba(0,0,0,.55);
@@ -973,6 +973,9 @@ body {
     display:flex; flex-direction:column; gap:8px;
 }
 .bf-fast-navigator[hidden] {display:none!important}
+/* The panel frame lets pointer/wheel gestures reach CDs underneath;
+   only real controls intercept input. */
+.bf-fast-nav-range,.bf-fast-nav-close,.bf-fast-nav-letters button {pointer-events:auto}
 .bf-fast-nav-heading {display:flex;align-items:center;gap:10px;min-width:0}
 .bf-fast-nav-label {flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
 .bf-fast-nav-count {font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums;color:#b5d4c4}

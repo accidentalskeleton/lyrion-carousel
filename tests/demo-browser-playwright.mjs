@@ -51,15 +51,31 @@ try{
         });
         if(!state.visible||!state.within||!state.centred||Math.abs(state.widthRatio-.8)>.015)
             throw Error('Fast navigator must be centred and 80% of shelf width at '+viewport.width+': '+JSON.stringify(state));
-        await page.locator('.bf-fast-nav-range').evaluate(input=>{
-            input.value=input.max;
-            input.dispatchEvent(new Event('input',{bubbles:true}));
-            input.dispatchEvent(new Event('change',{bubbles:true}));
-        });
-        const label=await page.locator('.bf-fast-nav-count').textContent();
-        if(!label?.includes('5 / 5'))throw Error('Scrub did not reach last offline CD: '+label);
-        await page.locator('.bf-fast-nav-close').click();
-        if(await page.locator('.bf-fast-navigator').isVisible())throw Error('Scrubber did not close');
+        const range=await page.locator('.bf-fast-nav-range').evaluate(input=>({min:Number(input.min),max:Number(input.max)}));
+        if(range.min!==-1||range.max!==5)
+            throw Error('Circular shelf requires wrap endpoints: '+JSON.stringify(range));
+        for(const [value,label] of [[4,'5 / 5'],[5,'1 / 5'],[-1,'5 / 5']]){
+            await page.locator('.bf-fast-nav-range').evaluate((input,value)=>{
+                input.value=String(value);
+                input.dispatchEvent(new Event('input',{bubbles:true}));
+                input.dispatchEvent(new Event('change',{bubbles:true}));
+            },value);
+            if(!(await page.locator('.bf-fast-nav-count').textContent())?.includes(label))
+                throw Error('Circular scrub seam '+value+' did not select '+label);
+        }
+        // Scrolling the CD shelf itself dismisses the floating navigator.
+        await page.locator('.bf-stage').evaluate(stage=>
+            stage.dispatchEvent(new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true})));
+        if(await page.locator('.bf-fast-navigator').isVisible())
+            throw Error('Direct CD wheel browsing must hide fast navigation');
+        await page.keyboard.press('n');
+        const bounds=await page.locator('.bf-stage').boundingBox();
+        await page.mouse.move(bounds.x+bounds.width*.22,bounds.y+bounds.height*.55);
+        await page.mouse.down();
+        await page.mouse.move(bounds.x+bounds.width*.22+95,bounds.y+bounds.height*.55,{steps:5});
+        await page.mouse.up();
+        if(await page.locator('.bf-fast-navigator').isVisible())
+            throw Error('Direct CD pointer scrolling must hide fast navigation');
     }
     await page.locator('.bf-settings-open').click();
     await page.locator('#settings-tab-demo').click();

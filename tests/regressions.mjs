@@ -173,10 +173,22 @@ export async function runTests(sources) {
   // Discovery must choose a different album when the test requires scrolling.
   // A real random draw can select the centred album and legitimately skip it.
   const appMath=Object.create(Math);appMath.random=()=>.37;
-  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,shouldRevealForWheel,scrubIndex,scrubRatio};')();
+  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,shouldRevealForWheel,scrubIndex,scrubRatio,scrubRange,scrubAlbumIndex};')();
   assert(navigation.scrubIndex(.5,1001)===500,'large library scrub ratio selects index 500');
   assert(navigation.scrubIndex(2,1001)===1000&&navigation.scrubIndex(-1,1001)===0,
     'scrub ratio clamps collection endpoints');
+  const wrapRange=navigation.scrubRange(169,true),finiteRange=navigation.scrubRange(169,false);
+  assert(wrapRange.min===-1&&wrapRange.max===169&&finiteRange.min===0&&finiteRange.max===168,
+    'circular scrubber gains two wrap points while bounded shelves retain finite limits');
+  assert(navigation.scrubAlbumIndex(-1,169,true)===168&&
+    navigation.scrubAlbumIndex(169,169,true)===0&&
+    navigation.scrubAlbumIndex(168,169,true)===168&&
+    navigation.scrubAlbumIndex(169,169,false)===168&&
+    navigation.scrubAlbumIndex(-1,169,false)===0,
+    'both circular seam positions wrap to the adjacent album, bounded endpoints clamp');
+  assert(geometry.nearestPositionForIndex(0,168,169)===169&&
+    geometry.nearestPositionForIndex(168,0,169)===-1,
+    'seam navigation preserves the shortest circular shelf route');
   assert(navigation.acceleratedFlick(.3,{total:1500})===.3*1.35,
     'slow existing swipe preserves original momentum');
   assert(Math.abs(navigation.acceleratedFlick(2,{total:1500,previousVelocity:2,elapsed:100}))>
@@ -1675,9 +1687,9 @@ export async function runTests(sources) {
     sources.albumBrowserCss.includes('[data-mode="recent"] .bf-order-icon.lms-history'),
     'LMS New Music uses a distinct history clock while Recently Added keeps the calendar');
 
-  assert(sources.index.includes('css/album-browser.css?v=fast-nav-2'),
+  assert(sources.index.includes('css/album-browser.css?v=fast-nav-3'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=fast-nav-2')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=fast-nav-3')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

@@ -1842,10 +1842,24 @@ const swipeNavigation=createSwipeNavigationDetector();
 let lastWheelAt=-Infinity,lastWheelDirection=0,wheelStreak=0,wheelBurstDistance=0;
 let lastShelfScrollAt=-Infinity;
 function shelfIsScrolling(){return dragging&&moved||!!followAnimation||randomAnimating||Math.abs(target-position)>.04||performance.now()-lastShelfScrollAt<160}
+// A direct shelf gesture dismisses the navigator and keeps it suppressed
+// for this uninterrupted browsing sequence. Another session can trigger it
+// after the user has paused for 2.2 seconds.
+let dismissBrowsingAt=-Infinity,suppressNavigatorUntilBrowseIdle=false;
+function directShelfBrowsing(now){
+    if(now-dismissBrowsingAt>2200)suppressNavigatorUntilBrowseIdle=false;
+    dismissBrowsingAt=now;
+    if(fastNavigator.visible()){
+        fastNavigator.hide();swipeNavigation.reset();
+        suppressNavigatorUntilBrowseIdle=true;
+    }
+    return suppressNavigatorUntilBrowseIdle;
+}
 function scrollShelfWheel(e){
     if(randomAnimating)return;
     lastFlickVelocity=0;e.preventDefault();finishCoverOpening();
     const now=performance.now();
+    const suppressed=directShelfBrowsing(now);
     lastShelfScrollAt=now;followingNowPlaying=false;cancelFollowAnimation();
     const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
     const direction=Math.sign(delta),sameDirection=direction===lastWheelDirection;
@@ -1855,7 +1869,7 @@ function scrollShelfWheel(e){
     lastWheelAt=now;lastWheelDirection=direction;
     const adjusted=acceleratedWheel(delta,{total:totalAlbums,streak:wheelStreak});
     target=position=shelfPosition(position+adjusted*.0028);
-    if(shouldRevealForWheel({streak:wheelStreak,distance:wheelBurstDistance,total:totalAlbums}))fastNavigator.show();
+    if(!suppressed&&shouldRevealForWheel({streak:wheelStreak,distance:wheelBurstDistance,total:totalAlbums}))fastNavigator.show();
     draw();clearTimeout(wheelTimer);
     wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110);
 }
@@ -1877,6 +1891,7 @@ function moveShelfDrag(event,closePreviewOnMove=true){
     if(!dragging)return;
     const now=performance.now(),dx=event.clientX-startX;
     if(Math.abs(dx)>6){
+        directShelfBrowsing(now);
         moved=true;lastShelfScrollAt=now;
         // Both the stage and open-cover drag surfaces scroll without closing
         // the open album; the boolean is kept for existing gesture callers.
@@ -1908,7 +1923,9 @@ function finishShelfDrag(cancelled=false){
             enabled:duration<850
         });
         target=snapShelfPosition(position-flick);
-        if(swipeNavigation.record({distance,duration,velocity,now,direction}))fastNavigator.show();
+        if(!suppressNavigatorUntilBrowseIdle&&swipeNavigation.record({distance,duration,velocity,now,direction}))
+            fastNavigator.show();
+        else if(suppressNavigatorUntilBrowseIdle)swipeNavigation.reset();
         lastFlickVelocity=duration<850&&Math.abs(velocity)>=.55?velocity:0;
         lastFlickAt=now;
     }
@@ -1919,6 +1936,7 @@ let latestFastNavRequest=0;
 const fastNavigator=createFastNavigator(root,{
     state:()=>({
         total:Math.max(0,totalAlbums-(externalShelfPosition>=0?1:0)),
+        circular:!boundedShelf(),
         index:Math.max(0,selectedIndex()-(externalShelfPosition>=0&&selectedIndex()>externalShelfPosition?1:0)),
         mode:orderMode,
         album:albums[selectedIndex()],

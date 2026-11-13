@@ -6,6 +6,17 @@ export function scrubIndex(ratio,total){
 export function scrubRatio(index,total){
     return total>1?clamp(index/(total-1),0,1):0;
 }
+// Give a circular shelf one wrap position at either end of the scrubber.
+// Moving left of album 1 selects the last album; moving right of the last
+// selects album 1. Bounded orders retain their original finite endpoints.
+export function scrubRange(total,circular=false){
+    return circular&&total>1?{min:-1,max:total}:{min:0,max:Math.max(0,total-1)};
+}
+export function scrubAlbumIndex(value,total,circular=false){
+    if(total<=0)return 0;
+    const index=Math.round(Number(value)||0);
+    return circular?((index%total)+total)%total:clamp(index,0,total-1);
+}
 // Velocity is measured in pixels per millisecond. A quick gesture now
 // provides useful inertia even on a ~169-CD shelf; normal drags retain their
 // original precisely controlled momentum. Reversed flicks do not chain.
@@ -58,8 +69,10 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
             mode==='recent'?'New music':mode==='colour'?'Spine colours':'Random order';
     }
     function render(){
-        const {total,index,mode,album}=state();
-        slider.max=String(Math.max(0,total-1));
+        const {total,index,mode,album,circular=false}=state();
+        const range=scrubRange(total,circular);
+        slider.min=String(range.min);
+        slider.max=String(range.max);
         if(!dragging)slider.value=String(clamp(index,0,Math.max(0,total-1)));
         slider.disabled=total<2;
         if(!dragging){
@@ -84,7 +97,7 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
         render();armHide();
     }
     function commit(value,final){
-        const current=state(),index=clamp(Math.round(Number(value)||0),0,Math.max(0,current.total-1));
+        const current=state(),index=scrubAlbumIndex(value,current.total,current.circular);
         ++request;
         onActivity();
         jump(index,final,request);
