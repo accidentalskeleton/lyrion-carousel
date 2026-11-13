@@ -1193,7 +1193,9 @@ function playbackSourceForTrack(track,result){
     const urls=[track.url,track.uri,track.extid,track.ext_id,remote.url,remote.uri,remote.id,remote.extid]
         .map(value=>String(value||''));
     if(urls.some(value=>/^spotify:/i.test(value)||/^https?:\/\/open\.spotify\.com\//i.test(value)))return 'spotify';
-    if(urls.some(value=>/^https?:/i.test(value)))return 'external';
+    // BBC Sounds live radio and programmes use sounds:// URIs rather than
+    // HTTP(S); their remote metadata often has no remote_title/icon.
+    if(urls.some(value=>/^sounds:\/\//i.test(value)||/^https?:/i.test(value)))return 'external';
     // "remote:1" is true for Spotify AND internet radio. The URI (LMS tag
     // u) or extid (tag E) is needed to distinguish them. Never call a
     // metadata-light Spotify event radio just because it says remote.
