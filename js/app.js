@@ -5,7 +5,7 @@ import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPositio
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=stable-spotify-album-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=stable-spotify-album-1';
-import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=3';
+import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=4';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
@@ -1644,7 +1644,7 @@ document.addEventListener('pointermove',event=>{if(longPressTimer&&Math.hypot(ev
 document.addEventListener('pointerdown',event=>{if(event.button!==0)cancelLongPress()},true);
 document.addEventListener('pointerup',cancelLongPress,true);document.addEventListener('pointercancel',cancelLongPress,true);
 document.addEventListener('wheel',event=>{if(!stage.contains(event.target)&&!frontPreview.contains(event.target))return;followingNowPlaying=false;cancelFollowAnimation();if(!albumMenu.hidden)closeAlbumMenu();if(!orderMenu.hidden)closeOrderMenu();if(!discoveryMenu.hidden)closeDiscoveryMenu()},true);
-document.addEventListener('contextmenu',event=>{const element=event.target.closest('.bf-album');if(!element)return;event.preventDefault();const album=albums[Number(element.dataset.index)];if(album)openAlbumMenu(album,event)},true);
+document.addEventListener('contextmenu',event=>{const element=event.target.closest('.bf-album');if(!element)return;event.preventDefault();const album=albums[Number(element.dataset.index)];if(album){resetFastNavigationOnAlbumSelection();openAlbumMenu(album,event)}},true);
 document.addEventListener('pointerdown',event=>{if(!albumMenu.hidden&&!albumMenu.contains(event.target))closeAlbumMenu();if(!orderMenu.hidden&&!orderMenu.contains(event.target)&&event.target!==orderToggle)closeOrderMenu()},true);document.addEventListener('keydown',event=>{if(event.defaultPrevented)return;if(event.key==='Escape'&&!searchOverlay.hidden)closeSearch();else if(event.key==='Escape'&&!trackOverlay.hidden)closeTrackList();else if(event.key==='Escape'&&!albumMenu.hidden)closeAlbumMenu();else if(event.key==='Escape'&&!orderMenu.hidden)closeOrderMenu();else if(event.key==='Escape'&&!discoveryMenu.hidden)closeDiscoveryMenu();else if(event.key==='Escape'&&!frontPreview.hidden)closeFrontPreview(false,true)});
 // Keep the cloverleaf short-press action unchanged. A long press offers
 // album-level discovery without modifying playback or the catalogue order.
@@ -1968,8 +1968,22 @@ const fastNavigator=createFastNavigator(root,{
         if(orderMode==='artistAlbum'||orderMode==='album')void jumpToLetter(letter);
     }
 });
+function resetFastNavigationOnAlbumSelection(){
+    // A real CD selection cancels the overlay AND any accumulated gesture
+    // history, including an outstanding scrub completion that could steal
+    // the selection after an asynchronous album-page fetch.
+    fastNavigator.hide();
+    swipeNavigation.reset();
+    lastWheelAt=-Infinity;lastWheelDirection=0;wheelStreak=0;wheelBurstDistance=0;
+    lastFlickVelocity=0;lastFlickAt=-Infinity;
+    latestFastNavRequest++;
+    suppressNavigatorUntilBrowseIdle=false;dismissBrowsingAt=-Infinity;
+}
 stage.addEventListener('pointerdown',event=>{
     const pressed=event.target.closest('.bf-album');
+    // Dismiss immediately on physical press, not after the open animation.
+    // Do not reset on every normal swipe: those need consecutive gestures.
+    if(pressed&&fastNavigator.visible())resetFastNavigationOnAlbumSelection();
     beginShelfDrag(event,pressed?Number(pressed.dataset.index):null,stage);
 });
 stage.addEventListener('pointermove',event=>moveShelfDrag(event));
@@ -1993,6 +2007,7 @@ stage.addEventListener('pointerup',event=>{
     if(randomAnimating||!Number.isInteger(index))return;
     const album=albums[index],wasClick=!moved&&performance.now()-lastShelfScrollAt>=160&&Math.abs(target-position)<.04&&Math.hypot(event.clientX-focusClickX,event.clientY-focusClickY)<=6;
     if(wasClick&&album){
+        resetFastNavigationOnAlbumSelection();
         event.stopImmediatePropagation();dragging=false;moved=true;pressedAlbumIndex=null;
         stage.classList.remove('is-dragging');
         // A deliberate spine click wins over any outstanding Now Playing lookup.

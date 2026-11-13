@@ -210,17 +210,17 @@ export async function runTests(sources) {
     navigation.acceleratedWheel(120,{total:50,streak:8})===120,
     'precise wheel movement and small libraries retain original speed');
   const swipeDetect=navigation.createSwipeNavigationDetector();
-  assert([1000,1350,1700].every(now=>!swipeDetect.record({
+  assert([1000,1350].every(now=>!swipeDetect.record({
     distance:120,duration:300,velocity:1.1,now,direction:1
-  })),'first three fast swipes leave the panel hidden');
-  assert(swipeDetect.record({distance:120,duration:300,velocity:1.1,now:2050,direction:1}),
-    'four consecutive quick swipes reveal the panel');
+  })),'first two fast swipes leave the panel hidden');
+  assert(swipeDetect.record({distance:120,duration:300,velocity:1.1,now:1700,direction:1}),
+    'three consecutive quick swipes reveal the panel');
   swipeDetect.reset();
-  assert([2500,3000,3500,4000,4500].every(now=>!swipeDetect.record({
+  assert([2500,3000,3500,4000].every(now=>!swipeDetect.record({
     distance:90,duration:500,velocity:.35,now,direction:1
-  })),'five moderate swipes do not distract with the panel');
-  assert(swipeDetect.record({distance:90,duration:500,velocity:.35,now:5000,direction:1}),
-    'six consecutive moderate swipes reveal the panel');
+  })),'four moderate swipes leave the panel hidden');
+  assert(swipeDetect.record({distance:90,duration:500,velocity:.35,now:4500,direction:1}),
+    'five consecutive moderate swipes reveal the panel');
   swipeDetect.reset();
   assert(!swipeDetect.record({distance:120,duration:300,velocity:1.1,now:5500,direction:1})&&
     !swipeDetect.record({distance:120,duration:300,velocity:1.1,now:5700,direction:-1}),
@@ -228,9 +228,9 @@ export async function runTests(sources) {
   swipeDetect.reset();
   assert(!swipeDetect.record({distance:20,duration:100,velocity:2,now:6000,direction:1}),
     'a short tap or tiny drag never opens navigator');
-  assert(!navigation.shouldRevealForWheel({total:169,streak:9,distance:1500})&&
-    !navigation.shouldRevealForWheel({total:169,streak:10,distance:1000})&&
-    navigation.shouldRevealForWheel({total:169,streak:10,distance:1200}),
+  assert(!navigation.shouldRevealForWheel({total:169,streak:7,distance:1500})&&
+    !navigation.shouldRevealForWheel({total:169,streak:8,distance:850})&&
+    navigation.shouldRevealForWheel({total:169,streak:8,distance:960}),
     'wheel browsing requires sustained scrolling, not a few notches or one huge event');
   assert(!navigation.shouldRevealForWheel({total:50,streak:16,distance:5000}),
     'small libraries do not automatically reveal the fast navigator');
@@ -1689,7 +1689,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=fast-nav-3'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=fast-nav-3')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=fast-nav-4')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
