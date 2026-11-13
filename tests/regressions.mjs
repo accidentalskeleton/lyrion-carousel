@@ -2288,6 +2288,25 @@ export async function runTests(sources) {
   await settle(api.handleLibraryEvent());
   assert(newAlbumToast.hidden,'unchanged catalogue revision does not repeat the announcement');
 
+  // A concurrent cache expiry can consume the server's recent_new_album_ids
+  // before this browser reconciles. A complete previous shelf must still
+  // identify a genuinely new ID, without false positives for retagging.
+  const missedServerArrival={id:99108,album:'Recovered arrival',artist:'Ripper'};
+  library.push(missedServerArrival);
+  recentNewAlbumIdsFixture=[];
+  catalogueReconcileChanged=false;
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(!newAlbumToast.hidden&&newAlbumToast.textContent.includes('Recovered arrival'),
+    'fully loaded shelf independently recovers a new album when server omits the ID');
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.hidden,'client fallback never repeats unchanged new albums');
+  const retagged=library.find(album=>album.id===99108);
+  retagged.artist='New artist spelling';
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.hidden,'retagging an existing album does not trigger false arrival');
+
   // A different path can update this viewer's shelf BEFORE it receives the
   // scan event. It must still announce that revision exactly once.
   const alreadyRefreshedArrival={id:99107,album:'Already on the shelf',artist:'New arrival'};
