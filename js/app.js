@@ -8,6 +8,10 @@ import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from 
 import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=4';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
+// This identifier lives inside the JavaScript actually loaded by this browser.
+// Packaging replaces the marker; source-checkout browsers say development.
+const CAROUSEL_BROWSER_BUILD='__CAROUSEL_BROWSER_BUILD_VERSION__';
+root.dataset.browserBuild=CAROUSEL_BROWSER_BUILD.startsWith('__CAROUSEL_')?'development':CAROUSEL_BROWSER_BUILD;
 stage.classList.add('bf-shelf-active');
 let connectionGeneration=0,appStarted=false,artworkNamespace='',catalogueSource='library',libraryRefreshPending=false,libraryRefreshing=false,genreRefreshPending=false,disabledGenres=new Set();
 // The prepared catalogue may be older than the live LMS album count. Keep its
