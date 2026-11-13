@@ -1,15 +1,87 @@
 /* Screen-space Demo Mode explanations. All overlays are passive: no click
  * handlers and no LMS operations. Recompute arrows as a shelf/case animates.
  */
-const SCENES=[
-    {title:'Your music, on a CD shelf',detail:'Browse your albums as familiar CD spines.',target:'.bf-stage'},
-    {title:'Browse naturally',detail:'The shelf glides smoothly to another album.',target:'.bf-stage'},
-    {title:'Open a jewel case',detail:'Select an album to reveal its full cover.',target:'.bf-front-case'},
-    {title:'Explore your collection',detail:'Jump through your library without interrupting playback.',target:'.bf-stage'},
-    {title:'Album artwork, up close',detail:'The jewel case opens right on the shelf.',target:'.bf-front-case'},
-    {title:'Switch music sources',detail:'Browse your own music or Spotify independently.',target:'.bf-source-switch'},
-    {title:'Discover Spotify albums',detail:'Spotify albums use the same interactive CD presentation.',target:'.bf-front-case'},
-    {title:'Back to your own CDs',detail:'Return to your library and explore more covers.',target:'.bf-front-case'}
+export const DEMO_SCENES=[
+    {
+        "title": "Your music, on a CD shelf",
+        "detail": "Browse your collection as familiar CD spines.",
+        "target": ".bf-stage"
+    },
+    {
+        "title": "Scroll through the collection",
+        "detail": "A smooth animated shelf lets you explore your albums.",
+        "target": ".bf-stage"
+    },
+    {
+        "title": "Open a jewel case",
+        "detail": "Choose any album to see its artwork up close.",
+        "target": ".bf-front-case"
+    },
+    {
+        "title": "Album information",
+        "detail": "See the track listing, discs and release details.",
+        "target": ".bf-track-panel"
+    },
+    {
+        "title": "Album actions",
+        "detail": "Explore play and queue options without starting music.",
+        "target": ".bf-album-menu"
+    },
+    {
+        "title": "Sort by album",
+        "detail": "Rearrange your shelf by album title.",
+        "target": ".bf-order-toggle"
+    },
+    {
+        "title": "Sort by artist",
+        "detail": "Group albums together by artist.",
+        "target": ".bf-order-toggle"
+    },
+    {
+        "title": "Recently added CDs",
+        "detail": "See the latest albums indexed in your library.",
+        "target": ".bf-order-toggle"
+    },
+    {
+        "title": "Random album discovery",
+        "detail": "Select a surprise album, without playing it.",
+        "target": ".bf-random"
+    },
+    {
+        "title": "Discover forgotten music",
+        "detail": "Explore Long Forgotten and Rarely Played options.",
+        "target": ".bf-discovery-menu"
+    },
+    {
+        "title": "An overlooked album",
+        "detail": "Open a rediscovered album without changing playback.",
+        "target": ".bf-front-case"
+    },
+    {
+        "title": "Search your collection",
+        "detail": "Find albums and artists quickly.",
+        "target": ".bf-search-open"
+    },
+    {
+        "title": "Choose your music source",
+        "detail": "Switch between your Library and Spotify.",
+        "target": ".bf-source-switch"
+    },
+    {
+        "title": "Spotify on the CD shelf",
+        "detail": "Explore Spotify albums using the same jewel cases.",
+        "target": ".bf-front-case"
+    },
+    {
+        "title": "Your personal library",
+        "detail": "Return to the CDs in your own collection.",
+        "target": ".bf-source-switch"
+    },
+    {
+        "title": "A final look at the cover",
+        "detail": "Open a jewel case and enjoy the album artwork.",
+        "target": ".bf-front-case"
+    }
 ];
 const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
 export function createDemoGuide(root){
@@ -28,7 +100,7 @@ export function createDemoGuide(root){
     function locate(){
         if(!active||!canMeasure())return;
         const selected=root.querySelector(targetSelector)||
-          root.querySelector(SCENES[currentStep]?.target||'.bf-stage');
+          root.querySelector(DEMO_SCENES[currentStep]?.target||'.bf-stage');
         if(!selected||typeof selected.getBoundingClientRect!=='function')return;
         const outer=root.getBoundingClientRect(),anchor=selected.getBoundingClientRect();
         if(outer.width<1||outer.height<1||anchor.width<1||anchor.height<1)return;
@@ -75,11 +147,11 @@ export function createDemoGuide(root){
         if(!frame&&typeof requestAnimationFrame==='function')frame=requestAnimationFrame(animate);
     }
     function show(step,selector){
-        if(!active||!SCENES[step])return;
-        currentStep=step;targetSelector=selector||SCENES[step].target;
-        if(banner)banner.textContent=`Scene ${step+1} of ${SCENES.length}`;
-        if(title)title.textContent=SCENES[step].title;
-        if(detail)detail.textContent=SCENES[step].detail;
+        if(!active||!DEMO_SCENES[step])return;
+        currentStep=step;targetSelector=selector||DEMO_SCENES[step].target;
+        if(banner)banner.textContent=`Scene ${step+1} of ${DEMO_SCENES.length}`;
+        if(title)title.textContent=DEMO_SCENES[step].title;
+        if(detail)detail.textContent=DEMO_SCENES[step].detail;
         if(callout)callout.hidden=false;
         locate();
     }
