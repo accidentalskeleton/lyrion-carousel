@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Expand Demo Mode to a sixteen-scene feature tour covering album information, safe action menus, album/artist/recently-added ordering, visual random selection, rediscovery, search, and Spotify. Add filming-friendly translucent explanations and tracking arrows beneath a top demo banner; place the Demo Settings tab last. No automatic playback commands.
+
 - Dim the CD shelf and any open jewel case when the selected LMS player's power state is off; restore full brightness on power-on while leaving navigation and transport controls readable. Unknown power state is not treated as off.
 
 
