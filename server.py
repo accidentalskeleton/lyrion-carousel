@@ -1037,6 +1037,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             return {'albums':saved['albums'],'genres':saved.get('genres',{}),
                     'orders':OrderedDict(),'colours':self._load_colour_index(),
                     'lms_orders':saved.get('lms_orders',{}),
+                    'legacy_sort':saved.get('version')!=CATALOGUE_SNAPSHOT_VERSION,
                     'created':saved.get('created',0),'revision':saved.get('revision'),
                     'recent_new_album_ids':saved.get('recent_new_album_ids',[])}
         except (OSError,ValueError,TypeError,UnicodeError,AttributeError,sqlite3.Error):
@@ -1079,7 +1080,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     'revision':current_revision,'colours':already_indexed,
                     'recent_new_album_ids':newly_added[:25],
                     'lms_orders':{},'orders':OrderedDict()
-                } if changed or previous is None else previous
+                } if changed or previous is None or previous.get('legacy_sort') else previous
                 snapshot['created']=time.time()
                 snapshot['genres']={}
                 snapshot.setdefault('lms_orders',{})
