@@ -13,6 +13,8 @@ export async function runShelfGestures(page) {
       const root=document.querySelector('#book-fan-browser');
       const stage=document.querySelector('.bf-stage');
       const casePreview=document.querySelector('.bf-front-preview');
+      // Disable only the visual transition for deterministic style readings.
+      stage.style.transition='none';casePreview.style.transition='none';
       shelfBrowser.applyStatus({mode:'stop',power:0,playlist_loop:[]});
       const off={power:root.dataset.playerPower,shelf:getComputedStyle(stage).opacity,
         cover:getComputedStyle(casePreview).opacity};
@@ -21,6 +23,7 @@ export async function runShelfGestures(page) {
       shelfBrowser.applyStatus({mode:'stop',power:1,playlist_loop:[]});
       const on={power:root.dataset.playerPower,shelf:getComputedStyle(stage).opacity,
         cover:getComputedStyle(casePreview).opacity};
+      stage.style.removeProperty('transition');casePreview.style.removeProperty('transition');
       return {off,on,partial};
     });
     assert(standby.off.power==='off'&&standby.partial==='off'&&
