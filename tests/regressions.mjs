@@ -979,6 +979,27 @@ export async function runTests(sources) {
   const releaseNotice=element('.bf-update-notice');
   assert(releaseNotice.hidden,'main carousel stays quiet before a newer release is confirmed');
   assert(settingsApi.state().installed==='0.10.0','release checks compare against the installed VERSION file');
+  assert(sources.index.includes('class="bf-about-browser-version"')&&
+    sources.index.includes('class="bf-about-build-match"'),
+    'About distinguishes browser-loaded code from installed server build');
+  root.dataset.browserBuild='0.13.1~git0123456789';
+  releaseInstalled='0.13.1~git0123456789';
+  await settingsApi.loadVersion();
+  assert(element('.bf-about-browser-version').textContent==='0.13.1~git0123456789'&&
+    element('.bf-about-version').textContent==='0.13.1~git0123456789'&&
+    element('.bf-about-build-match').textContent==='Matched',
+    'About confirms loaded browser and server use identical Git builds');
+  releaseInstalled='0.13.1~git9876543210';
+  await settingsApi.loadVersion();
+  assert(element('.bf-about-build-match').textContent.includes('Different builds')&&
+    element('.bf-about-browser-version').textContent==='0.13.1~git0123456789',
+    'server upgrade does not falsely upgrade JS already loaded in an old tab');
+  assert(settingsApi.releaseIsNewer('v0.13.1','0.13.1~git0123456789'),
+    'the final stable release supersedes a matching Git pre-release');
+  root.dataset.browserBuild='development';releaseInstalled='0.10.0';
+  await settingsApi.loadVersion();
+  assert(element('.bf-about-build-match').textContent.includes('Not verified'),
+    'source checkouts are not incorrectly labelled as matching a package');
   const toastCss=sources.settingsCss.match(/\.bf-new-album-toast:not\(\[hidden\]\)\s*\{([^}]+)\}/)?.[1]||'';
   assert(/z-index:\s*900\s*;/.test(toastCss)&&/top:\s*8px\s*;/.test(toastCss),
     'new album notice appears above open cases and menus at the top of the viewer');

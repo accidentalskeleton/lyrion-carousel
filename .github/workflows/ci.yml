@@ -46,6 +46,8 @@ jobs:
           node tests/demo-mode.mjs
       - name: Test Python
         run: python -W always::ResourceWarning -m unittest discover -s tests -p 'test_*.py'
+      - name: Verify commit-stamped Debian package
+        run: bash tests/test_deb_build_stamp.sh
       - name: Install browser test tools
         timeout-minutes: 5
         run: |

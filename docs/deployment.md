@@ -12,9 +12,13 @@ Use the [scripted Raspberry Pi kiosk installer and troubleshooting guide](raspbe
 
 ## Versioning
 
-`VERSION` is the single canonical application version. **Settings → About** reads it directly. Debian packaging reads the same file by default, so the UI and generated package do not maintain independent version numbers.
+`VERSION` remains the canonical **release** version (currently `0.13.1`). Untagged pre-release `.deb` builds automatically append the source commit SHA, e.g. `0.13.1~git267cd42400`. This is derived at build time; the tracked `VERSION` file is **not** modified (otherwise the commit would change). Exact Git release-tag builds such as `v0.13.1` use the clean release number. Builds refuse uncommitted tracked changes so a stamped SHA cannot falsely identify modified code.
 
-The version is deliberately **not** auto-incremented by feature work or packaging. It remains at the value in `VERSION` until an explicit version-change request is made.
+The installed package, `/opt/lyrion-carousel/VERSION` and `/opt/lyrion-carousel/BUILD_INFO.json` identify the same build. The packaged HTML references, JavaScript entrypoints and nested module imports use commit-specific cache keys so newly loaded pages do not reuse old code from the browser cache.
+
+**Settings → About** shows **Browser build** (the identifier embedded in the JavaScript that tab actually loaded), **Server build** (read afresh from `/api/build`) and **Build status**. If they differ, reload the tab; a page already open during a package upgrade keeps its old JavaScript until reloaded. On un-packaged development checkouts the browser displays `development` and the match is not asserted.
+
+The normal GitHub release checker continues comparing the stable numeric release version. A final `0.13.1` release supersedes a pre-release of the same number.
 
 ## Debian packaging
 
@@ -33,7 +37,7 @@ The package/service names are consistently `lyrion-carousel`:
 - disposable artwork images: `/var/cache/lyrion-carousel/artwork`;
 - persistent unified metadata database: `/var/cache/lyrion-carousel/carousel-metadata.sqlite3` (outside the artwork directory, so clearing images does not remove saved album-added dates).
 
-The package includes `VERSION`, the web-app manifest, assets, CSS and JavaScript.
+The package includes a commit-stamped `VERSION`, `BUILD_INFO.json`, the web-app manifest, assets, CSS and JavaScript. The output filename is printed by `build-deb.sh` and includes the Git SHA for pre-releases.
 
 ### Manage the Debian service
 

@@ -1247,6 +1247,24 @@ class ServerTests(unittest.TestCase):
         response.headers = {}
         self.assertEqual(self.handler._read_limited(response, 10), b'x' * 10)
 
+    def test_build_info_reports_server_install_and_unstamped_checkout(self):
+        self.handler.directory=self.temp.name
+        root=Path(self.temp.name)
+        (root/'VERSION').write_text('0.13.1~git0123456789\n',encoding='utf-8')
+        commit='0123456789abcdef0123456789abcdef01234567'
+        (root/'BUILD_INFO.json').write_text(json.dumps({
+            'version':'0.13.1~git0123456789','commit':commit
+        }),encoding='utf-8')
+        self.handler._serve_build_info()
+        self.assertEqual(json.loads(self.responses[-1][1]),{
+            'version':'0.13.1~git0123456789','commit':commit
+        })
+        (root/'BUILD_INFO.json').unlink()
+        self.handler._serve_build_info()
+        self.assertEqual(json.loads(self.responses[-1][1]),{
+            'version':'0.13.1~git0123456789','commit':None
+        })
+
     def test_static_files_revalidate_but_artwork_keeps_its_cache_policy(self):
         headers = []
         self.handler.send_header = lambda key, value: headers.append((key, value))
