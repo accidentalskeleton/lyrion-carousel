@@ -70,12 +70,20 @@ try{
             throw Error('Direct CD wheel browsing must hide fast navigation');
         await page.keyboard.press('n');
         const bounds=await page.locator('.bf-stage').boundingBox();
-        await page.mouse.move(bounds.x+bounds.width*.22,bounds.y+bounds.height*.55);
+        // Begin outside the slider/letter hit targets; those are intentionally
+        // interactive even though the rest of the panel lets CD input through.
+        const startX=bounds.x+bounds.width*.04,startY=bounds.y+bounds.height*.55;
+        const hit=await page.evaluate(({x,y})=>{
+            const element=document.elementFromPoint(x,y);
+            return {name:element?.className||'',insideNavigator:!!element?.closest('.bf-fast-navigator')};
+        },{x:startX,y:startY});
+        if(hit.insideNavigator)throw Error('CD drag start intercepted by navigator: '+JSON.stringify(hit));
+        await page.mouse.move(startX,startY);
         await page.mouse.down();
-        await page.mouse.move(bounds.x+bounds.width*.22+95,bounds.y+bounds.height*.55,{steps:5});
+        await page.mouse.move(startX+95,startY,{steps:5});
         await page.mouse.up();
         if(await page.locator('.bf-fast-navigator').isVisible())
-            throw Error('Direct CD pointer scrolling must hide fast navigation');
+            throw Error('Direct CD pointer scrolling must hide fast navigation; hit='+JSON.stringify(hit));
     }
     await page.locator('.bf-settings-open').click();
     await page.locator('#settings-tab-demo').click();
