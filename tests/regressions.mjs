@@ -194,6 +194,7 @@ export async function runTests(sources) {
       return metadataFetch(url,...args);
     },rpc,CometDClient:class{stop(){}start(){}resetLibraryState(){}},resetRpcSession:()=>{},clamp:geometry.clamp,modulo:geometry.modulo,circularDelta:geometry.circularDelta,nearestPosition:geometry.nearestPositionForIndex,
     buildAlbumPositionIndex:catalogue.buildAlbumPositionIndex,locateIndexedAlbum:catalogue.locateAlbum,
+    createDemoMode:()=>({active:()=>false,stop:async()=>{}}),
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
@@ -1563,6 +1564,15 @@ export async function runTests(sources) {
       'Debian package excludes removed disc module while retaining photographic assets');
   }
 
+  assert(sources.index.includes('id="settings-tab-demo"')&&
+    sources.index.includes('class="bf-demo-local"')&&
+    sources.index.includes('class="bf-demo-join"')&&
+    sources.index.includes('class="bf-demo-launch"'),
+    'Demo settings include local showcase, opt-in shared join and staged launch');
+  assert(sources.app.includes("import { createDemoMode }")&&
+    sources.app.includes("async prepareStep(step,remote)")&&
+    sources.app.includes("setCatalogueSource(desired,{manual:true,demo:true})"),
+    'visual-only demo uses Carousel shelf navigation without changing LMS playback');
   assert(sources.app.includes("'tags:aluJenKNRAxE'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
     'closed-cover interaction no longer dispatches open-case events');
