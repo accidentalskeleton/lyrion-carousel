@@ -1574,7 +1574,7 @@ export async function runTests(sources) {
     'Demo settings include local showcase, opt-in shared join and staged launch');
   assert(sources.app.includes("import { createDemoMode }")&&
     sources.app.includes("async prepareStep(step,remote)")&&
-    sources.app.includes("setCatalogueSource(desired,{manual:true,demo:true})"),
+    sources.app.includes("setCatalogueSource(desired,{manual:false,demo:true})"),
     'visual-only demo uses Carousel shelf navigation without changing LMS playback');
   assert(sources.app.includes("'tags:aluJenKNRAxE'"),'initial LMS player status requests artist roles');
   assert(!sources.app.includes('carousel:toggle-jewel-case')&&!sources.app.includes('carousel:album-preview'),
