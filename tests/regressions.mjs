@@ -882,7 +882,7 @@ export async function runTests(sources) {
     'closing an idle album preview clears its detail heading');
 
 
-  const tabs=['display','browsing','connection','genres','cache','about'].map(name=>{
+  const tabs=['display','browsing','demo','connection','genres','cache','about'].map(name=>{
     const tab=new Element(name);tab.className='bf-settings-tab';tab.setAttribute('aria-controls','settings-panel-'+name);root.append(tab);return tab;
   });
   window.fetch=async()=>{};
@@ -1005,11 +1005,11 @@ export async function runTests(sources) {
   Element.prototype.dispatchEvent.call(window,{type:'pageshow'});
   assert(!!settingsApi.state().timer,'restoring a suspended page resumes daily checks');
   autoRelease.checked=false;autoRelease.listeners.change[0]();
-  tabs[2].listeners.click[0]();
-  assert(tabs[2].getAttribute('aria-selected')==='true'&&tabs[2].tabIndex===0,'settings tab selected accessibly');
+  tabs[3].listeners.click[0]();
+  assert(tabs[3].getAttribute('aria-selected')==='true'&&tabs[3].tabIndex===0,'settings tab selected accessibly');
   assert(!element('#settings-panel-connection').hidden&&element('#settings-panel-display').hidden,'settings shows only selected panel');
   const key=key=>({key,preventDefault(){},stopPropagation(){}});
-  tabs[2].listeners.keydown[0](key('ArrowRight'));
+  tabs[5].listeners.keydown[0](key('ArrowRight'));
   assert(!element('#settings-panel-genres').hidden,'arrow key selects genres settings tab');
   tabs[3].listeners.keydown[0](key('ArrowRight'));
   assert(!element('#settings-panel-cache').hidden,'arrow key selects cache settings tab');
@@ -1019,9 +1019,9 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
-  assert(sources.index.includes('css/settings.css?v=new-album-toast-top-1'),
-    'project-link styles invalidate the settings stylesheet cache');
-  tabs[5].listeners.keydown[0](key('Home'));
+  assert(sources.index.includes('css/settings.css?v=demo-mode-1'),
+    'Demo styles invalidate the settings stylesheet cache');
+  tabs[6].listeners.keydown[0](key('Home'));
   assert(!element('#settings-panel-display').hidden,'Home selects first settings tab');
   assert(api.state().KEEP_PLAYING_OPEN===true,
     'the playing cover is permanently pinned regardless of old preferences');
