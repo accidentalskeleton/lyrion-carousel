@@ -30,7 +30,7 @@ class DemoSessions:
             controller = secrets.token_urlsafe(32)
             viewer = secrets.token_urlsafe(32)
             self._sessions[code] = dict(controller=controller, viewer=viewer,
-                                        seq=0, step=None, active=True,
+                                        seq=0, step=None, source=None, album_id=None, active=True,
                                         until=time.monotonic()+MAX_AGE)
             return dict(code=code, controller=controller, viewer=viewer)
 
@@ -49,9 +49,9 @@ class DemoSessions:
             session = self._sessions.get(code)
             if not session or not session["active"] or not secrets.compare_digest(session["viewer"], viewer):
                 return None
-            return {key: session[key] for key in ("seq", "step", "active")}
+            return {key: session[key] for key in ("seq", "step", "source", "album_id", "active")}
 
-    def update(self, code, controller, action, step=None):
+    def update(self, code, controller, action, step=None, source=None, album_id=None):
         with self._lock:
             self._prune()
             session = self._sessions.get(code)
@@ -60,9 +60,13 @@ class DemoSessions:
             if action == "stop":
                 session["active"] = False
                 session["seq"] += 1
-            elif action == "step" and session["active"] and type(step) is int and 0 <= step < 8:
+            elif (action == "step" and session["active"] and type(step) is int and 0 <= step < 8
+                  and source in ("library", "spotify") and isinstance(album_id, str)
+                  and 0 < len(album_id) <= 128):
                 session["seq"] += 1
                 session["step"] = step
+                session["source"] = source
+                session["album_id"] = album_id
                 session["until"] = time.monotonic()+MAX_AGE
             else:
                 return None
