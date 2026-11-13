@@ -68,7 +68,7 @@ export function createDemoMode({prepareStep,onStep,onActiveChange,onStop}) {
         stepIndex=step;
         say((controller?'Shared demo':'Visual demo')+' · scene '+(step+1)+'/'+DEMO_SCENES.length+(code?' · code '+code:''));
         const target=await onStep(step,selection);
-        if(generation===epoch&&mode)guide.show(step,target);
+        if(generation===epoch&&mode)guide.show(step,target,selection);
     }
     async function hostStep(generation,step=0){
         if(generation!==epoch||!mode)return;
