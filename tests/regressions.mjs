@@ -2042,6 +2042,45 @@ export async function runTests(sources) {
     'real HTTP radio streams remain external');
   assert(api.playbackSourceForTrack({remote_title:'Radio station'}, {remote:1})==='external',
     'radio station metadata keeps the fake CD when the stream URL is missing');
+  // Protocol-independent remote classification: the server's remote flag is
+  // authoritative, but a concrete non-Spotify URI is required to avoid
+  // converting metadata-light Spotify updates into fake radio CDs.
+  const planetRockStatus={
+    mode:'play',remote:1,current_title:' ',
+    playlist_cur_index:'0',
+    playlist_loop:[{
+      title:'The Planet Rock Years',
+      album:'Legendary rock tracks, tv and memories from one classic year',
+      remote:1,
+      url:'https://stream-mz.hellorayo.co.uk/planetrock.aac?direct=true',
+      artwork_url:'/imageproxy/planetrock/image.jpg','playlist index':0
+    }],
+    remoteMeta:{remote:1,url:'https://stream-mz.hellorayo.co.uk/planetrock.aac?direct=true'}
+  };
+  assert(api.playbackSourceForTrack(planetRockStatus.playlist_loop[0],planetRockStatus)==='external',
+    'actual Planet Rock HTTP stream remains external via remote flag');
+  for(const uri of ['sounds://_LIVE_bbc_radio_two','radiofuture://station/live','rtsp://station/live']){
+    assert(api.playbackSourceForTrack({remote:1,url:uri},{remote:1})==='external',
+      'remote player streams are independent of URL scheme: '+uri);
+  }
+  assert(api.playbackSourceForTrack({remote:1,url:'file:///music/track.flac',album_id:20},{remote:1})==='unknown',
+    'remote:1 with only a local-looking URI is ambiguous, not a false radio CD');
+  assert(api.playbackSourceForTrack({remote:0,url:'file:///music/track.flac',album_id:20},{remote:0})==='library',
+    'remote:0 local album remains a library record');
+  assert(api.playbackSourceForTrack({remote:1,title:'Metadata-light remote',artist:'Artist'},{remote:1})==='unknown',
+    'remote:1 without a non-Spotify URI does not invent a radio CD');
+  assert(api.playbackSourceForTrack({title:'Metadata-light Spotify track',album:'Album',remote:1},
+      {remoteMeta:{remote:1}})==='unknown',
+    'partial CometD remote status never misclassifies Spotify as radio');
+  assert(api.playbackSourceForTrack({url:'spotify:track:abc',remote:1},
+      {remote:1,remoteMeta:{url:'sounds://_LIVE_bbc_radio_two'}})==='spotify',
+    'positive Spotify identity takes priority over other remote URLs');
+  assert(api.playbackSourceForTrack({url:'spotify://track:abc',remote:1},{remote:1})==='spotify',
+    'Spotify double-slash URI remains Spotify despite remote:1');
+  assert(api.playbackSourceForTrack({url:'radiofuture://station/live'},
+      {remoteMeta:{remote:1}})==='external',
+    'remoteMeta flag can identify a new radio protocol even when track.remote is missing');
+
   // Real LMS BBC Sounds Radio 2 payload: the live stream has a sounds:// URI
   // and artwork, but neither a remote_title nor a station icon.
   const soundsStatus={
@@ -2071,6 +2110,23 @@ export async function runTests(sources) {
   api.applyStatus({mode:'stop',playlist_loop:[]});
   assert(!api.state().albums.some(album=>album?.[13]==='external'),
     'stopping BBC Sounds removes the temporary radio CD');
+  const rockBefore=api.state().albums.length;
+  api.applyStatus(planetRockStatus);
+  assert(root.dataset.externalPlayback==='true'&&
+    api.state().albums.filter(album=>album?.[13]==='external').length===1&&
+    api.state().albums.length===rockBefore+1,
+    'actual Planet Rock metadata also inserts exactly one temporary radio CD');
+  await settle(api.ensurePlayingCover());
+  assert(api.state().frontPreviewAlbum?.[13]==='external'&&!preview.hidden,
+    'Planet Rock continues to open its radio jewel case');
+  // Partial metadata must preserve the established radio source without
+  // replacing its CD, just as it preserves confirmed Spotify playback.
+  api.applyStatus({mode:'pause',remote:1,playlist_loop:[{title:'Partial radio update',remote:1}]});
+  assert(root.dataset.externalPlayback==='true'&&
+    api.state().albums.filter(album=>album?.[13]==='external').length===1,
+    'partial remote event keeps the existing confirmed radio CD');
+  api.applyStatus({mode:'stop',playlist_loop:[]});
+
 
   async function settleSource(expected) {
     for(let i=0;i<500;i++){
