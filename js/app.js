@@ -1864,6 +1864,7 @@ function finishShelfDrag(cancelled=false){
     pressedAlbumIndex=null;schedule();
 }
 // The navigator changes shelf position only. It does not open or play CDs.
+let latestFastNavRequest=0;
 const fastNavigator=createFastNavigator(root,{
     state:()=>({
         total:Math.max(0,totalAlbums-(externalShelfPosition>=0?1:0)),
@@ -1874,6 +1875,7 @@ const fastNavigator=createFastNavigator(root,{
     }),
     onActivity:()=>{noteUserActivity();lastFlickVelocity=0;},
     jump:async(index,final,token)=>{
+        latestFastNavRequest=token;
         if(orderBusy||libraryRefreshing||randomAnimating||!totalAlbums)return;
         const generation=catalogueGeneration,source=catalogueSource;
         const slot=catalogueSlot(index);
@@ -1888,12 +1890,22 @@ const fastNavigator=createFastNavigator(root,{
         if(!final)return;
         if(source==='library'&&liveCatalogue){
             await fetchBatch(Math.floor(index/PAGE_SIZE));
-            if(generation!==catalogueGeneration||source!==catalogueSource)return;
+            if(token!==latestFastNavRequest||generation!==catalogueGeneration||source!==catalogueSource)return;
         }
         target=snapShelfPosition(nearestPositionForIndex(slot));
         schedule();
     },
-    jumpLetter:letter=>{if(orderMode==='artistAlbum'||orderMode==='album')void jumpToLetter(letter)}
+    jumpLetter:letter=>{
+        if(orderMode==='artistAlbum'){void jumpToLetter(letter);return}
+        if(orderMode!=='album')return;
+        // Album order is based on title, not the artist textkey. Prepared
+        // catalogues contain the full order; fallback loads only as needed.
+        const index=albums.findIndex(a=>a?.[13]!=='external'&&String(a?.[0]||'').trim().toUpperCase().startsWith(letter));
+        if(index>=0){
+            followingNowPlaying=false;cancelFollowAnimation();
+            target=nearestPositionForIndex(index);schedule();
+        }
+    }
 });
 stage.addEventListener('pointerdown',event=>{
     const pressed=event.target.closest('.bf-album');
