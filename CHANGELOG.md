@@ -4,7 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
-- Add a context-triggered, shelf-centred translucent fast-scrub timeline (hidden at rest; keyboard N also reveals it) with CD position, artist/album preview and ordering-aware alphabet shortcuts. Strengthen fast touch/mouse momentum and accelerate repeated mouse-wheel notches for 100+ CD libraries, preserving precise slow gestures, finite shelf bounds and visual-only navigation.
+- Add an 80%-width, shelf-centred translucent fast-scrub timeline hidden at rest; reveal after sustained repeated swipes or wheel browsing, or manually with N. Strengthen fast touch/mouse momentum and accelerate repeated mouse-wheel notches for 100+ CD libraries, preserving precise slow gestures, finite shelf bounds and visual-only navigation.
 
 - Dim the CD shelf and any open jewel case when the selected LMS player's power state is off; restore full brightness on power-on while leaving navigation and transport controls readable. Unknown power state is not treated as off.
 

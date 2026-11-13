@@ -25,19 +25,21 @@ export function acceleratedWheel(delta,{total=0,streak=0}={}){
     if(total<100||Math.abs(delta)<65||streak<2)return delta;
     return Math.sign(delta)*Math.min(Math.abs(delta)*(1+Math.min(6,streak-1)*1.25),1500);
 }
-// Gesture counting is independent of rendering and does not hijack normal
-// taps, slow drags, or changes of direction.
+// Reveal only after deliberate extended navigation: quick flicks may still
+// accelerate immediately, but the scrub panel must not interrupt casual use.
+export function shouldRevealForWheel({streak=0,distance=0,total=0}={}){
+    return total>=100&&streak>=10&&distance>=1200;
+}
 export function createSwipeNavigationDetector(){
     let count=0,lastAt=-Infinity,lastDirection=0;
     return {
         record({distance=0,duration=Infinity,velocity=0,now=0,direction=0}={}){
-            if(distance<55||duration>850||direction===0){count=0;return false}
+            if(distance<70||duration>900||direction===0){count=0;return false}
             if(now-lastAt>2200||direction!==lastDirection)count=0;
             count++;lastAt=now;lastDirection=direction;
             const speed=Math.abs(velocity);
-            return (speed>=1.5&&distance>=140)||
-                (speed>=.9&&distance>=90&&count>=2)||
-                count>=3;
+            return (speed>=.9&&distance>=90&&count>=4)||
+                (speed>=.3&&distance>=75&&count>=6);
         },
         reset(){count=0;lastAt=-Infinity;lastDirection=0}
     };

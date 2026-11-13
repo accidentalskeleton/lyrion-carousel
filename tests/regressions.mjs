@@ -173,7 +173,7 @@ export async function runTests(sources) {
   // Discovery must choose a different album when the test requires scrolling.
   // A real random draw can select the centred album and legitimately skip it.
   const appMath=Object.create(Math);appMath.random=()=>.37;
-  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,scrubIndex,scrubRatio};')();
+  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,shouldRevealForWheel,scrubIndex,scrubRatio};')();
   assert(navigation.scrubIndex(.5,1001)===500,'large library scrub ratio selects index 500');
   assert(navigation.scrubIndex(2,1001)===1000&&navigation.scrubIndex(-1,1001)===0,
     'scrub ratio clamps collection endpoints');
@@ -198,18 +198,30 @@ export async function runTests(sources) {
     navigation.acceleratedWheel(120,{total:50,streak:8})===120,
     'precise wheel movement and small libraries retain original speed');
   const swipeDetect=navigation.createSwipeNavigationDetector();
-  assert(!swipeDetect.record({distance:110,duration:400,velocity:1.1,now:1000,direction:1}),
-    'one ordinary swipe leaves navigator hidden');
-  assert(swipeDetect.record({distance:120,duration:400,velocity:1.1,now:1400,direction:1}),
-    'two quick swipes reveal contextual navigator');
+  assert([1000,1350,1700].every(now=>!swipeDetect.record({
+    distance:120,duration:300,velocity:1.1,now,direction:1
+  })),'first three fast swipes leave the panel hidden');
+  assert(swipeDetect.record({distance:120,duration:300,velocity:1.1,now:2050,direction:1}),
+    'four consecutive quick swipes reveal the panel');
   swipeDetect.reset();
-  assert(!swipeDetect.record({distance:90,duration:500,velocity:.35,now:2200,direction:1})&&
-    !swipeDetect.record({distance:90,duration:500,velocity:.35,now:2800,direction:1})&&
-    swipeDetect.record({distance:90,duration:500,velocity:.35,now:3400,direction:1}),
-    'three repeated moderate swipes reveal navigator');
+  assert([2500,3000,3500,4000,4500].every(now=>!swipeDetect.record({
+    distance:90,duration:500,velocity:.35,now,direction:1
+  })),'five moderate swipes do not distract with the panel');
+  assert(swipeDetect.record({distance:90,duration:500,velocity:.35,now:5000,direction:1}),
+    'six consecutive moderate swipes reveal the panel');
   swipeDetect.reset();
-  assert(!swipeDetect.record({distance:20,duration:100,velocity:2,now:4000,direction:1}),
+  assert(!swipeDetect.record({distance:120,duration:300,velocity:1.1,now:5500,direction:1})&&
+    !swipeDetect.record({distance:120,duration:300,velocity:1.1,now:5700,direction:-1}),
+    'a change in swipe direction resets the reveal streak');
+  swipeDetect.reset();
+  assert(!swipeDetect.record({distance:20,duration:100,velocity:2,now:6000,direction:1}),
     'a short tap or tiny drag never opens navigator');
+  assert(!navigation.shouldRevealForWheel({total:169,streak:9,distance:1500})&&
+    !navigation.shouldRevealForWheel({total:169,streak:10,distance:1000})&&
+    navigation.shouldRevealForWheel({total:169,streak:10,distance:1200}),
+    'wheel browsing requires sustained scrolling, not a few notches or one huge event');
+  assert(!navigation.shouldRevealForWheel({total:50,streak:16,distance:5000}),
+    'small libraries do not automatically reveal the fast navigator');
   const env={Math:appMath,document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
     ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>{
       if(url==='/api/catalogue/invalidate'){
@@ -235,6 +247,7 @@ export async function runTests(sources) {
     acceleratedFlick:navigation.acceleratedFlick,
     acceleratedWheel:navigation.acceleratedWheel,
     createSwipeNavigationDetector:navigation.createSwipeNavigationDetector,
+    shouldRevealForWheel:navigation.shouldRevealForWheel,
     createFastNavigator:()=>({render(){},active:()=>false,show(){},hide(){},visible:()=>false}),
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),

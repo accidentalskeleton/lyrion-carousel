@@ -965,7 +965,7 @@ body {
     color:inherit; font:inherit; cursor:pointer; touch-action:manipulation;
 }
 .bf-fast-navigator {
-    pointer-events:auto; width:min(560px,calc(100% - 40px)); box-sizing:border-box;
+    pointer-events:auto; width:80%; box-sizing:border-box;
     padding:11px 16px 12px; border:1px solid rgba(166,218,186,.46);
     border-radius:14px; background:rgba(13,27,25,.86);
     box-shadow:0 12px 36px rgba(0,0,0,.55);
@@ -985,7 +985,7 @@ body {
 .bf-fast-navigator :focus-visible {outline:2px solid #a7ddbd;outline-offset:2px}
 @media(max-width:560px) {
     .bf-fast-nav-anchor {top:42px;bottom:62px}
-    .bf-fast-navigator {width:calc(100% - 18px);padding:8px 10px}
+    .bf-fast-navigator {width:80%;padding:8px 10px}
     .bf-fast-nav-letters button {min-width:19px}
 }
 @media(prefers-reduced-motion:reduce) {

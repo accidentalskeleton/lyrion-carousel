@@ -46,10 +46,11 @@ try{
             const r=panel.getBoundingClientRect(),s=screen.getBoundingClientRect(),shelf=stage.getBoundingClientRect();
             return {visible:!panel.hidden,within:r.left>=s.left-1&&r.right<=s.right+1&&
                 r.top>=s.top-1&&r.bottom<=s.bottom+1,
-                centred:Math.abs((r.top+r.bottom)/2-(shelf.top+shelf.bottom)/2)<4};
+                centred:Math.abs((r.top+r.bottom)/2-(shelf.top+shelf.bottom)/2)<4,
+                widthRatio:r.width/shelf.width};
         });
-        if(!state.visible||!state.within||!state.centred)
-            throw Error('Fast navigator must be centred inside shelf at '+viewport.width+': '+JSON.stringify(state));
+        if(!state.visible||!state.within||!state.centred||Math.abs(state.widthRatio-.8)>.015)
+            throw Error('Fast navigator must be centred and 80% of shelf width at '+viewport.width+': '+JSON.stringify(state));
         await page.locator('.bf-fast-nav-range').evaluate(input=>{
             input.value=input.max;
             input.dispatchEvent(new Event('input',{bubbles:true}));

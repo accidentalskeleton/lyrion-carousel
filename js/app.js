@@ -5,7 +5,7 @@ import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPositio
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=stable-spotify-album-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=stable-spotify-album-1';
-import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector } from './fast-navigation.js?v=2';
+import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=3';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 stage.classList.add('bf-shelf-active');
@@ -1846,12 +1846,12 @@ function scrollShelfWheel(e){
     const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
     const direction=Math.sign(delta),sameDirection=direction===lastWheelDirection;
     const continuous=sameDirection&&now-lastWheelAt<650;
-    wheelStreak=continuous&&Math.abs(delta)>=65?Math.min(8,wheelStreak+1):Math.abs(delta)>=65?1:0;
+    wheelStreak=continuous&&Math.abs(delta)>=65?Math.min(16,wheelStreak+1):Math.abs(delta)>=65?1:0;
     wheelBurstDistance=continuous?wheelBurstDistance+Math.abs(delta):Math.abs(delta);
     lastWheelAt=now;lastWheelDirection=direction;
     const adjusted=acceleratedWheel(delta,{total:totalAlbums,streak:wheelStreak});
     target=position=shelfPosition(position+adjusted*.0028);
-    if(totalAlbums>=100&&(wheelStreak>=4||wheelBurstDistance>=1100))fastNavigator.show();
+    if(shouldRevealForWheel({streak:wheelStreak,distance:wheelBurstDistance,total:totalAlbums}))fastNavigator.show();
     draw();clearTimeout(wheelTimer);
     wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110);
 }
