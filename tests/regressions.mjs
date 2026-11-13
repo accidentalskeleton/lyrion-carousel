@@ -2305,6 +2305,25 @@ export async function runTests(sources) {
   await settle(api.handleLibraryEvent());
   assert(newAlbumToast.hidden,'unchanged catalogue revision does not repeat the announcement');
 
+  // A concurrent cache expiry can consume the server's recent_new_album_ids
+  // before this browser reconciles. A complete previous shelf must still
+  // identify a genuinely new ID, without false positives for retagging.
+  const missedServerArrival={id:99108,album:'Recovered arrival',artist:'Ripper'};
+  library.push(missedServerArrival);
+  recentNewAlbumIdsFixture=[];
+  catalogueReconcileChanged=false;
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(!newAlbumToast.hidden&&newAlbumToast.textContent.includes('Recovered arrival'),
+    'fully loaded shelf independently recovers a new album when server omits the ID');
+  newAlbumToast.hidden=true;
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.hidden,'client fallback never repeats unchanged new albums');
+  const retagged=library.find(album=>album.id===99108);
+  retagged.artist='New artist spelling';
+  await settle(api.handleLibraryEvent());
+  assert(newAlbumToast.hidden,'retagging an existing album does not trigger false arrival');
+
   // A different path can update this viewer's shelf BEFORE it receives the
   // scan event. It must still announce that revision exactly once.
   const alreadyRefreshedArrival={id:99107,album:'Already on the shelf',artist:'New arrival'};
@@ -2324,9 +2343,14 @@ export async function runTests(sources) {
   assert(newAlbumToast.hidden,'already-refreshed arrival is never announced twice');
 
   // In preview mode the virtual viewer is idle and may scroll/open, but never
-  // play. Opening an album also reuses the standard temporary case timeout.
+  // play. A manual Library source hold must NOT suppress this same-shelf,
+  // opted-in preview; the 15-second activity guard still applies.
   api.applySetting('newAlbumAction','preview');
   api.closeFrontPreview(true);
+  api.applySetting('sourceBrowseTimeout',60000);
+  await settle(api.setCatalogueSource('library',{manual:true}));
+  assert(api.manualSourceStateForTest().held,
+    'manual source hold is active during the idle new-album preview test');
   api.set({activity:Date.now()-30000});
   const secondArrival={id:99102,album:'Second fresh CD',artist:'Ripping artist'};
   library.push(secondArrival);
@@ -2337,6 +2361,8 @@ export async function runTests(sources) {
     'idle viewer scrolls to freshly added album and opens its jewel case');
   assert(api.state().frontTimer!==0,
     'new album cover uses the usual temporary front-preview timeout');
+  api.applySetting('sourceBrowseTimeout',0);
+
 
   // Active browsing must not be hijacked; a text notification is safe.
   api.closeFrontPreview(true);

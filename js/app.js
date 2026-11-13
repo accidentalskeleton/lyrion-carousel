@@ -1261,7 +1261,11 @@ function showNewAlbumToast(message){
 function canPreviewNewAlbum(){
     // Passive catalogue events never steal an active user's place, change
     // source, interrupt radio, or replace an explicitly opened cover.
-    return catalogueSource==='library'&&playingSource!=='external'&&!sourceBrowseHeld()&&
+    // A manual Library source hold prevents automatic Library/Spotify
+    // switching, not an explicitly opted-in new-CD preview on this same
+    // Library shelf. Recent interaction (15s) and open menus still protect
+    // active browsing.
+    return catalogueSource==='library'&&playingSource!=='external'&&
         Date.now()-lastActivityAt>=15000&&
         !randomAnimating&&!discoveryBusy&&!dragging&&!orderBusy&&!sourceFollowPending&&
         !root.querySelector('.bf-settings-overlay:not([hidden])')&&
@@ -1317,8 +1321,16 @@ async function handleLibraryEvent(){
             const revision=typeof result.revision==='string'?result.revision:null;
             const newRevision=!!revision&&observedLibraryRevision!==null&&revision!==observedLibraryRevision;
             if(revision)observedLibraryRevision=revision;
-            const newIds=newRevision&&Array.isArray(result.recent_new_album_ids)?
+            let newIds=newRevision&&Array.isArray(result.recent_new_album_ids)?
                 result.recent_new_album_ids.filter(id=>typeof id==='string'&&id.length<=128):[];
+            // The server's last-added list can be overtaken by an unrelated
+            // catalogue refresh. If this viewer holds a COMPLETE previous
+            // shelf, its identity set provides an independent baseline.
+            // Do not infer arrivals from a partial/cold shelf or a retag.
+            const priorRows=albums.filter(a=>a?.[13]!=='external'&&a?.[6]!=null);
+            const priorIds=newRevision&&catalogueSource==='library'&&liveCatalogue&&
+                preparedCatalogueCount!==null&&priorRows.length===preparedCatalogueCount?
+                new Set(priorRows.map(a=>String(a[6]))):null;
             // Another browser may already have reconciled the shared server
             // snapshot. In that case "changed" is false relative to SERVER
             // memory, but this browser still has the older shelf.
@@ -1341,6 +1353,10 @@ async function handleLibraryEvent(){
             if(needsRefresh){
                 await refreshCatalogue({invalidate:false});
                 if(connection!==connectionGeneration)return;
+                if(!newIds.length&&priorIds){
+                    newIds=albums.filter(a=>a?.[13]!=='external'&&a?.[6]!=null&&
+                        !priorIds.has(String(a[6]))).map(a=>String(a[6])).slice(0,25);
+                }
             }
             if(newIds.length)await announceNewAlbums(newIds,connection);
         }
