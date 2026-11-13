@@ -58,3 +58,13 @@ jobs:
           trap 'kill "$server_pid"' EXIT
           PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/shelf-playwright.mjs http://127.0.0.1:8089/
           PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/demo-browser-playwright.mjs http://127.0.0.1:8089/
+      - name: Test synchronized Demo Mode against real Carousel server
+        run: |
+          python3 server.py --bind 127.0.0.1 --port 8090 --lms http://127.0.0.1:19999 --cache-dir "$RUNNER_TEMP/demo-cache/art" &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for i in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:8090/VERSION >/dev/null; then break; fi
+            sleep 0.1
+          done
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/carousel-browser/node_modules/playwright/index.mjs" node tests/demo-shared-playwright.mjs http://127.0.0.1:8090/
