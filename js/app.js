@@ -268,6 +268,9 @@ async function setCatalogueSource(source,{manual=false}={}){
     const previous=catalogueSource,previousDesired=desiredOrderMode;catalogueSource=source==='spotify'?'spotify':'library';desiredOrderMode=sourceOrderModes[catalogueSource];updateSourceButtons();sourceButtons.forEach(b=>b.disabled=true);
     try{
         if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();
+        // Catalogue loading rebuilds the shelf. Retain live radio's virtual
+        // jewel case even when the user switches Library/Spotify manually.
+        syncExternalShelf();
         try{localStorage.setItem('albumBrowserSource',catalogueSource)}catch(_){}
         // A source switch replaces the catalogue, so resolve Now Playing again
         // against the newly loaded source. If that album exists here, move
@@ -345,7 +348,11 @@ async function setDisplayOrder(mode){
         if(mode==='random')albums.sort(()=>Math.random()-.5);
         else if(mode==='colour')mode='artistAlbum';
         if(mode!=='random')albums.sort((a,b)=>(mode==='album'?(a[0]+'\0'+a[1]):(a[1]+'\0'+a[0])).localeCompare(mode==='album'?(b[0]+'\0'+b[1]):(b[1]+'\0'+b[0])));
-        rebuildAlbumIndex();const i=indexForAlbumId(selected);position=target=i>=0?i:0;rememberSourceOrder(orderMode);updateOrderToggle();renderAlbums();draw();return;
+        // Re-sort real Spotify albums only. The radio CD is a transient
+        // Now Playing overlay, not a Spotify library record.
+        albums=albums.filter(album=>album?.[13]!=='external');totalAlbums=albums.length;
+        rebuildAlbumIndex();syncExternalShelf();
+        const i=indexForAlbumId(selected);position=target=i>=0?i:0;rememberSourceOrder(orderMode);updateOrderToggle();renderAlbums();draw();return;
     }
     if(orderBusy||randomAnimating||!Object.prototype.hasOwnProperty.call(orderLabels,mode))return;
     const generation=catalogueGeneration,selected=albums[selectedIndex()]?.[6];
@@ -365,7 +372,12 @@ async function setDisplayOrder(mode){
             observedLibraryRevision=preparedCatalogueRevision;
         preparedCatalogueCount=Number.isSafeInteger(preparedCount)&&preparedCount>=0?preparedCount:null;
         preparedCatalogueCreated=Number.isFinite(preparedCreated)&&preparedCreated>0?preparedCreated:null;
-        libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
+        libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);
+        rebuildAlbumIndex();
+        // A source switch, library scan or order change replaces the album
+        // array. Restore the temporary radio CD immediately; radio doesn't
+        // necessarily emit another status event after the refresh completes.
+        syncExternalShelf();
         loadedBatches=new Set(Array.from({length:batchCount()},(_,i)=>i));
         orderMode=desiredOrderMode=mode;
         rememberSourceOrder(mode);
