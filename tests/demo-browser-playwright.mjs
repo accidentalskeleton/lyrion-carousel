@@ -85,6 +85,31 @@ try{
         if(await page.locator('.bf-fast-navigator').isVisible())
             throw Error('Direct CD pointer scrolling must hide fast navigation; hit='+JSON.stringify(hit));
     }
+    // An actual pointer press on a CD closes the overlay immediately,
+    // without requiring a drag or waiting for the case animation.
+    await page.setViewportSize({width:1280,height:720});
+    await page.keyboard.press('n');
+    if(!await page.locator('.bf-fast-navigator').isVisible())
+        throw Error('Fast navigation could not be opened for CD-click test');
+    const cdClick=await page.evaluate(()=>{
+        const stage=document.querySelector('.bf-stage'),bounds=stage.getBoundingClientRect();
+        for(const album of stage.querySelectorAll('.bf-album')){
+            const rect=album.getBoundingClientRect();
+            for(const fraction of [.22,.52,.78]){
+                const x=rect.left+rect.width/2,y=rect.top+rect.height*fraction;
+                if(x<=bounds.left+4||x>=bounds.right-4||y<=bounds.top+4||y>=bounds.bottom-4)continue;
+                if(document.elementFromPoint(x,y)?.closest('.bf-album')===album)
+                    return {x,y,album:album.dataset.index};
+            }
+        }
+        return null;
+    });
+    if(!cdClick)throw Error('No directly clickable CD is visible for navigator dismissal test');
+    await page.mouse.move(cdClick.x,cdClick.y);
+    await page.mouse.down();
+    if(await page.locator('.bf-fast-navigator').isVisible())
+        throw Error('CD pointerdown must immediately hide fast navigation: '+JSON.stringify(cdClick));
+    await page.mouse.up();
     await page.locator('.bf-settings-open').click();
     await page.locator('#settings-tab-demo').click();
     if(!await page.locator('.bf-demo-local').isVisible())throw Error('Local demo button unavailable');

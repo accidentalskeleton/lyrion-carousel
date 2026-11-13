@@ -234,6 +234,7 @@ export async function runTests(sources) {
     'wheel browsing requires sustained scrolling, not a few notches or one huge event');
   assert(!navigation.shouldRevealForWheel({total:50,streak:16,distance:5000}),
     'small libraries do not automatically reveal the fast navigator');
+  const navigatorMock={opened:false,hideCount:0};
   const env={Math:appMath,document,window,localStorage,performance:{now:()=>time},requestAnimationFrame,cancelAnimationFrame,setTimeout,clearTimeout,setInterval:setTimeout,clearInterval:clearTimeout,
     ResizeObserver:class{observe(){}},Event:class{},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail;}},Image:PreloadImage,fetch:(url,...args)=>{
       if(url==='/api/catalogue/invalidate'){
@@ -260,13 +261,20 @@ export async function runTests(sources) {
     acceleratedWheel:navigation.acceleratedWheel,
     createSwipeNavigationDetector:navigation.createSwipeNavigationDetector,
     shouldRevealForWheel:navigation.shouldRevealForWheel,
-    createFastNavigator:()=>({render(){},active:()=>false,show(){},hide(){},visible:()=>false}),
+    createFastNavigator:()=>({
+      render(){},active:()=>false,
+      show(){navigatorMock.opened=true},
+      hide(){navigatorMock.opened=false;navigatorMock.hideCount++},
+      visible:()=>navigatorMock.opened
+    }),
     createLmsProvider:()=>({play:async album=>{await rpc('test-player',['playlistcontrol','cmd:load','album_id:'+album[6]]);return {};}}),createSpotifyProvider:()=>({load:async()=>({albums:spotifyFollowAlbums,total:spotifyFollowAlbums.length,libraryCount:spotifyFollowAlbums.length,live:false}),search:async()=>spotifyFollowSearch?spotifyFollowSearch():({albums:spotifyFollowAlbums}),play:async album=>{await rpc('test-player',['spotty','playlist','play','item_id:'+album[14]]);return {};}}),spotifyAlbumInformation:async()=>({tracks:[]}),
     spotifyAlbumUrl:new Function(plain(sources.spotify)+';return spotifyAlbumUrl;')(),
     spotifyAlbumSearchUrl:new Function(plain(sources.spotify)+';return spotifyAlbumSearchUrl;')()};
   const app=plain(sources.app).replace(/start\(\);\s*$/, '');
   const api=new Function(...Object.keys(env), app + `
-    return {setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
+    return {recordSwipeForTest:options=>swipeNavigation.record(options),
+      fastGestureStateForTest:()=>({wheelStreak,wheelBurstDistance,lastFlickVelocity}),
+      setOrderForTest:value=>{orderMode=value;},setSourceForTest:value=>{catalogueSource=value;},sourceForTest:()=>catalogueSource,sourceOrdersForTest:()=>({...sourceOrderModes}),checkSpottyAvailability,spottyState:()=>spottyAvailable,setCatalogueSource,shelfSpace,shelfIndexAt,spineWeight,mapLyrionAlbum,catalogueCodeLines,loadSpineMeta,fetchSpineMeta,flushSpineMetaBatch,rememberSpineMeta,clearSpineMetadata,indexForAlbumId,rebuildAlbumIndex,jumpToLetter,letterIndex:()=>new Map(alphabetIndex),
       preparedStateForTest:()=>({albums:preparedCatalogueCount,created:preparedCatalogueCreated,revision:preparedCatalogueRevision,live:libraryAlbumCount}),
       arrivalStateForTest:()=>({mode:newAlbumAction,revision:observedLibraryRevision}),
       manualSourceStateForTest:()=>({timeout:MANUAL_SOURCE_IDLE_MS,until:sourceBrowseDeadline,timer:sourceBrowseTimer,held:sourceBrowseHeld()}),
@@ -1435,10 +1443,24 @@ export async function runTests(sources) {
     'spine press during wheel scrolling cannot replace the open cover');
   time+=250;
   api.set({position:Math.round(wheelPosition)});
+  // Two swipes are not enough to reveal the panel, and selecting a CD
+  // must clear this history. If already visible it closes on pointerdown,
+  // before the case starts its opening animation.
+  assert(!api.recordSwipeForTest({distance:120,duration:300,velocity:1.1,now:10100,direction:1})&&
+    !api.recordSwipeForTest({distance:120,duration:300,velocity:1.1,now:10400,direction:1}),
+    'two quick swipes accumulate without showing fast navigation');
+  navigatorMock.opened=true;
+  const navigatorHideCount=navigatorMock.hideCount;
   stage.dispatchEvent({type:'pointerdown',button:0,target:idleTarget,pointerId:52,clientX:100,clientY:80});
+  assert(!navigatorMock.opened&&navigatorMock.hideCount===navigatorHideCount+1,
+    'pressing a CD immediately dismisses fast navigation');
   stage.dispatchEvent({type:'pointerup',target:idleTarget,pointerId:52,clientX:100,clientY:80,stopImmediatePropagation(){}});
   assert(api.state().frontPreviewAlbum===api.state().albums[idleIndex]&&!preview.hidden,
     'deliberate spine click opens its cover once scrolling has stopped');
+  assert([11000,11300].every(now=>!api.recordSwipeForTest({
+    distance:120,duration:300,velocity:1.1,now,direction:1
+  }))&&api.recordSwipeForTest({distance:120,duration:300,velocity:1.1,now:11600,direction:1}),
+    'clicking a CD resets the fast navigation gesture streak to zero');
   // A subsequent spine drag must preserve the manually selected preview and
   // should never promote the spine under the pointer at release.
   api.set({playing:false,position:10});
