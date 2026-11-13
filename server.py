@@ -1078,7 +1078,8 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 snapshot={
                     'created':time.time(),'albums':current,'genres':{},
                     'revision':current_revision,'colours':already_indexed,
-                    'recent_new_album_ids':newly_added[:25],
+                    'recent_new_album_ids':newly_added[:25] if newly_added else (
+                        previous.get('recent_new_album_ids',[]) if previous and not changed else []),
                     'lms_orders':{},'orders':OrderedDict()
                 } if changed or previous is None or previous.get('legacy_sort') else previous
                 snapshot['created']=time.time()
