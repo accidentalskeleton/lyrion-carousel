@@ -664,7 +664,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                 code=data.get('code','')
                 token=data.get('controller','')
                 if not isinstance(code,str) or not isinstance(token,str) or len(token)>100: raise ValueError
-                payload=DEMO_SESSIONS.update(code,token,action,data.get('step'))
+                payload=DEMO_SESSIONS.update(code,token,action,data.get('step'),data.get('source'),data.get('album_id'))
             else: raise ValueError
         except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError):
             self.send_error(400,'Invalid demo request'); return
