@@ -1739,10 +1739,18 @@ export async function runTests(sources) {
   api.set({position:0});await api.jumpToLetter('R');
   assert(api.state().target===1,
     'R jumps to the beginning of the LMS R section, not to visible-name C');
-  api.setOrderForTest('album');api.replaceAlbumsForTest(visibleAlbums);
-  assert(api.letterIndex().get('G')===0&&api.letterIndex().get('O')===1&&
+  // Album mode has a DIFFERENT one-letter key from LMS's sort:album
+  // response (e.g. ALBUMSORT can place a visible 'The Wall' under W).
+  const byAlbumTitle=visibleAlbums.map(album=>album.slice());
+  byAlbumTitle[0][9]='Z';byAlbumTitle[1][9]='O';byAlbumTitle[2][9]='R';
+  api.setOrderForTest('album');api.replaceAlbumsForTest(byAlbumTitle);
+  assert(api.letterIndex().get('Z')===0&&api.letterIndex().get('O')===1&&
     api.letterIndex().get('R')===2,
-    'Album A–Z follows album-title order rather than LMS artist textkey');
+    'Album A–Z uses its own LMS ALBUMSORT keys, not artist keys');
+  byAlbumTitle[0][0]='The Wall';byAlbumTitle[0][9]='W';
+  api.replaceAlbumsForTest(byAlbumTitle);
+  assert(api.letterIndex().get('W')===0,
+    'LMS album-sort initial W overrides the displayed album-title T');
   api.setOrderForTest('artistAlbum');
   // Letter jumps should not fetch or scan 20,000 entries on each click.
   // The index tracks the first position in the *current* ordered catalogue.
