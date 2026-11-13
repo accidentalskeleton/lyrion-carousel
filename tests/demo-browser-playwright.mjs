@@ -110,6 +110,21 @@ try{
     if(await page.locator('.bf-fast-navigator').isVisible())
         throw Error('CD pointerdown must immediately hide fast navigation: '+JSON.stringify(cdClick));
     await page.mouse.up();
+    // Real CD selection opens a jewel case. Reopening fast navigation must
+    // close that case FIRST; simply raising z-index hides the underlying bug.
+    await page.waitForFunction(()=>
+        document.querySelector('.bf-front-preview')?.hidden===false,null,{timeout:3000});
+    await page.keyboard.press('n');
+    const shelfOnly=await page.evaluate(()=>{
+        const cover=document.querySelector('.bf-front-preview');
+        const navigator=document.querySelector('.bf-fast-navigator');
+        return {coverClosed:cover.hidden,caseOpening:cover.dataset.opening,
+            navVisible:!navigator.hidden,
+            coverDisplayed:getComputedStyle(cover).display};
+    });
+    if(!shelfOnly.coverClosed||!shelfOnly.navVisible||shelfOnly.caseOpening==='true')
+        throw Error('Fast navigator must appear on closed CD shelf, not underneath open case: '+JSON.stringify(shelfOnly));
+    await page.locator('.bf-fast-nav-close').click();
     // Test the real overlay positioner against large functional surfaces.
     // No screenshot heuristics: use measured rectangles across screen sizes.
     for(const viewport of [{width:1280,height:720},{width:1024,height:768},{width:600,height:700}]){

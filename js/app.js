@@ -829,7 +829,7 @@ function isPlayingCoverPinned(){
         (frontPreviewAlbum[6]!=null&&current[6]!=null&&
         String(frontPreviewAlbum[6])===String(current[6])));
 }
-async function ensurePlayingCover(){if(demoActive)return;
+async function ensurePlayingCover(){if(demoActive||fastNavigator.visible())return;
     syncExternalShelf();
     const request=++pinnedRequest,id=playingAlbumId,generation=catalogueGeneration;
     frontPreview.dataset.pinned=String(isPlayingCoverPinned());
@@ -1424,7 +1424,7 @@ function scrollToAlbumIndex(index,allowPointerMovement=false){
 }
 function armIdleReturn(delayOverride=null){clearTimeout(idleTimer);if(IDLE_RETURN_MS<=0)return;const elapsed=Date.now()-lastActivityAt,delay=delayOverride===null?Math.max(0,IDLE_RETURN_MS-elapsed):delayOverride;idleTimer=setTimeout(()=>returnToPlayingAlbum(),delay)}
 function noteUserActivity(event){if(demoActive)return;if(!discoveryBusy&&!(event?.type==='pointermove'&&followAnimation?.allowPointerMovement))cancelFollowAnimation();if(sourceBrowseHeld())armSourceBrowseHold();lastActivityAt=Date.now();idleReturnAlbumId=null;armIdleReturn()}
-async function returnToPlayingAlbum(immediate=false){if(demoActive)return;
+async function returnToPlayingAlbum(immediate=false){if(demoActive||fastNavigator.visible())return;
     clearTimeout(idleTimer);idleTimer=0;
     if(!immediate&&Date.now()-lastActivityAt<IDLE_RETURN_MS){armIdleReturn();return}
     if(randomAnimating||discoveryBusy||dragging||orderBusy||libraryRefreshing||root.querySelector('.bf-settings-overlay:not([hidden])')||!searchOverlay.hidden||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden){clearTimeout(idleTimer);idleTimer=setTimeout(()=>returnToPlayingAlbum(immediate),1000);return}
@@ -1873,7 +1873,7 @@ function scrollShelfWheel(e){
     lastWheelAt=now;lastWheelDirection=direction;
     const adjusted=acceleratedWheel(delta,{total:totalAlbums,streak:wheelStreak});
     target=position=shelfPosition(position+adjusted*.0028);
-    if(!suppressed&&shouldRevealForWheel({streak:wheelStreak,distance:wheelBurstDistance,total:totalAlbums}))fastNavigator.show();
+    if(!suppressed&&shouldRevealForWheel({streak:wheelStreak,distance:wheelBurstDistance,total:totalAlbums}))showFastNavigation();
     draw();clearTimeout(wheelTimer);
     wheelTimer=boundedShelf()?0:setTimeout(()=>{target=snapShelfPosition(position);schedule()},110);
 }
@@ -1928,7 +1928,7 @@ function finishShelfDrag(cancelled=false){
         });
         target=snapShelfPosition(position-flick);
         if(!suppressNavigatorUntilBrowseIdle&&swipeNavigation.record({distance,duration,velocity,now,direction}))
-            fastNavigator.show();
+            showFastNavigation();
         else if(suppressNavigatorUntilBrowseIdle)swipeNavigation.reset();
         lastFlickVelocity=duration<850&&Math.abs(velocity)>=.55?velocity:0;
         lastFlickAt=now;
@@ -1972,6 +1972,19 @@ const fastNavigator=createFastNavigator(root,{
         if(orderMode==='artistAlbum'||orderMode==='album')void jumpToLetter(letter);
     }
 });
+// The navigator is a shelf-only control. A closing animation can be
+// interrupted by layout/scrolling, so enforce an immediate completed close
+// immediately before showing it, for both Demo Mode and normal browsing.
+// Keep playback untouched; suppress automatic Now Playing cover restoration
+// while the scrubber is visible.
+function showFastNavigation(options){
+    followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;
+    finishCoverOpening();
+    void closeFrontPreview(true,false);
+    if(!frontPreview.hidden)return false;
+    fastNavigator.show(options);
+    return fastNavigator.visible();
+}
 function resetFastNavigationOnAlbumSelection(){
     // A real CD selection cancels the overlay AND any accumulated gesture
     // history, including an outstanding scrub completion that could steal
@@ -1992,7 +2005,7 @@ stage.addEventListener('pointerdown',event=>{
 });
 stage.addEventListener('pointermove',event=>moveShelfDrag(event));
 stage.addEventListener('pointerup',()=>finishShelfDrag(false));
-stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(e.key==='Escape'&&fastNavigator.visible()){fastNavigator.hide();return}if(!typing&&e.key.toLowerCase()==='n'&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!randomAnimating&&searchOverlay.hidden){e.preventDefault();fastNavigator.show();return}if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{setPlayerPower(null);cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;clearSourceBrowseHold();sourceFollowAttempt='';sourceFollowAttemptAt=-Infinity;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{clearTimeout(newAlbumToastTimer);clearSourceBrowseHold();cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
+stage.addEventListener('pointercancel',()=>finishShelfDrag(true));stage.addEventListener('wheel',scrollShelfWheel,{passive:false});frontPreview.addEventListener('wheel',scrollShelfWheel,{passive:false});root.addEventListener('pointerdown',noteUserActivity,{capture:true});root.addEventListener('wheel',noteUserActivity,{capture:true,passive:true});document.addEventListener('keydown',e=>{noteUserActivity();if(e.key==='Escape'&&!searchOverlay.hidden){closeSearch();return}const typing=e.target.matches?.('input,select,textarea,[contenteditable="true"]')||!!root.querySelector('.bf-settings-overlay:not([hidden])')||!trackOverlay.hidden||!albumMenu.hidden||!orderMenu.hidden;if(e.key==='Escape'&&fastNavigator.visible()){fastNavigator.hide();return}if(!typing&&e.key.toLowerCase()==='n'&&!e.ctrlKey&&!e.altKey&&!e.metaKey&&!randomAnimating&&searchOverlay.hidden){e.preventDefault();showFastNavigation();return}if(!typing&&e.key==='/'){e.preventDefault();openSearch();return}if(typing||randomAnimating||!searchOverlay.hidden)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();browseWithArrow(e.key==='ArrowRight'?1:-1)}});powerButton.onclick=togglePlayerPower;searchOpen.onclick=openSearch;searchClose.onclick=closeSearch;searchOverlay.onclick=e=>{if(e.target===searchOverlay)closeSearch()};searchInput.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(searchInput.value),250)};randomPlay.onclick=()=>{if(suppressRandomClick){suppressRandomClick=false;return}if(!discoveryMenu.hidden){closeDiscoveryMenu();return}playRandomAlbum()};play.onclick=togglePlayback;playerSelect.addEventListener('change',()=>{setPlayerPower(null);cancelFollowAnimation();pinnedRequest++;playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);playerId=playerSelect.value;clearSourceBrowseHold();sourceFollowAttempt='';sourceFollowAttemptAt=-Infinity;setPlayerPower(null);try{localStorage.setItem('albumBrowserPlayer',playerId)}catch(_){}updateBusyState();refreshStatus();cometd.start(playerId)});new ResizeObserver(()=>{if(nodes.length){draw();scheduleCatalogueLayout()}}).observe(root);window.addEventListener('pagehide',()=>{clearTimeout(newAlbumToastTimer);clearSourceBrowseHold();cometd.stop();cancelFollowAnimation();clearInterval(progressTimer);clearTimeout(idleTimer);clearTimeout(frontTimer);clearTimeout(reconnectTimer)});
 async function connectLyrion(){if(connecting)return;connecting=true;const connection=connectionGeneration;try{const result=await rpc('0',['players',0,100]),players=(result.players_loop||[]).filter(p=>String(p.connected)!=='0');if(connection!==connectionGeneration)return;playerSelect.replaceChildren();for(const p of players){const o=document.createElement('option');o.value=p.playerid;o.textContent=p.name||p.playerid;playerSelect.append(o)}let remembered='';try{remembered=localStorage.getItem('albumBrowserPlayer')||''}catch(_){}const selected=players.find(p=>p.playerid===remembered)||players.find(p=>String(p.isplaying)==='1')||players[0];if(playerId!==(selected?.playerid||''))resetQueuePosition();playerId=selected?.playerid||'';setPlayerPower(null);if(playerId)playerSelect.value=playerId;playerSelect.disabled=!players.length;updateBusyState();await checkSpottyAvailability();if(connection!==connectionGeneration)return;if(catalogueSource==='spotify')await loadSpotifyCatalogue();else await loadInitialCatalogue();if(connection!==connectionGeneration)return;const status=await getStatus();if(connection!==connectionGeneration)return;await selectStartupAlbum(status);if(connection!==connectionGeneration)return;await followPlayingSource();if(connection!==connectionGeneration)return;resetReconnect();armIdleReturn();cometd.start(playerId);clearInterval(progressTimer);progressTimer=setInterval(updateProgressDisplay,500)}catch(error){if(connection!==connectionGeneration)return;console.warn(error);cometd.stop();root.dataset.liveUpdates='false';emitStatus();if(!liveCatalogue){albums=demoAlbums.slice();totalAlbums=libraryAlbumCount=albums.length;position=target=Math.floor(Math.random()*albums.length);renderAlbums();draw();root.classList.remove('is-starting');root.dataset.ready='true';playerSelect.innerHTML='<option>Demo mode</option>'}playing=false;paused=false;playingAlbumId=null;closeFrontPreview();updateMeta(true);root.classList.remove('is-starting');root.dataset.ready='true';playerId='';resetQueuePosition();playerSelect.disabled=true;updateBusyState();setConnection('Lyrion Music Server unavailable',false);scheduleReconnect()}finally{if(connection===connectionGeneration)connecting=false}}
 orderToggle.onclick=()=>orderMenu.hidden?openOrderMenu():closeOrderMenu();orderMenu.querySelectorAll('[data-order]').forEach(button=>button.onclick=()=>{closeOrderMenu();setDisplayOrder(button.dataset.order).catch(error=>{setConnection(error.message||'Could not change album order',false)}).finally(()=>{if(libraryRefreshPending)handleLibraryEvent()})});updateOrderToggle();
 previousTrack.onclick=()=>skipTrack(-1);nextTrack.onclick=()=>skipTrack(1);
@@ -2124,9 +2137,10 @@ const demoMode=createDemoMode({
         if(!demoActive||request!==demoSceneGeneration||!arrived)return;
         if(scene.open)openFrontPreview(albums[index],index,true);
         if(scene.fastNavigation){
-            // The visual tour holds this open for the whole scene, including
-            // Relaxed mode; ordinary manual activation still auto-hides.
-            fastNavigator.show({keepOpen:true});
+            // The previous scene may have left an animated or pinned case.
+            // Force the demo onto the closed shelf before revealing the
+            // scrubber, then let the guide point to the unobstructed slider.
+            if(!showFastNavigation({keepOpen:true}))return '.bf-stage';
             return '.bf-fast-nav-range';
         }
         if(step===3){
