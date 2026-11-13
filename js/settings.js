@@ -3,7 +3,7 @@ import { rpc } from './lms.js?v=source-sync-1';
 const root=document.getElementById('book-fan-browser');
 const openButton=root?.querySelector('.bf-settings-open'),overlay=root?.querySelector('.bf-settings-overlay'),closeButton=root?.querySelector('.bf-settings-close');
 const player=root?.querySelector('.bf-player-select'),idle=root?.querySelector('.bf-idle-return'),sourceBrowseTimeout=root?.querySelector('.bf-source-browse-timeout'),menuTimeout=root?.querySelector('.bf-album-menu-timeout'),frontTimeout=root?.querySelector('.bf-front-timeout'),random=root?.querySelector('.bf-random-duration'),displayCount=root?.querySelector('.bf-display-count'),lmsUrl=root?.querySelector('.bf-lms-url'),lmsConnect=root?.querySelector('.bf-lms-connect-button');
-const aboutConnection=root?.querySelector('.bf-about-connection'),aboutLive=root?.querySelector('.bf-about-live'),aboutPlayer=root?.querySelector('.bf-about-player'),aboutLibrary=root?.querySelector('.bf-about-library'),aboutCache=root?.querySelector('.bf-about-cache'),aboutVersion=root?.querySelector('.bf-about-version'),clearCacheButton=root?.querySelector('.bf-clear-cache'),cacheFeedback=root?.querySelector('.bf-cache-feedback');
+const aboutConnection=root?.querySelector('.bf-about-connection'),aboutLive=root?.querySelector('.bf-about-live'),aboutPlayer=root?.querySelector('.bf-about-player'),aboutLibrary=root?.querySelector('.bf-about-library'),aboutCache=root?.querySelector('.bf-about-cache'),aboutVersion=root?.querySelector('.bf-about-version'),aboutBrowserVersion=root?.querySelector('.bf-about-browser-version'),aboutBuildMatch=root?.querySelector('.bf-about-build-match'),clearCacheButton=root?.querySelector('.bf-clear-cache'),cacheFeedback=root?.querySelector('.bf-cache-feedback');
 const cacheConfirm=root?.querySelector('.bf-cache-confirm'),cacheCancel=root?.querySelector('.bf-cache-cancel'),cacheConfirmClear=root?.querySelector('.bf-cache-confirm-clear');
 function dismissCacheConfirm(){if(cacheConfirm)cacheConfirm.hidden=true;if(clearCacheButton)clearCacheButton.hidden=false;}
 const shelfVariety=root?.querySelector('.bf-shelf-variety');
@@ -22,6 +22,7 @@ function selectSettingsTab(tab,focus=false){
         button.tabIndex=selected?0:-1;
         const panel=root.querySelector('#'+button.getAttribute('aria-controls'));
         if(panel)panel.hidden=!selected;
+        if(selected&&button.getAttribute('aria-controls')==='settings-panel-about')void loadVersion();
     }
     const body=root.querySelector('.bf-settings-body');if(body)body.scrollTop=0;
     if(focus)tab.focus();
@@ -46,7 +47,7 @@ const releaseNotice=root?.querySelector('.bf-update-notice');
 const RELEASE_INTERVAL_MS=24*60*60*1000,RELEASE_API='https://api.github.com/repos/accidentalskeleton/lyrion-carousel/releases/latest';
 let installedReleaseVersion='',releaseTimer=0,releaseRequest=0,releaseController=null,releaseStopped=false,releaseLastAttempt=0;
 function releaseVersion(value){
-    const match=/^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(value||'').trim());
+    const match=/^v?(\d+)\.(\d+)\.(\d+)(?:~git[0-9a-f]{7,40})?$/.exec(String(value||'').trim());
     const parts=match?.slice(1).map(Number);
     return parts?.every(Number.isSafeInteger)?parts:null;
 }
@@ -54,7 +55,9 @@ function releaseIsNewer(candidate,current){
     const latest=releaseVersion(candidate),installed=releaseVersion(current);
     if(!latest||!installed)return false;
     for(let index=0;index<3;index++)if(latest[index]!==installed[index])return latest[index]>installed[index];
-    return false;
+    // A stable release supersedes the corresponding commit-specific prerelease.
+    return /~git[0-9a-f]{7,40}$/.test(String(current||''))&&
+        !/~git[0-9a-f]{7,40}$/.test(String(candidate||''));
 }
 function showRelease(tag){
     const newer=releaseIsNewer(tag,installedReleaseVersion);
@@ -153,7 +156,33 @@ async function loadGenres(){
 }
 function apply(value,name){set(storage[name],value);window.dispatchEvent(new CustomEvent('lyrion-carousel-setting',{detail:{name,value}}))}
 function refreshStatus(){const label=root.querySelector('.bf-connection-label')?.textContent?.trim()||'—',cached=root.dataset.catalogueSource==='cache';aboutConnection.textContent=root.dataset.connected==='true'?'Connected':'Not connected';if(aboutLive)aboutLive.textContent=root.dataset.liveUpdates==='true'?'Connected':root.dataset.liveUpdates==='connecting'?'Connecting…':'Disconnected';aboutLibrary.textContent=cached?label+' · cached':label;aboutPlayer.textContent=player?.selectedOptions?.[0]?.textContent||'—';if(aboutCache)aboutCache.textContent=cached?'Using cached catalogue':'Album cache enabled'}
-async function loadVersion(signal){try{const r=await fetch('VERSION',{cache:'no-store',signal});if(r.ok){installedReleaseVersion=(await r.text()).trim();aboutVersion.textContent='v'+installedReleaseVersion}}catch(_){aboutVersion.textContent=''}}
+async function loadVersion(signal){
+    // Browser build is written by the JavaScript code already executing.
+    // Server build is fetched fresh, so an existing tab can detect upgrades.
+    let serverVersion='';
+    try{
+        const response=await fetch('/api/build',{cache:'no-store',signal});
+        if(response.ok){
+            const result=await response.json();
+            serverVersion=String(result?.version||'').trim();
+        }
+    }catch(_){}
+    if(!serverVersion){
+        try{
+            const response=await fetch('VERSION',{cache:'no-store',signal});
+            if(response.ok)serverVersion=(await response.text()).trim();
+        }catch(_){}
+    }
+    installedReleaseVersion=serverVersion;
+    const browserVersion=String(root?.dataset.browserBuild||'development');
+    if(aboutVersion)aboutVersion.textContent=serverVersion||'Unavailable';
+    if(aboutBrowserVersion)aboutBrowserVersion.textContent=browserVersion;
+    if(aboutBuildMatch){
+        const comparable=browserVersion!=='development'&&!!serverVersion;
+        aboutBuildMatch.textContent=!comparable?'Not verified (source/browser not stamped)':
+            browserVersion===serverVersion?'Matched':'Different builds — reload this page';
+    }
+}
 function initialise(){shelfVariety.value=get(storage.shelfVariety,get('albumBrowserMultiDiscWidths','true'))==='false'?'false':'true';catalogueCodes.value=get(storage.catalogueCodes,'true')==='false'?'false':'true';coverSize.value=get(storage.coverSize,'512');idle.value=get(storage.idle,'30000');sourceBrowseTimeout.value=get(storage.sourceBrowseTimeout,'300000');newAlbumAction.value=['none','notify','preview'].includes(get(storage.newAlbumAction,'none'))?get(storage.newAlbumAction,'none'):'none';menuTimeout.value=get(storage.menuTimeout,'10000');frontTimeout.value=get(storage.frontTimeout,'10000');random.value=get(storage.random,'3000');displayCount.value=get(storage.displayCount,'30');cacheLimit.value=get(storage.cacheLimit,'512000000');window.__lyrionCarouselSettings={shelfVariety:shelfVariety.value,catalogueCodes:catalogueCodes.value,coverSize:Number(coverSize.value),idle:Number(idle.value),sourceBrowseTimeout:Number(sourceBrowseTimeout.value),newAlbumAction:newAlbumAction.value,menuTimeout:Number(menuTimeout.value),frontTimeout:Number(frontTimeout.value),random:Number(random.value),displayCount:Number(displayCount.value)};return loadVersion()}
 function validLmsUrl(value){return /^https?:\/\/[^/?#]+(?:\/[^?#]*)?$/.test(value)}
 function applyRuntimeDefault(select,name,value){

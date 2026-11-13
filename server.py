@@ -474,7 +474,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         return True
     def end_headers(self)->None:
         """Revalidate application assets; image endpoints supply their own cache policy."""
-        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/cache/clear','/api/catalogue','/api/catalogue/status','/api/catalogue/invalidate','/api/catalogue/reconcile'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
+        if urlsplit(self.path).path not in {'/api/config','/api/lms','/api/cometd','/api/config/lms','/api/config/cache','/api/build','/api/cache/clear','/api/catalogue','/api/catalogue/status','/api/catalogue/invalidate','/api/catalogue/reconcile'} and not urlsplit(self.path).path.startswith(('/api/art/','/api/art-meta/')):
             self.send_header('Cache-Control','no-cache')
         super().end_headers()
     def do_POST(self)->None:
@@ -625,6 +625,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         if path=='/api/diagnostics/now-playing': self._serve_now_playing_diagnostic(); return
         if path=='/api/spotty-art': self._serve_spotty_art(); return
         if path=='/api/spotty-art-meta': self._serve_spotty_art_meta(); return
+        if path=='/api/build': self._serve_build_info(); return
         if path=='/api/config': self._send_payload(200,json.dumps({k:v for k,v in self.runtime_config.items() if not k.startswith('_')}).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
         if path.startswith('/api/art-meta/'):
             artwork_id=unquote(path.removeprefix('/api/art-meta/'))
@@ -644,6 +645,25 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             return
         # SimpleHTTPRequestHandler serves index.html, scripts, styles and assets.
         super().do_GET()
+
+    def _serve_build_info(self)->None:
+        """Report the installed server build, independent of browser asset caches."""
+        directory=Path(self.directory)
+        info={}
+        try:
+            saved=json.loads((directory/'BUILD_INFO.json').read_text(encoding='utf-8'))
+            if isinstance(saved,dict):info=saved
+        except (OSError,ValueError,UnicodeError):
+            pass
+        try:
+            version=(directory/'VERSION').read_text(encoding='utf-8').strip()
+        except (OSError,UnicodeError):
+            version=''
+        if not re.fullmatch(r'[0-9A-Za-z.+:~-]{1,100}',version):version='unknown'
+        commit=info.get('commit')
+        if not isinstance(commit,str) or not re.fullmatch(r'[0-9a-f]{40}',commit):commit=None
+        self._send_payload(200,json.dumps({'version':version,'commit':commit}).encode(),
+                           'application/json; charset=utf-8',cache_control='no-store')
 
     def _demo_post(self)->None:
         """Explicitly opt into a visual-only session, or publish a bounded step."""
