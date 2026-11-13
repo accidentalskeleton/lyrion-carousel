@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
 from contextlib import closing
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from demo_sessions import DEMO_SESSIONS
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, unquote, urlsplit, parse_qs
@@ -479,6 +480,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     def do_POST(self)->None:
         """Dispatch state-changing/cache APIs or forward bounded JSON to LMS."""
         path=urlsplit(self.path).path
+        if path=='/api/demo': self._demo_post(); return
         if path=='/api/catalogue-codes': self._serve_catalogue_codes(); return
         if path=='/api/cache/warm': self._warm_cache(); return
         if path=='/api/art-meta':
@@ -612,6 +614,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
     def do_GET(self)->None:
         """Serve status, prepared catalogues and artwork, or fall through to static files."""
         path=urlsplit(self.path).path
+        if path=='/api/demo': self._demo_get(); return
         if path=='/api/cache/warm':
             self._send_payload(200,json.dumps({**ARTWORK_WARMER.snapshot(),'cache':self._cache_usage()}).encode(),'application/json; charset=utf-8',cache_control='no-store'); return
         if path.startswith(('/api/art/','/api/art-meta/')):
@@ -642,6 +645,43 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             return
         # SimpleHTTPRequestHandler serves index.html, scripts, styles and assets.
         super().do_GET()
+
+    def _demo_post(self)->None:
+        """Explicitly opt into a visual-only session, or publish a bounded step."""
+        try:
+            length=int(self.headers.get('Content-Length','0'))
+            if not 0<length<=1024: raise ValueError
+            data=json.loads(self.rfile.read(length))
+            if not isinstance(data,dict): raise ValueError
+            action=data.get('action')
+            if action=='create':
+                payload=DEMO_SESSIONS.create()
+            elif action=='join':
+                code=data.get('code','')
+                if not isinstance(code,str) or len(code)!=8 or not all(c in '0123456789ABCDEF' for c in code): raise ValueError
+                payload=DEMO_SESSIONS.join(code)
+            elif action in ('step','stop'):
+                code=data.get('code','')
+                token=data.get('controller','')
+                if not isinstance(code,str) or not isinstance(token,str) or len(token)>100: raise ValueError
+                payload=DEMO_SESSIONS.update(code,token,action,data.get('step'))
+            else: raise ValueError
+        except (ValueError,TypeError,UnicodeDecodeError,json.JSONDecodeError):
+            self.send_error(400,'Invalid demo request'); return
+        if payload is None:
+            self.send_error(403,'Demo session unavailable or unauthorised'); return
+        self._send_payload(200,json.dumps(payload).encode(),'application/json; charset=utf-8',cache_control='no-store')
+
+    def _demo_get(self)->None:
+        query=parse_qs(urlsplit(self.path).query)
+        code=query.get('code',[''])[0]; viewer=query.get('viewer',[''])[0]
+        if len(code)!=8 or not isinstance(viewer,str) or len(viewer)>100:
+            self.send_error(400,'Invalid demo credentials'); return
+        payload=DEMO_SESSIONS.state(code,viewer)
+        if payload is None:
+            self.send_error(403,'Demo session unavailable'); return
+        self._send_payload(200,json.dumps(payload).encode(),'application/json; charset=utf-8',cache_control='no-store')
+
     def _lms_rpc(self,player_id:str,command:list[object])->dict:
         body=json.dumps({'id':1,'method':'slim.request','params':[player_id,command]}).encode()
         with urlopen(Request(f'{self.lms_url}/jsonrpc.js',data=body,headers={'Content-Type':'application/json'}),timeout=15) as response:
