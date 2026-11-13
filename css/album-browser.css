@@ -953,7 +953,3 @@ body {
 #book-fan-browser[data-player-power="off"][data-external-playback="true"] .bf-front-preview[data-pinned="true"] {
     opacity:.30;
 }
-#book-fan-browser[data-demo-active="true"] .bf-stage,
-#book-fan-browser[data-demo-active="true"] .bf-front-preview {
-    opacity:1;
-}
