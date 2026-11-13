@@ -1712,11 +1712,28 @@ export async function runTests(sources) {
   [largeAlbums[1],largeAlbums[19999]]=[largeAlbums[19999],largeAlbums[1]];
   assert(api.indexForAlbumId('large-19999')===1&&api.indexForAlbumId('large-1')===19999,
     'album index cache detects reordered positions and self-corrects');
+  // LMS sort metadata can say "Rea, Chris" while the visible artist is
+  // "Chris Rea". A–Z navigation must match the printed artist/album name.
+  const visibleAlbums=[
+    ['Road To Hell','Chris Rea',null,null,null,null,'chris',null,null,'Rea, Chris'],
+    ['Greatest Hits','David Bowie',null,null,null,null,'bowie',null,null,'Bowie, David'],
+    ['OK Computer','Radiohead',null,null,null,null,'radiohead',null,null,'Radiohead']
+  ];
+  api.setOrderForTest('artistAlbum');api.replaceAlbumsForTest(visibleAlbums);
+  assert(api.letterIndex().get('C')===0&&api.letterIndex().get('R')===2,
+    'Artist A–Z follows visible names, not LMS surname sort textkey');
+  api.set({position:0});await api.jumpToLetter('R');
+  assert(api.state().target===-1,
+    'R jumps to visible Radiohead via shortest circular route, not Chris Rea');
+  api.setOrderForTest('album');api.replaceAlbumsForTest(visibleAlbums);
+  assert(api.letterIndex().get('R')===0&&api.letterIndex().get('O')===2,
+    'Album A–Z uses visible album titles rather than artist or LMS textkeys');
+  api.setOrderForTest('artistAlbum');
   // Letter jumps should not fetch or scan 20,000 entries on each click.
   // The index tracks the first position in the *current* ordered catalogue.
-  largeAlbums[0][9]='A';
-  largeAlbums[15000][9]='M';
-  largeAlbums[19999][9]='Z';
+  largeAlbums[0][1]='Artist A';
+  largeAlbums[15000][1]='Muse';
+  largeAlbums[19999][1]='ZZ Top';
   api.replaceAlbumsForTest(largeAlbums);
   assert(api.letterIndex().get('A')===0&&api.letterIndex().get('M')===15000&&
     api.letterIndex().get('Z')===19999,'20k-album alphabet index stores first positions');
@@ -1730,7 +1747,7 @@ export async function runTests(sources) {
   api.replaceAlbumsForTest(largeAlbums);
   assert(api.letterIndex().get('Z')===0&&api.letterIndex().get('A')===19999,
     'alphabet index follows album reordering');
-  largeAlbums[0][9]='';
+  largeAlbums[0][1]='';
   api.replaceAlbumsForTest(largeAlbums);
   assert(!api.letterIndex().has('Z'),'alphabet index drops letters removed by a filter');
   // Put the array back before the separate DOM-pool stress test.

@@ -77,11 +77,14 @@ function indexForAlbumId(id){
     if(found<0)albumIndexCache.delete(key);else albumIndexCache.set(key,found);
     return found;
 }
-// Letter navigation is an O(1) lookup once the ordered catalogue is loaded.
-// The minimum index is retained because batches can arrive out of order.
+// The LMS textkey can be an artist-sort name (e.g. "Rea, Chris") even
+// though the displayed spine says "Chris Rea". A–Z shortcuts must match
+// visible labels, not unrelated sort metadata. In Album order use title.
 const alphabetIndex=new Map();
 function indexAlbumLetter(album,index){
-    const letter=String(album?.[9]||'').trim().charAt(0).toUpperCase();
+    if(album?.[13]==='external')return;
+    const field=orderMode==='album'?album?.[0]:album?.[1];
+    const letter=String(field||'').trim().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').charAt(0).toUpperCase();
     if(!/^[A-Z]$/.test(letter))return;
     const previous=alphabetIndex.get(letter);
     if(previous===undefined||index<previous)alphabetIndex.set(letter,index);
@@ -374,11 +377,12 @@ async function setDisplayOrder(mode){
             observedLibraryRevision=preparedCatalogueRevision;
         preparedCatalogueCount=Number.isSafeInteger(preparedCount)&&preparedCount>=0?preparedCount:null;
         preparedCatalogueCreated=Number.isFinite(preparedCreated)&&preparedCreated>0?preparedCreated:null;
+        // Set the new order before indexing its visible A–Z labels.
+        orderMode=desiredOrderMode=mode;
         libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
         // Restoring the virtual CD must not depend on another status event.
         syncExternalShelf();
         loadedBatches=new Set(Array.from({length:batchCount()},(_,i)=>i));
-        orderMode=desiredOrderMode=mode;
         rememberSourceOrder(mode);
         updateOrderToggle();
         const playingIndex=hasPlaybackAlbum()?playingCarouselIndex():-1;
@@ -1943,15 +1947,7 @@ const fastNavigator=createFastNavigator(root,{
         schedule();
     },
     jumpLetter:letter=>{
-        if(orderMode==='artistAlbum'){void jumpToLetter(letter);return}
-        if(orderMode!=='album')return;
-        // Album order is based on title, not the artist textkey. Prepared
-        // catalogues contain the full order; fallback loads only as needed.
-        const index=albums.findIndex(a=>a?.[13]!=='external'&&String(a?.[0]||'').trim().toUpperCase().startsWith(letter));
-        if(index>=0){
-            followingNowPlaying=false;cancelFollowAnimation();
-            target=nearestPositionForIndex(index);schedule();
-        }
+        if(orderMode==='artistAlbum'||orderMode==='album')void jumpToLetter(letter);
     }
 });
 stage.addEventListener('pointerdown',event=>{
