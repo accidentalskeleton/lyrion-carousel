@@ -4,7 +4,7 @@ export async function buildAlbumPositionIndex(rpc, totalAlbums, generation, curr
   const index = new Map();
   for (let start = 0; start < totalAlbums; start += pageSize) {
     const count = Math.min(pageSize, totalAlbums - start);
-    const result = await rpc('0', ['albums', start, count, 'sort:artflow', 'tags:s']);
+    const result = await rpc('0', ['albums', start, count, 'sort:artistalbum', 'tags:s']);
     if (generation !== currentGeneration()) return null;
     (result.albums_loop || []).forEach((album, offset) => {
       if (album?.id !== undefined && album?.id !== null) index.set(String(album.id), start + offset);

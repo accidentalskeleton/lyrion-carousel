@@ -77,15 +77,13 @@ function indexForAlbumId(id){
     if(found<0)albumIndexCache.delete(key);else albumIndexCache.set(key,found);
     return found;
 }
-// Artist shelves follow LMS's artist-sort order. Its album "textkey"
-// is the first letter of that sort key (Chris Rea may therefore be R).
-// Album-first shelves instead use their displayed album title, matching
-// Carousel's album-title order. Never infer the artist group from the
-// first letter of the display name.
+// Both alphabetical shelves use native LMS ordering: artistalbum respects
+// ARTISTSORT / ALBUMARTISTSORT (Chris Rea can appear under R), while album
+// respects ALBUMSORT. Each mode's LMS textkey identifies the A–Z section.
 const alphabetIndex=new Map();
 function indexAlbumLetter(album,index){
     if(album?.[13]==='external')return;
-    const field=orderMode==='album'?album?.[0]:(album?.[9]||album?.[1]);
+    const field=album?.[9]||(orderMode==='album'?album?.[0]:album?.[1]);
     const letter=String(field||'').trim().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').charAt(0).toUpperCase();
     if(!/^[A-Z]$/.test(letter))return;
     const previous=alphabetIndex.get(letter);
@@ -1060,11 +1058,11 @@ window.addEventListener('lyrion-carousel-cache-cleared',()=>{
 });
 function scheduleReconnect(){if(reconnectTimer)return;const delay=reconnectDelay;setConnection('Reconnecting to Lyrion Music Server in '+Math.ceil(delay/1000)+'s…',false);reconnectTimer=setTimeout(()=>{reconnectTimer=0;connectLyrion()},delay);reconnectDelay=Math.min(reconnectDelay*2,RECONNECT_MAX_MS)}function resetReconnect(){clearTimeout(reconnectTimer);reconnectTimer=0;reconnectDelay=1000}
 function storeBatch(batchNumber,result,render=true){const normal=modulo(batchNumber,batchCount()),start=normal*PAGE_SIZE,batch=(result.albums_loop||[]).map(mapLyrionAlbum);batch.forEach((a,o)=>{const index=catalogueSlot(start+o);if(index<albums.length){albums[index]=a;if(a?.[6]!=null)albumIndexCache.set(String(a[6]),index);indexAlbumLetter(a,index)}});rebuildShelfGeometry();loadedBatches.add(normal);if(render){renderAlbums();draw()}return batch}
-async function fetchBatch(batchNumber,render=true){if(!liveCatalogue||!totalAlbums)return[];const normal=modulo(batchNumber,batchCount());if(loadedBatches.has(normal)){const start=normal*PAGE_SIZE;return albums.slice(catalogueSlot(start),Math.min(catalogueSlot(start+PAGE_SIZE),totalAlbums)).filter(album=>album?.[13]!=='external')}if(loadingBatches.has(normal))return loadingBatches.get(normal);const generation=catalogueGeneration,promise=(async()=>{const start=normal*PAGE_SIZE,result=await rpc('0',['albums',start,PAGE_SIZE,'sort:artflow','tags:ajlysgiq']);if(generation!==catalogueGeneration)return[];return storeBatch(normal,result,render)})().finally(()=>{if(loadingBatches.get(normal)===promise)loadingBatches.delete(normal)});loadingBatches.set(normal,promise);return promise}
+async function fetchBatch(batchNumber,render=true){if(!liveCatalogue||!totalAlbums)return[];const normal=modulo(batchNumber,batchCount());if(loadedBatches.has(normal)){const start=normal*PAGE_SIZE;return albums.slice(catalogueSlot(start),Math.min(catalogueSlot(start+PAGE_SIZE),totalAlbums)).filter(album=>album?.[13]!=='external')}if(loadingBatches.has(normal))return loadingBatches.get(normal);const generation=catalogueGeneration,promise=(async()=>{const start=normal*PAGE_SIZE,result=await rpc('0',['albums',start,PAGE_SIZE,'sort:artistalbum','tags:ajlysgiq']);if(generation!==catalogueGeneration)return[];return storeBatch(normal,result,render)})().finally(()=>{if(loadingBatches.get(normal)===promise)loadingBatches.delete(normal)});loadingBatches.set(normal,promise);return promise}
 function prefetchAround(index){if(!liveCatalogue||!totalAlbums)return;const realIndex=modulo(index,totalAlbums),b=Math.floor((realIndex-(externalShelfPosition>=0&&realIndex>externalShelfPosition?1:0))/PAGE_SIZE);if(b===prefetchedWindowPage)return;prefetchedWindowPage=b;[-1,0,1].forEach(o=>fetchBatch(b+o).catch(()=>{if(prefetchedWindowPage===b)prefetchedWindowPage=-1}))}async function locateAlbum(id,render=true){const found=indexForAlbumId(id);if(found>=0)return found;await ensurePositionIndex();if(externalShelfPosition>=0){const position=albumPositionById.get(String(id));if(!Number.isFinite(position))return -1;await fetchBatch(Math.floor(position/PAGE_SIZE),render);return indexForAlbumId(id)}return locateIndexedAlbum(id,albums,albumPositionById,PAGE_SIZE,b=>fetchBatch(b,render))}
 async function loadInitialCatalogue(){
     const connection=connectionGeneration;
-    const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artflow','tags:ajlysgiq']);
+    const result=await rpc('0',['albums',0,PAGE_SIZE,'sort:artistalbum','tags:ajlysgiq']);
     if(connection!==connectionGeneration)return;
     const first=(result.albums_loop||[]).map(mapLyrionAlbum);
     libraryAlbumCount=Number(result.count)||first.length;
