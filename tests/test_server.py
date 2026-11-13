@@ -524,7 +524,7 @@ class ServerTests(unittest.TestCase):
         # LMS sort:artflow already accounts for ARTISTSORT/ALBUMARTISTSORT,
         # so a displayed "Chris Rea" may live in the R shelf section.
         rows=[
-            {'id':1,'artist':'David Bowie','album':'Greatest Hits','textkey':'B'},
+            {'id':1,'artist':'David Bowie','album':'Ziggy Stardust','textkey':'B'},
             {'id':2,'artist':'Radiohead','album':'OK Computer','textkey':'R'},
             {'id':3,'artist':'Chris Rea','album':'Road To Hell','textkey':'R'},
         ]
@@ -536,8 +536,8 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(pages.call_count,1)
         self.assertEqual([a['id'] for a in json.loads(self.responses[0][1])['albums_loop']],[1,2,3],
                          'Artist order must preserve LMS sort keys, not visible first names')
-        self.assertEqual([a['id'] for a in json.loads(self.responses[1][1])['albums_loop']],[1,2,3],
-                         'Album order sorts displayed album titles independently')
+        self.assertEqual([a['id'] for a in json.loads(self.responses[1][1])['albums_loop']],[2,3,1],
+                         'Album order still sorts titles independently of LMS artist sort')
 
     def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
         # _catalogue_pages already returns this order from LMS artflow.
