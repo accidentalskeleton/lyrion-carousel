@@ -463,3 +463,29 @@
     box-shadow: 0 5px 20px rgba(0, 0, 0, .35);
 }
 .bf-new-album-toast[hidden] { display: none; }
+
+/* Opt-in browser-native demo: settings are grouped separately from playback. */
+.bf-demo-description { margin: 10px 0; color: #abaeaa; font-size: 13px; line-height: 1.5; }
+.bf-demo-actions { display: flex; flex-wrap: wrap; gap: 9px; margin: 10px 0; }
+.bf-demo-actions button, .bf-demo-controls button {
+    min-height: 38px; padding: 8px 14px; border-radius: 8px;
+    border: 1px solid rgba(143,186,145,.45); background: #26362b;
+    color: #e4efe3; font: inherit; font-size: 13px; cursor: pointer;
+}
+.bf-demo-actions button:disabled { opacity: .48; cursor: default; }
+.bf-demo-actions input {
+    flex: 1 1 170px; min-width: 0; max-width: 240px; min-height: 38px;
+    box-sizing: border-box; border: 1px solid rgba(255,255,255,.15);
+    border-radius: 8px; background: #191919; color: #f0f0eb;
+    padding: 6px 10px; font: inherit; letter-spacing: .1em;
+    text-transform: uppercase;
+}
+.bf-demo-status { color: #9dc4a0; font-size: 12px; line-height: 1.5; }
+.bf-demo-controls[hidden] { display: none!important; }
+.bf-demo-controls {
+    position: fixed; z-index: 2000; top: 6px; right: 6px;
+    opacity: 0; transition: opacity 150ms ease;
+}
+.bf-demo-controls:hover, .bf-demo-controls:focus-within { opacity: 1; }
+.bf-demo-controls button:focus-visible, .bf-demo-actions button:focus-visible,
+.bf-demo-actions input:focus-visible { outline: 2px solid #94c69c; outline-offset: 3px; }
