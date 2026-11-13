@@ -39,7 +39,7 @@ try{
     await page.waitForTimeout(1000);    await page.waitForFunction(()=>
         document.querySelector('.bf-demo-guide')?.hidden===false&&
         document.querySelector('.bf-demo-banner-progress')?.textContent.includes('Scene 1 of 16')&&
-        document.querySelector('.bf-demo-callout')?.hidden===false,{timeout:8000});
+        document.querySelector('.bf-demo-callout')?.hidden===false,null,{timeout:8000});
     const annotations=await page.evaluate(()=>({
         banner:document.querySelector('.bf-demo-banner')?.getBoundingClientRect().width,
         title:document.querySelector('.bf-demo-callout-title')?.textContent,
