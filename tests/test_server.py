@@ -520,9 +520,29 @@ class ServerTests(unittest.TestCase):
             snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
             self.assertFalse(snapshot['orders'])
 
+    def test_artist_album_order_retains_lms_artist_sort_keys(self):
+        # LMS sort:artflow already accounts for ARTISTSORT/ALBUMARTISTSORT,
+        # so a displayed "Chris Rea" may live in the R shelf section.
+        rows=[
+            {'id':1,'artist':'David Bowie','album':'Greatest Hits','textkey':'B'},
+            {'id':2,'artist':'Radiohead','album':'OK Computer','textkey':'R'},
+            {'id':3,'artist':'Chris Rea','album':'Road To Hell','textkey':'R'},
+        ]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([rows])) as pages:
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+            self.handler.path='/api/catalogue?order=album'
+            self.handler._serve_catalogue()
+        self.assertEqual(pages.call_count,1)
+        self.assertEqual([a['id'] for a in json.loads(self.responses[0][1])['albums_loop']],[1,2,3],
+                         'Artist order must preserve LMS sort keys, not visible first names')
+        self.assertEqual([a['id'] for a in json.loads(self.responses[1][1])['albums_loop']],[1,2,3],
+                         'Album order sorts displayed album titles independently')
+
     def test_catalogue_snapshot_reuses_one_lms_scan_across_sort_orders(self):
-        pages=[[{'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'},
-                {'id':2,'artist':'Alpha','album':'Zulu','artwork_track_id':'b'}]]
+        # _catalogue_pages already returns this order from LMS artflow.
+        pages=[[{'id':2,'artist':'Alpha','album':'Zulu','artwork_track_id':'b'},
+                {'id':1,'artist':'Zebra','album':'Alpha','artwork_track_id':'a'}]]
         calls=[]
         def fetch_pages(genre_id=None):
             calls.append(genre_id)

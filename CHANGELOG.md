@@ -4,7 +4,7 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
-- Add an 80%-width, shelf-centred translucent fast-scrub timeline hidden at rest; reveal after sustained repeated swipes or wheel browsing, or manually with N. Make circular scrub endpoints wrap first/last CDs by the shortest route; direct scrolling on CDs dismisses and suppresses the overlay until browsing pauses; A–Z shortcuts use the displayed artist/title instead of LMS sort metadata. Strengthen fast touch/mouse momentum and accelerate repeated mouse-wheel notches for 100+ CD libraries, preserving precise slow gestures, finite shelf bounds and visual-only navigation.
+- Add an 80%-width, shelf-centred translucent fast-scrub timeline hidden at rest; reveal after sustained repeated swipes or wheel browsing, or manually with N. Make circular scrub endpoints wrap first/last CDs by the shortest route; direct scrolling on CDs dismisses and suppresses the overlay until browsing pauses; Artist → Album preserves LMS artist-sort ordering and A–Z uses its sort-group `textkey` (e.g. Chris Rea under R), while Album → Artist retains album-title A–Z navigation. Strengthen fast touch/mouse momentum and accelerate repeated mouse-wheel notches for 100+ CD libraries, preserving precise slow gestures, finite shelf bounds and visual-only navigation.
 
 - Dim the CD shelf and any open jewel case when the selected LMS player's power state is off; restore full brightness on power-on while leaving navigation and transport controls readable. Unknown power state is not treated as off.
 

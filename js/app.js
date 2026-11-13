@@ -77,13 +77,15 @@ function indexForAlbumId(id){
     if(found<0)albumIndexCache.delete(key);else albumIndexCache.set(key,found);
     return found;
 }
-// The LMS textkey can be an artist-sort name (e.g. "Rea, Chris") even
-// though the displayed spine says "Chris Rea". A–Z shortcuts must match
-// visible labels, not unrelated sort metadata. In Album order use title.
+// Artist shelves follow LMS's artist-sort order. Its album "textkey"
+// is the first letter of that sort key (Chris Rea may therefore be R).
+// Album-first shelves instead use their displayed album title, matching
+// Carousel's album-title order. Never infer the artist group from the
+// first letter of the display name.
 const alphabetIndex=new Map();
 function indexAlbumLetter(album,index){
     if(album?.[13]==='external')return;
-    const field=orderMode==='album'?album?.[0]:album?.[1];
+    const field=orderMode==='album'?album?.[0]:(album?.[9]||album?.[1]);
     const letter=String(field||'').trim().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').charAt(0).toUpperCase();
     if(!/^[A-Z]$/.test(letter))return;
     const previous=alphabetIndex.get(letter);
@@ -377,7 +379,7 @@ async function setDisplayOrder(mode){
             observedLibraryRevision=preparedCatalogueRevision;
         preparedCatalogueCount=Number.isSafeInteger(preparedCount)&&preparedCount>=0?preparedCount:null;
         preparedCatalogueCreated=Number.isFinite(preparedCreated)&&preparedCreated>0?preparedCreated:null;
-        // Set the new order before indexing its visible A–Z labels.
+        // Set the new order before indexing its corresponding A–Z sort groups.
         orderMode=desiredOrderMode=mode;
         libraryAlbumCount=Number(result.library_count)||Math.max(libraryAlbumCount,totalAlbums);rebuildAlbumIndex();
         // Restoring the virtual CD must not depend on another status event.

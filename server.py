@@ -1188,7 +1188,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                             return ((album.get('spine_metadata') or {}).get('colour_index',float('inf')),*tie)
                         return tie if mode=='artistAlbum' else (title,artist,tie[2])
                     if mode=='random':random.shuffle(albums)
-                    elif mode not in ('recent','indexed'):albums.sort(key=key)
+                    elif mode not in ('recent','indexed','artistAlbum'):albums.sort(key=key)
+                    # artistAlbum: preserve the LMS sort:artflow sequence from
+                    # _catalogue_pages(), including ARTISTSORT / ALBUMARTISTSORT
+                    # namesort (such as Chris Rea under R), rather than
+                    # re-sorting on the displayed artist name.
                     payload=json.dumps({'count':len(albums),'library_count':library_count,
                                         'snapshot_created':snapshot['created'],
                                         'catalogue_revision':self._catalogue_revision(snapshot),
