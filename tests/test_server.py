@@ -692,6 +692,51 @@ class ServerTests(unittest.TestCase):
         remote.assert_called_once()
         self.assertEqual(json.loads(self.responses[-1][1])['albums_loop'][0]['album'],'Fresh')
 
+    def test_expiry_refresh_preserves_arrival_until_reconcile(self):
+        """Sorting after TTL must not consume the new-CD notification."""
+        initial=[{'id':1,'artist':'A','album':'Known album'}]
+        current=initial+[{'id':2,'artist':'B','album':'New rip'}]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([initial])):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        key=self.handler._catalogue_snapshot_key()
+        snapshot=server._CATALOGUE_MEMORY[key]
+        snapshot['created']=server.time.time()-server.CATALOGUE_SNAPSHOT_TTL_SECONDS-30
+        self.handler._save_catalogue_snapshot(snapshot)
+        # An ordinary shelf request is the first to notice the album,
+        # before CometD delivers scan completion.
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([current])):
+            self.handler._serve_catalogue()
+        rebuilt=server._CATALOGUE_MEMORY[key]
+        self.assertEqual(rebuilt['recent_new_album_ids'],['2'])
+        self.assertEqual(self.stored_catalogue()['recent_new_album_ids'],['2'])
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([current])):
+            self.handler._reconcile_catalogue()
+        response=json.loads(self.responses[-1][1])
+        self.assertFalse(response['changed'])
+        self.assertEqual(response['recent_new_album_ids'],['2'])
+        # Restarting Carousel drops memory but retains the event in SQLite.
+        server._CATALOGUE_MEMORY.pop(key,None)
+        with patch.object(self.handler,'_catalogue_pages') as scan:
+            self.handler._load_catalogue_snapshot()
+        scan.assert_not_called()
+        self.assertEqual(server._CATALOGUE_MEMORY[key]['recent_new_album_ids'],['2'])
+
+    def test_expired_disk_snapshot_preserves_arrival_after_restart(self):
+        """The previous SQLite snapshot also remains a valid comparison base."""
+        initial=[{'id':11,'album':'Existing','artist':'A'}]
+        current=initial+[{'id':12,'album':'Fresh','artist':'B'}]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([initial])):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        key=self.handler._catalogue_snapshot_key()
+        stale=server._CATALOGUE_MEMORY.pop(key)
+        stale['created']=server.time.time()-server.CATALOGUE_SNAPSHOT_TTL_SECONDS-30
+        self.handler._save_catalogue_snapshot(stale)
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([current])):
+            rebuilt=self.handler._load_catalogue_snapshot()
+        self.assertEqual(rebuilt['recent_new_album_ids'],['12'])
+
     def test_large_catalogue_sorting_does_not_rescan_upstream(self):
         rows=[{'id':i,'artist':f'Artist {i%79:03d}','album':f'Album {10000-i:05d}'}
               for i in range(10000)]
