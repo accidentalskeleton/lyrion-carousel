@@ -943,3 +943,17 @@ body {
 }
 
 #book-fan-browser[data-external-playback="true"] .bf-front-preview[data-pinned="true"] { opacity:1; }
+
+/* Player standby dims both the shelf and any open jewel case.
+ * This intentionally overrides the normal pinned-radio cover exception.
+ * Transport and Settings remain at full contrast so the player can wake.
+ * Unknown power state is never treated as off. */
+#book-fan-browser[data-player-power="off"] .bf-stage,
+#book-fan-browser[data-player-power="off"] .bf-front-preview,
+#book-fan-browser[data-player-power="off"][data-external-playback="true"] .bf-front-preview[data-pinned="true"] {
+    opacity:.30;
+}
+#book-fan-browser[data-demo-active="true"] .bf-stage,
+#book-fan-browser[data-demo-active="true"] .bf-front-preview {
+    opacity:1;
+}
