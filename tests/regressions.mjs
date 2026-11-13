@@ -2042,6 +2042,36 @@ export async function runTests(sources) {
     'real HTTP radio streams remain external');
   assert(api.playbackSourceForTrack({remote_title:'Radio station'}, {remote:1})==='external',
     'radio station metadata keeps the fake CD when the stream URL is missing');
+  // Real LMS BBC Sounds Radio 2 payload: the live stream has a sounds:// URI
+  // and artwork, but neither a remote_title nor a station icon.
+  const soundsStatus={
+    mode:'play',remote:1,current_title:"Don't Stop Believin'",
+    playlist_cur_index:'0',playlist_loop:[{
+      artist:'Journey',album:"Vernon Kay - Owain's 4 Nations Cycle Challenge, Day 5 Part 2",
+      title:"Don't Stop Believin'",url:'sounds://_LIVE_bbc_radio_two',
+      remote:1,id:'-93827187894416',
+      artwork_url:'/imageproxy/https%3A%2F%2Fichef.bbci.co.uk%2Fimages%2Fic%2F320x320%2Fp01bty7k.jpg/image.jpg',
+      'playlist index':0
+    }],
+    remoteMeta:{url:'sounds://_LIVE_bbc_radio_two',remote:1}
+  };
+  assert(api.playbackSourceForTrack(soundsStatus.playlist_loop[0],soundsStatus)==='external',
+    'BBC Sounds URI is recognised as radio, not unknown or Spotify');
+  api.setSourceForTest('library');
+  api.applyStatus({mode:'stop',playlist_loop:[]});
+  const soundsBefore=api.state().albums.length;
+  api.applyStatus(soundsStatus);
+  assert(root.dataset.externalPlayback==='true'&&
+    api.state().albums.filter(album=>album?.[13]==='external').length===1&&
+    api.state().albums.length===soundsBefore+1,
+    'real BBC Sounds metadata inserts exactly one virtual radio CD and dims Library');
+  await settle(api.ensurePlayingCover());
+  assert(api.state().frontPreviewAlbum?.[13]==='external'&&!preview.hidden,
+    'BBC Sounds virtual jewel case is displayed as the active cover');
+  api.applyStatus({mode:'stop',playlist_loop:[]});
+  assert(!api.state().albums.some(album=>album?.[13]==='external'),
+    'stopping BBC Sounds removes the temporary radio CD');
+
   async function settleSource(expected) {
     for(let i=0;i<500;i++){
       await Promise.resolve();
