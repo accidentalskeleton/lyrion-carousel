@@ -489,3 +489,6 @@
 .bf-demo-controls:hover, .bf-demo-controls:focus-within { opacity: 1; }
 .bf-demo-controls button:focus-visible, .bf-demo-actions button:focus-visible,
 .bf-demo-actions input:focus-visible { outline: 2px solid #94c69c; outline-offset: 3px; }
+
+.bf-demo-repeat-label { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.bf-demo-repeat-label input { width: 18px; height: 18px; accent-color: #94c69c; cursor: pointer; }
