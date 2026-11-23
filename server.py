@@ -942,10 +942,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     not 0<=now-data['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS):
                 raise ValueError('Snapshot outdated')
             expected={str(a['id']) for a in data['albums'] if a.get('id') is not None}
-            ranks=data.get('lms_orders')
-            ranks=ranks if isinstance(ranks,dict) else {}
-            album_rank=ranks.get('album')
-            if not (isinstance(album_rank,dict) and
+            saved_orders=data.get('lms_orders')
+            saved_orders=saved_orders if isinstance(saved_orders,dict) else {}
+            ranks={}
+            album_rank=saved_orders.get('album')
+            if (isinstance(album_rank,dict) and
                     isinstance(album_rank.get('ids'),list) and
                     isinstance(album_rank.get('textkeys'),list) and
                     len(album_rank['ids'])==len(album_rank['textkeys'])==len(expected) and
@@ -953,8 +954,15 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     all(isinstance(k,str) for k in album_rank['textkeys']) and
                     len(set(album_rank['ids']))==len(expected) and
                     set(album_rank['ids'])==expected):
-                ranks={}
-            else:ranks={'album':album_rank}
+                ranks['album']=album_rank
+            release_rank=saved_orders.get('releaseYear')
+            if (isinstance(release_rank,dict) and
+                    isinstance(release_rank.get('ids'),list) and
+                    len(release_rank['ids'])==len(expected) and
+                    all(isinstance(i,str) for i in release_rank['ids']) and
+                    len(set(release_rank['ids']))==len(expected) and
+                    set(release_rank['ids'])==expected):
+                ranks['releaseYear']={'ids':release_rank['ids']}
             snapshot={'created':data['created'],'albums':data['albums'],
                       'genres':data['genres'],'colours':self._load_colour_index(),
                       'revision':data.get('revision'),
