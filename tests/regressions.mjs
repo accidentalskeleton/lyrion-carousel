@@ -1709,8 +1709,8 @@ export async function runTests(sources) {
     'Demo settings include local showcase, opt-in shared join and staged launch');
   assert(sources.index.includes('data-order="releaseYear"')&&
     sources.app.includes("releaseYear:'Release Year (LMS)'")&&
-    sources.app.includes("['recent','indexed','releaseYear']")&&
-    sources.index.includes('js/app.js?v=release-year-1'),
+    sources.app.includes("['recent','indexed','releaseYear'].includes(orderMode)")&&
+    sources.index.includes('js/app.js?v=artist-year-1'),
     'release-year option has a menu item, finite shelf and browser cache-bust');
   assert(sources.app.includes("import { createDemoMode }")&&
     sources.app.includes("async prepareStep(step,remote)")&&
