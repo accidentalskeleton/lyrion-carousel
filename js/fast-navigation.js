@@ -65,7 +65,7 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
     let timer=0,dragging=false,opened=false,request=0;
     function modeLabel(mode){
         return mode==='artistAlbum'?'Artists A–Z':
-            mode==='album'?'Albums A–Z':mode==='indexed'?'Recently added':
+            mode==='album'?'Albums A–Z':mode==='artistYear'?'Artists · release year':mode==='indexed'?'Recently added':
             mode==='recent'?'New music':mode==='releaseYear'?'Release year (LMS)':mode==='colour'?'Spine colours':'Random order';
     }
     function render(){
@@ -79,7 +79,7 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
             count.textContent=total?(Math.min(index,total-1)+1).toLocaleString()+' / '+total.toLocaleString()+' CDs':'No CDs';
             caption.textContent=album?(album[1]+' — '+album[0]):modeLabel(mode);
         }
-        letters.hidden=!(mode==='artistAlbum'||mode==='album');
+        letters.hidden=!(mode==='artistAlbum'||mode==='album'||mode==='artistYear');
         root.dataset.fastNavOrder=mode;
     }
     function cancelHide(){clearTimeout(timer);timer=0}
