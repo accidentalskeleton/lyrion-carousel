@@ -235,7 +235,7 @@ export async function runTests(sources) {
   assert(Number(slider.min)===-1&&Number(slider.max)===169&&slider.step==='1',
     'circular scrubber continues to expose adjacent wrap positions');
   navigator.hide();
-    assert(navigation.scrubAlbumIndex(-1,169,true)===168&&
+  assert(navigation.scrubAlbumIndex(-1,169,true)===168&&
     navigation.scrubAlbumIndex(169,169,true)===0&&
     navigation.scrubAlbumIndex(168,169,true)===168&&
     navigation.scrubAlbumIndex(169,169,false)===168&&
