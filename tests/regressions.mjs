@@ -1743,7 +1743,7 @@ export async function runTests(sources) {
   const menuStart=sources.index.indexOf('<div class="bf-order-menu"');
   const menu=sources.index.slice(menuStart,sources.index.indexOf('<div class="bf-transport"',menuStart));
   const modeOrder=[...menu.matchAll(/data-order="([^"]+)"/g)].map(match=>match[1]);
-  assert(modeOrder.join(',')==='artistAlbum,album,indexed,recent,colour,random',
+  assert(modeOrder.join(',')==='artistAlbum,album,indexed,recent,releaseYear,colour,random',
     'order menu groups alphabetical, chronological and visual sorting');
   assert(menu.includes('role="separator"')&&menu.includes('Sort albums by'),
     'sort menu contains a heading and group dividers');
@@ -1759,9 +1759,9 @@ export async function runTests(sources) {
     sources.albumBrowserCss.includes('[data-mode="recent"] .bf-order-icon.lms-history'),
     'LMS New Music uses a distinct history clock while Recently Added keeps the calendar');
 
-  assert(sources.index.includes('css/album-browser.css?v=fast-nav-3'),
+  assert(sources.index.includes('css/album-browser.css?v=release-year-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=demo-tour-3')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=release-year-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
