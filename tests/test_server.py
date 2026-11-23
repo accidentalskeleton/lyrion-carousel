@@ -798,6 +798,53 @@ class ServerTests(unittest.TestCase):
             rebuilt=self.handler._load_catalogue_snapshot()
         self.assertEqual(rebuilt['recent_new_album_ids'],['12'])
 
+    def test_artist_release_year_uses_native_artflow_and_persistent_rank(self):
+        rows=[
+            {'id':1,'artist':'Alpha','album':'Second','year':2020},
+            {'id':2,'artist':'Alpha','album':'First','year':1990},
+            {'id':3,'artist':'Beta','album':'New','year':2022},
+            {'id':4,'artist':'Beta','album':'Old','year':2000},
+        ]
+        native=[dict(rows[i],textkey=('A' if i in (0,1) else 'B'))
+                for i in (1,0,3,2)]
+        calls=[]
+        def pages(genre_id=None,sort='artistalbum'):
+            calls.append(sort)
+            yield native if sort=='artflow' else rows
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            self.handler.path='/api/catalogue?order=artistYear'
+            self.handler._serve_catalogue()
+            first=json.loads(self.responses[-1][1])
+            self.assertEqual([a['id'] for a in first['albums_loop']],[2,1,4,3])
+            self.assertEqual([a['textkey'] for a in first['albums_loop']],['A','A','B','B'])
+            self.handler._serve_catalogue()
+            snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
+            snapshot['genres']['8']=['1']
+            self.handler.path='/api/catalogue?order=artistYear&exclude_genre_id=8'
+            self.handler._serve_catalogue()
+            self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],
+                             [2,4,3])
+        self.assertEqual(calls,['artistalbum','artflow'])
+        server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
+        with patch.object(self.handler,'_catalogue_pages',
+                          side_effect=AssertionError('Unexpected LMS request')):
+            self.handler.path='/api/catalogue?order=artistYear'
+            self.handler._serve_catalogue()
+        self.assertEqual([a['id'] for a in json.loads(self.responses[-1][1])['albums_loop']],
+                         [2,1,4,3])
+
+    def test_artist_release_year_rejects_incomplete_native_ranking(self):
+        rows=[{'id':1,'artist':'A','album':'One'},
+              {'id':2,'artist':'B','album':'Two'}]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([rows])):
+            self.handler.path='/api/catalogue'
+            self.handler._serve_catalogue()
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([[rows[0]]])):
+            self.handler.path='/api/catalogue?order=artistYear'
+            with patch.object(self.handler,'_send_upstream_error') as error:
+                self.handler._serve_catalogue()
+        error.assert_called_once()
+
     def test_release_year_uses_native_lms_yearartistalbum_and_caches_it(self):
         # Native LMS sorts by year ASC, then artist namesort/title; Carousel
         # shows newest year first without reversing artists within a year.
