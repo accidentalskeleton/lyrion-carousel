@@ -66,7 +66,7 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
     function modeLabel(mode){
         return mode==='artistAlbum'?'Artists A–Z':
             mode==='album'?'Albums A–Z':mode==='indexed'?'Recently added':
-            mode==='recent'?'New music':mode==='colour'?'Spine colours':'Random order';
+            mode==='recent'?'New music':mode==='releaseYear'?'Release year (LMS)':mode==='colour'?'Spine colours':'Random order';
     }
     function render(){
         const {total,index,mode,album,circular=false}=state();
