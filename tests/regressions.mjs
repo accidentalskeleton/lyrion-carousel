@@ -1743,8 +1743,11 @@ export async function runTests(sources) {
   const menuStart=sources.index.indexOf('<div class="bf-order-menu"');
   const menu=sources.index.slice(menuStart,sources.index.indexOf('<div class="bf-transport"',menuStart));
   const modeOrder=[...menu.matchAll(/data-order="([^"]+)"/g)].map(match=>match[1]);
-  assert(modeOrder.join(',')==='artistAlbum,album,indexed,recent,releaseYear,colour,random',
+  assert(modeOrder.join(',')==='artistAlbum,artistYear,album,indexed,recent,releaseYear,colour,random',
     'order menu groups alphabetical, chronological and visual sorting');
+  assert(orderLabels.includes("artistYear:'Artist → Release Year'")&&
+    sources.app.includes("'artistYear'")&&sources.fastNavigation.includes("mode==='artistYear'"),
+    'native LMS artist/year ordering is supported by menu, browser and fast navigation');
   assert(menu.includes('role="separator"')&&menu.includes('Sort albums by'),
     'sort menu contains a heading and group dividers');
   const buttonContent=id=>{
