@@ -102,6 +102,7 @@ Carousel provides two **newest-first** choices for albums in your local LMS libr
 | --- | --- | --- |
 | **Recently Added** (calendar icon) | Carousel's earliest **current-library track-added** timestamp for that album, as reported by LMS | To find albums recently imported into your library, including compilations and greatest-hits releases |
 | **New Music (LMS)** (history-clock icon) | LMS's native `sort:new` ordering, using the oldest **persistent recording-added** timestamp associated with the album | To see the same New Music order that LMS itself reports |
+| **Release Year (LMS)** (calendar icon) | LMS's native `sort:yearartistalbum` ordering by release year and then artist/title; Carousel displays newest year first | To browse when albums were released, regardless of when imported |
 
 ### Why can a newly added album appear old in LMS?
 
@@ -119,7 +120,7 @@ On first selection, Carousel populates the **per-LMS album-date rows in its shar
 
 **Limitations:** This is an index of when LMS currently knows the album's tracks, not proof of the original CD rip or import date. If LMS's database is completely rebuilt, previously unknown historical dates cannot be reconstructed; Carousel can retain previously observed dates only when the cached album ID and identity still match. Album IDs reused or metadata identities changed after a rebuild may lead to recalculation. Albums for which LMS supplies no usable track-added timestamp sort last. The first sort requires LMS connectivity.
 
-Both date-based choices use a **finite shelf** (no wraparound), respect excluded genres, and are available for the **Library**, not Spotify. Carousel saves Library and Spotify sort preferences independently. The other choices are **Artist → Album**, **Album → Artist**, **Spine Colour** and **Random**.
+All three chronological choices use a **finite shelf** (no wraparound), respect excluded genres, and are available for the **Library**, not Spotify. **Release Year (LMS)** requests native `albums ... sort:yearartistalbum` once per catalogue snapshot, caches its album IDs, and reverses only the release-year groups so the newest years come first. **Artist and album ordering within each year remains exactly as LMS supplies it.** The LMS album `year` tag is derived from track metadata; albums without a usable year come last. LMS exposes a year, not a dependable day/month release date. No direct LMS database access, independent metadata source or MusicBrainz lookup is used. Carousel saves Library and Spotify sort preferences independently. The other choices are **Artist → Album**, **Album → Artist**, **Spine Colour** and **Random**.
 
 For the LMS query, SQLite cache, paging and edge cases, see the [album-ordering implementation](architecture.md#album-date-ordering-implementation).
 
