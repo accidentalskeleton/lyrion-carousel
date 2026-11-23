@@ -46,7 +46,7 @@ There is no Node/npm runtime dependency and no build step. Python 3.9+ and Pillo
 
 ## Catalogue loading, persistence and outages
 
-`/api/catalogue?order=artistAlbum|album|colour|random|indexed|recent|releaseYear` serves the chosen album order from LMS data. The public labels **Recently Added** and **New Music (LMS)** map to internal `indexed` and `recent`, respectively; the identifiers are intentionally unchanged for saved preferences. The first cold catalogue load requests LMS albums in pages of up to 200 records; a persisted snapshot (described below) and a small in-memory prepared-order cache avoid refetching the whole catalogue on every sort change. Colour order can prepare missing spine metadata with six shared workers, and the browser renders only nearby albums.
+`/api/catalogue?order=artistAlbum|album|artistYear|colour|random|indexed|recent|releaseYear` serves the chosen album order from LMS data. The public labels **Recently Added** and **New Music (LMS)** map to internal `indexed` and `recent`, respectively; the identifiers are intentionally unchanged for saved preferences. The first cold catalogue load requests LMS albums in pages of up to 200 records; a persisted snapshot (described below) and a small in-memory prepared-order cache avoid refetching the whole catalogue on every sort change. Colour order can prepare missing spine metadata with six shared workers, and the browser renders only nearby albums.
 
 Browser fallback/index requests remain bounded by `--batch-size`. `js/resilience.js` caches successful read-only `players` and `albums` RPC responses in local storage; mutating and player-control calls are never replayed. This cache does not cover `/api/catalogue`, so a fresh load or sort change still requires LMS connectivity. An already loaded catalogue can remain visible during an outage while reconnection is attempted.
 
@@ -77,6 +77,10 @@ This replaces the separate `colour-index-v1-*.sqlite3`, `indexed-order-v1-*.sqli
 **New album arrival actions:** On reconciliation, the latest genuine album IDs (capped at 25 for bounded responses) are saved alongside the snapshot's content revision. Subsequent viewers receive the same IDs even if another viewer already performed the scan. A browser compares the new revision to its per-session baseline to avoid repeating old arrival actions after reloads, while ordinary retagging, artwork changes and track repair do not create new album IDs. Settings → Browsing offers silent update (default), notification, or passive scroll-and-preview; all are local to each browser and never issue playback commands. Preview uses existing CD-shelf motion and timeout, and is suppressed during recent user activity, manual source browsing, Spotify/radio, or an open preview/dialog. The saved IDs remain in the normal catalogue snapshot and are cleared with other generated catalogue data, not added to the durable `album_dates` history.
 
 **Automatic indexing of newly added albums:** after detecting an actual catalogue change, Carousel queues newly introduced artwork IDs for a single low-priority background worker. The worker yields to recent browser artwork/metadata activity and shares the existing cache-clear coordination lock; it saves successful colours in the shared SQLite artwork-metadata table. When the browser switches to Spotify, the catalogue can still be reconciled without forcing the Spotify UI to reload. An offline Carousel may instead discover changes after its normal snapshot expiry. **Cold-start limitation:** if covers have never been viewed or analysed and no prior snapshot was available, a first colour sort can still take time. Failed background artwork requests are retried through normal metadata access or a later colour sort, and an in-progress background queue does not survive a Carousel process restart.
+
+### Artist → Release Year
+
+The Library-only `artistYear` order requests native LMS `albums ... sort:artflow`, which groups by artist and orders albums by year (oldest first) then title. Carousel stores native album IDs and A–Z text keys in its shared snapshot and validates the full ID set before caching. Genre exclusions filter the ranking; the A–Z fast navigator retains native LMS text keys. Unknown years follow LMS's own placement. No independent database queries or external metadata are used.
 
 ### Album date ordering implementation
 
@@ -128,7 +132,7 @@ The `cached` field should be `true` after the catalogue has loaded. To measure t
 
 - `/api/lms` → LMS JSON-RPC;
 - `/api/cometd` → LMS CometD;
-- `/api/catalogue?order=artistAlbum|album|colour|random|indexed|recent|releaseYear` → server-prepared ordered catalogue from a SQLite-backed snapshot (15-minute TTL);
+- `/api/catalogue?order=artistAlbum|album|artistYear|colour|random|indexed|recent|releaseYear` → server-prepared ordered catalogue from a SQLite-backed snapshot (15-minute TTL);
 - `/api/catalogue/status` → catalogue state, album and colour counts, plus background-colour indexing progress (GET, never contacts LMS);
 - `/api/catalogue/reconcile` → Carousel-owned change check after observing an LMS scan finish (POST). Compares album data, updates snapshot only as necessary, and queues new cover colours in the background;
 - `/api/catalogue/invalidate` → explicitly discard the catalogue snapshot (POST), without modifying LMS;
