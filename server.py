@@ -232,6 +232,35 @@ def save_lms_url(path:Path,lms_url:str)->None:
     finally:
         temporary.unlink(missing_ok=True)
 
+def album_release_year(album:dict)->int|None:
+    """Normalise only the year supplied by LMS album metadata."""
+    raw=album.get('year')
+    if isinstance(raw,bool):return None
+    if isinstance(raw,int):return raw if 1000<=raw<=9999 else None
+    if isinstance(raw,str):
+        value=raw.strip()
+        if len(value)==4 and all('0'<=c<='9' for c in value):
+            year=int(value)
+            return year if 1000<=year<=9999 else None
+    return None
+
+
+def order_release_year_from_lms(albums:list[dict],native_ids:list[str])->list[dict]:
+    """Reverse native year GROUPS, preserving LMS artist/album order.
+
+    LMS yearartistalbum sorts ASC by year, then contributor.namesort and
+    album.titlesort. Keep that native order within each individual year.
+    """
+    lookup={str(album['id']):album for album in albums}
+    groups={}
+    for album_id in native_ids:
+        album=lookup.get(album_id)
+        if album is not None:
+            groups.setdefault(album_release_year(album),[]).append(album)
+    years=sorted((year for year in groups if year is not None),reverse=True)
+    return [album for year in [*years,None] for album in groups.get(year,())]
+
+
 def remember_catalogue_order(orders:OrderedDict,key:tuple,payload:bytes)->bool:
     """Cache serialized orders within both entry and byte limits (oldest first).
 
@@ -913,10 +942,11 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     not 0<=now-data['created']<CATALOGUE_SNAPSHOT_TTL_SECONDS):
                 raise ValueError('Snapshot outdated')
             expected={str(a['id']) for a in data['albums'] if a.get('id') is not None}
-            ranks=data.get('lms_orders')
-            ranks=ranks if isinstance(ranks,dict) else {}
-            album_rank=ranks.get('album')
-            if not (isinstance(album_rank,dict) and
+            saved_orders=data.get('lms_orders')
+            saved_orders=saved_orders if isinstance(saved_orders,dict) else {}
+            ranks={}
+            album_rank=saved_orders.get('album')
+            if (isinstance(album_rank,dict) and
                     isinstance(album_rank.get('ids'),list) and
                     isinstance(album_rank.get('textkeys'),list) and
                     len(album_rank['ids'])==len(album_rank['textkeys'])==len(expected) and
@@ -924,8 +954,15 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     all(isinstance(k,str) for k in album_rank['textkeys']) and
                     len(set(album_rank['ids']))==len(expected) and
                     set(album_rank['ids'])==expected):
-                ranks={}
-            else:ranks={'album':album_rank}
+                ranks['album']=album_rank
+            release_rank=saved_orders.get('releaseYear')
+            if (isinstance(release_rank,dict) and
+                    isinstance(release_rank.get('ids'),list) and
+                    len(release_rank['ids'])==len(expected) and
+                    all(isinstance(i,str) for i in release_rank['ids']) and
+                    len(set(release_rank['ids']))==len(expected) and
+                    set(release_rank['ids'])==expected):
+                ranks['releaseYear']={'ids':release_rank['ids']}
             snapshot={'created':data['created'],'albums':data['albums'],
                       'genres':data['genres'],'colours':self._load_colour_index(),
                       'revision':data.get('revision'),
@@ -1170,7 +1207,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         mode=query.get('order',['artistAlbum'])[0]
         excluded_genre_ids={int(genre_id) for genre_id in query.get('exclude_genre_id',[])
                             if genre_id.isdecimal() and int(genre_id)>0}
-        if mode not in ('artistAlbum','album','colour','random','recent','indexed'):
+        if mode not in ('artistAlbum','album','colour','random','recent','indexed','releaseYear'):
             self.send_error(400,'Invalid album order');return
         try:
             with _CATALOGUE_LOCK:
@@ -1205,6 +1242,26 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                         indexed={str(a['id']):a for a in albums}
                         albums=[dict(indexed[id],textkey=key)
                                 for id,key in zip(rank['ids'],rank['textkeys']) if id in indexed]
+                    if mode=='releaseYear':
+                        # Use LMS's native yearartistalbum sorting. It sorts
+                        # oldest first; reverse only the YEAR groups for a
+                        # newest-first shelf, retaining native intra-year order.
+                        ranks=snapshot.setdefault('lms_orders',{})
+                        native=ranks.get('releaseYear')
+                        if not isinstance(native,dict) or not isinstance(native.get('ids'),list):
+                            rows=[a for page in self._catalogue_pages(sort='yearartistalbum')
+                                  for a in page]
+                            ids=[str(a['id']) for a in rows if a.get('id') is not None]
+                            baseline={str(a['id']) for a in snapshot['albums']
+                                      if a.get('id') is not None}
+                            if (len(ids)!=len(baseline) or len(set(ids))!=len(baseline)
+                                    or set(ids)!=baseline):
+                                raise ValueError('LMS year order changed during preparation')
+                            native={'ids':ids}
+                            ranks['releaseYear']=native
+                            try:self._save_catalogue_snapshot(snapshot)
+                            except (OSError,sqlite3.Error,ValueError):pass
+                        albums=order_release_year_from_lms(albums,native['ids'])
                     if mode=='recent':
                         # Use LMS's native first-added ranking, NOT modification
                         # dates or unreliable album-ID order. The base snapshot

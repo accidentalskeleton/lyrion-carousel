@@ -46,7 +46,7 @@ There is no Node/npm runtime dependency and no build step. Python 3.9+ and Pillo
 
 ## Catalogue loading, persistence and outages
 
-`/api/catalogue?order=artistAlbum|album|colour|random|indexed|recent` serves the chosen album order from LMS data. The public labels **Recently Added** and **New Music (LMS)** map to internal `indexed` and `recent`, respectively; the identifiers are intentionally unchanged for saved preferences. The first cold catalogue load requests LMS albums in pages of up to 200 records; a persisted snapshot (described below) and a small in-memory prepared-order cache avoid refetching the whole catalogue on every sort change. Colour order can prepare missing spine metadata with six shared workers, and the browser renders only nearby albums.
+`/api/catalogue?order=artistAlbum|album|colour|random|indexed|recent|releaseYear` serves the chosen album order from LMS data. The public labels **Recently Added** and **New Music (LMS)** map to internal `indexed` and `recent`, respectively; the identifiers are intentionally unchanged for saved preferences. The first cold catalogue load requests LMS albums in pages of up to 200 records; a persisted snapshot (described below) and a small in-memory prepared-order cache avoid refetching the whole catalogue on every sort change. Colour order can prepare missing spine metadata with six shared workers, and the browser renders only nearby albums.
 
 Browser fallback/index requests remain bounded by `--batch-size`. `js/resilience.js` caches successful read-only `players` and `albums` RPC responses in local storage; mutating and player-control calls are never replayed. This cache does not cover `/api/catalogue`, so a fresh load or sort change still requires LMS connectivity. An already loaded catalogue can remain visible during an outage while reconnection is attempted.
 
@@ -80,12 +80,13 @@ This replaces the separate `colour-index-v1-*.sqlite3`, `indexed-order-v1-*.sqli
 
 ### Album date ordering implementation
 
-Carousel offers two independent Library-only date orders. Both are newest-first, honour genre exclusions and use the non-wrapping shelf. The menu names differ from the internal API values for backward compatibility:
+Carousel offers three independent Library-only chronological orders. All are newest-first, honour genre exclusions and use the non-wrapping shelf. The menu names differ from the internal API values for backward compatibility:
 
 | Public menu label | `/api/catalogue?order=` | Data source |
 | --- | --- | --- |
 | **Recently Added** | `indexed` | Carousel's index of the current LMS library's track-added timestamps |
 | **New Music (LMS)** | `recent` | LMS native `albums ... sort:new` ranking |
+| **Release Year (LMS)** | `releaseYear` | Native LMS `albums ... sort:yearartistalbum` (year ASC, then artist/title). Carousel caches native album-ID ranks per snapshot, reverses only year groups for newest-first display, preserves native intra-year order and places unknown years last |
 
 **Why native LMS New Music may appear wrong for a new compilation.** In LMS's [album query code](https://github.com/LMS-Community/slimserver/blob/e656a5028b9b46fd715a0150ea189333095bcfc6/Slim/Control/Queries.pm), `sort:new` orders by `MIN(tracks_persistent.added) DESC`. The value comes from persistent recording records rather than exclusively from tracks newly indexed on that release. LMS can associate the same recording with different release tracks, particularly when they share a MusicBrainz Recording ID. A new compilation or greatest-hits album containing an already-known recording can therefore inherit an older persistent timestamp. The use of **MIN** means just one previously known recording may affect the whole album's rank.
 
@@ -127,7 +128,7 @@ The `cached` field should be `true` after the catalogue has loaded. To measure t
 
 - `/api/lms` → LMS JSON-RPC;
 - `/api/cometd` → LMS CometD;
-- `/api/catalogue?order=artistAlbum|album|colour|random|indexed|recent` → server-prepared ordered catalogue from a SQLite-backed snapshot (15-minute TTL);
+- `/api/catalogue?order=artistAlbum|album|colour|random|indexed|recent|releaseYear` → server-prepared ordered catalogue from a SQLite-backed snapshot (15-minute TTL);
 - `/api/catalogue/status` → catalogue state, album and colour counts, plus background-colour indexing progress (GET, never contacts LMS);
 - `/api/catalogue/reconcile` → Carousel-owned change check after observing an LMS scan finish (POST). Compares album data, updates snapshot only as necessary, and queues new cover colours in the background;
 - `/api/catalogue/invalidate` → explicitly discard the catalogue snapshot (POST), without modifying LMS;

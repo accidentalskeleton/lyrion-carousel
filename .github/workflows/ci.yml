@@ -17,7 +17,8 @@ concurrency:
 jobs:
   regressions:
     name: JavaScript and Python regressions
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 does not support the Ubuntu 26.04 image behind latest.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out source
