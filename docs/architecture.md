@@ -80,7 +80,7 @@ This replaces the separate `colour-index-v1-*.sqlite3`, `indexed-order-v1-*.sqli
 
 ### Album date ordering implementation
 
-Carousel offers two independent Library-only date orders. Both are newest-first, honour genre exclusions and use the non-wrapping shelf. The menu names differ from the internal API values for backward compatibility:
+Carousel offers three independent Library-only chronological orders. All are newest-first, honour genre exclusions and use the non-wrapping shelf. The menu names differ from the internal API values for backward compatibility:
 
 | Public menu label | `/api/catalogue?order=` | Data source |
 | --- | --- | --- |

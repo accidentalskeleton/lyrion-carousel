@@ -96,7 +96,7 @@ Settings (the **i** button beside the connection status) has these tabs. Only th
 
 ## Understanding album date ordering
 
-Carousel provides two **newest-first** choices for albums in your local LMS library. They are deliberately different, so you can compare them without changing LMS, your audio files or your tags:
+Carousel provides three **newest-first** chronological choices for albums in your local LMS library. They serve different purposes, so you can compare them without changing LMS, your audio files or your tags:
 
 | Menu choice | What determines the album's position? | When to use it |
 | --- | --- | --- |
