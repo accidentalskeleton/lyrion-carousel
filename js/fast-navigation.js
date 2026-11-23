@@ -9,8 +9,17 @@ export function scrubRatio(index,total){
 // Give a circular shelf one wrap position at either end of the scrubber.
 // Moving left of album 1 selects the last album; moving right of the last
 // selects album 1. Bounded orders retain their original finite endpoints.
-export function scrubRange(total,circular=false){
-    return circular&&total>1?{min:-1,max:total}:{min:0,max:Math.max(0,total-1)};
+export function scrubRange(total,circular=false,finiteBounds=null){
+    if(circular&&total>1)return {min:-1,max:total};
+    if(Array.isArray(finiteBounds)&&finiteBounds.length===2){
+        const [first,last]=finiteBounds;
+        if(Number.isFinite(first)&&Number.isFinite(last)&&first<=last)
+            return {min:first,max:last};
+    }
+    return {min:0,max:Math.max(0,total-1)};
+}
+export function scrubFinitePosition(value,bounds){
+    return clamp(Number(value)||0,bounds.min,bounds.max);
 }
 export function scrubAlbumIndex(value,total,circular=false){
     if(total<=0)return 0;
@@ -69,12 +78,15 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
             mode==='recent'?'New music':mode==='releaseYear'?'Release year (LMS)':mode==='colour'?'Spine colours':'Random order';
     }
     function render(){
-        const {total,index,mode,album,circular=false}=state();
-        const range=scrubRange(total,circular);
+        const {total,index,mode,album,circular=false,position,finiteBounds}=state();
+        const range=scrubRange(total,circular,finiteBounds);
         slider.min=String(range.min);
         slider.max=String(range.max);
-        if(!dragging)slider.value=String(clamp(index,0,Math.max(0,total-1)));
-        slider.disabled=total<2;
+        slider.step=circular?'1':'any';
+        if(!dragging)slider.value=String(!circular&&finiteBounds
+            ?scrubFinitePosition(position,range)
+            :clamp(index,0,Math.max(0,total-1)));
+        slider.disabled=total<2||range.max<=range.min;
         if(!dragging){
             count.textContent=total?(Math.min(index,total-1)+1).toLocaleString()+' / '+total.toLocaleString()+' CDs':'No CDs';
             caption.textContent=album?(album[1]+' — '+album[0]):modeLabel(mode);
@@ -100,10 +112,15 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
         if(keepOpen)cancelHide();else armHide();
     }
     function commit(value,final){
-        const current=state(),index=scrubAlbumIndex(value,current.total,current.circular);
+        const current=state(),range=scrubRange(current.total,current.circular,current.finiteBounds);
+        const finitePosition=!current.circular&&current.finiteBounds
+            ?scrubFinitePosition(value,range):null;
+        const index=finitePosition===null
+            ?scrubAlbumIndex(value,current.total,current.circular)
+            :current.indexForPosition(finitePosition);
         ++request;
         onActivity();
-        jump(index,final,request);
+        jump(index,final,request,finitePosition);
         const album=state().albumAt?.(index);
         caption.textContent=album?album[1]+' — '+album[0]:modeLabel(current.mode);
         count.textContent=(index+1).toLocaleString()+' / '+current.total.toLocaleString()+' CDs';

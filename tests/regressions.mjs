@@ -173,13 +173,68 @@ export async function runTests(sources) {
   // Discovery must choose a different album when the test requires scrolling.
   // A real random draw can select the centred album and legitimately skip it.
   const appMath=Object.create(Math);appMath.random=()=>.37;
-  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,shouldRevealForWheel,scrubIndex,scrubRatio,scrubRange,scrubAlbumIndex};')();
+  const navigation=new Function(plain(sources.fastNavigation)+';return {acceleratedFlick,acceleratedWheel,createSwipeNavigationDetector,shouldRevealForWheel,scrubIndex,scrubRatio,scrubRange,scrubAlbumIndex,scrubFinitePosition};')();
   assert(navigation.scrubIndex(.5,1001)===500,'large library scrub ratio selects index 500');
   assert(navigation.scrubIndex(2,1001)===1000&&navigation.scrubIndex(-1,1001)===0,
     'scrub ratio clamps collection endpoints');
   const wrapRange=navigation.scrubRange(169,true),finiteRange=navigation.scrubRange(169,false);
   assert(wrapRange.min===-1&&wrapRange.max===169&&finiteRange.min===0&&finiteRange.max===168,
     'circular scrubber gains two wrap points while bounded shelves retain finite limits');
+  const boundedRange=navigation.scrubRange(169,false,[14.5,153.5]);
+  assert(boundedRange.min===14.5&&boundedRange.max===153.5&&
+    navigation.scrubFinitePosition(14.5,boundedRange)===14.5&&
+    navigation.scrubFinitePosition(153.5,boundedRange)===153.5&&
+    navigation.scrubFinitePosition(200,boundedRange)===153.5&&
+    navigation.scrubFinitePosition(-2,boundedRange)===14.5,
+    'finite scrubber range follows physical shelf edges with fractional endpoints');
+  const independentRange=navigation.scrubRange(169,true,[14.5,153.5]);
+  assert(independentRange.min===-1&&independentRange.max===169,
+    'circular scrubber retains wrap travel regardless of finite bounds');
+  // Use the real fast-navigation controller with a small, deterministic slider
+  // to verify displayed thumb position and forwarded continuous shelf position.
+  const sliderEvents={};
+  const slider={min:'',max:'',step:'',value:'',disabled:false,
+    addEventListener(name,handler){sliderEvents[name]=handler}};
+  const shell={hidden:true,addEventListener(){}};
+  const rootStub={
+    dataset:{},
+    querySelector(selector){return ({
+      '.bf-fast-navigator':shell,'.bf-fast-nav-range':slider,
+      '.bf-fast-nav-label':{set textContent(value){this.text=value}},
+      '.bf-fast-nav-count':{set textContent(value){this.text=value}},
+      '.bf-fast-nav-letters':{append(){}},
+      '.bf-fast-nav-close':{addEventListener(){}}
+    })[selector]}
+  };
+  const fakeDocument={createElement(){return {setAttribute(){},addEventListener(){}}}};
+  const fakeWindow={addEventListener(){}};
+  const makeNavigator=new Function('window','document',
+    plain(sources.fastNavigation)+';return createFastNavigator;')(fakeWindow,fakeDocument);
+  let finitePos=153.5,finiteMode=true;
+  const scrubJumps=[];
+  const navigator=makeNavigator(rootStub,{
+    state:()=>({total:169,index:Math.round(finitePos),position:finitePos,
+      finiteBounds:finiteMode?[14.5,153.5]:null,circular:!finiteMode,
+      indexForPosition:p=>Math.round(p),mode:'recent',
+      album:['Album','Artist'],albumAt:()=>['Album','Artist']}),
+    onActivity(){},jump:(index,final,token,position)=>scrubJumps.push({index,final,position}),
+    jumpLetter(){}
+  });
+  navigator.show();
+  assert(Number(slider.min)===14.5&&Number(slider.max)===153.5&&
+    Number(slider.value)===153.5&&slider.step==='any',
+    'finite shelf at its final visible spine puts the scrub thumb at the right endpoint');
+  slider.value='14.5';sliderEvents.input();sliderEvents.change();
+  assert(scrubJumps.at(-1).position===14.5&&scrubJumps.at(-1).final&&
+    scrubJumps.at(-1).index===15,
+    'finite scrub reaches exact left shelf stop, retaining fractional shelf position');
+  slider.value='153.5';sliderEvents.input();sliderEvents.change();
+  assert(scrubJumps.at(-1).position===153.5&&scrubJumps.at(-1).index===154,
+    'finite scrub reaches exact right shelf stop without unused slider travel');
+  finiteMode=false;navigator.render();
+  assert(Number(slider.min)===-1&&Number(slider.max)===169&&slider.step==='1',
+    'circular scrubber continues to expose adjacent wrap positions');
+  navigator.hide();
   assert(navigation.scrubAlbumIndex(-1,169,true)===168&&
     navigation.scrubAlbumIndex(169,169,true)===0&&
     navigation.scrubAlbumIndex(168,169,true)===168&&
@@ -1135,7 +1190,12 @@ export async function runTests(sources) {
     'About links to the GitHub project in a protected new tab');
   assert(sources.index.includes('aria-label="GitHub project (opens in a new tab)"'),
     'the project link announces its new-tab behavior');
-  assert(sources.index.includes('class="bf-fast-nav-range"')&&
+  assert(sources.app.includes('finiteBounds:boundedShelf()?finiteShelfBounds():null')&&
+    sources.app.includes('position:boundedShelf()?shelfPosition(position):null')&&
+    sources.app.includes('jump:async(index,final,token,finitePosition=null)')&&
+    sources.app.includes('?shelfPosition(finitePosition):nearestPositionForIndex(slot)'),
+    'finite navigator reads real shelf geometry and preserves continuous position on jumps');
+    assert(sources.index.includes('class="bf-fast-nav-range"')&&
     !sources.index.includes('class="bf-fast-nav-toggle"')&&
     sources.albumBrowserCss.includes('.bf-fast-nav-anchor')&&
     sources.albumBrowserCss.includes('align-items:center; justify-content:center'),
@@ -1710,7 +1770,7 @@ export async function runTests(sources) {
   assert(sources.index.includes('data-order="releaseYear"')&&
     sources.app.includes("releaseYear:'Release Year (LMS)'")&&
     sources.app.includes("['recent','indexed','releaseYear'].includes(orderMode)")&&
-    sources.index.includes('js/app.js?v=artist-year-1'),
+    sources.index.includes('js/app.js?v=finite-scrub-1'),
     'release-year option has a menu item, finite shelf and browser cache-bust');
   assert(sources.app.includes("import { createDemoMode }")&&
     sources.app.includes("async prepareStep(step,remote)")&&
@@ -1764,7 +1824,7 @@ export async function runTests(sources) {
 
   assert(sources.index.includes('css/album-browser.css?v=artist-year-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=artist-year-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=finite-scrub-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');

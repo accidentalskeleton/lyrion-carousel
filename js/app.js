@@ -5,7 +5,7 @@ import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPositio
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=stable-spotify-album-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=stable-spotify-album-1';
-import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=artist-year-1';
+import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=finite-scrub-1';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 // This identifier lives inside the JavaScript actually loaded by this browser.
@@ -1941,20 +1941,27 @@ const fastNavigator=createFastNavigator(root,{
     state:()=>({
         total:Math.max(0,totalAlbums-(externalShelfPosition>=0?1:0)),
         circular:!boundedShelf(),
+        finiteBounds:boundedShelf()?finiteShelfBounds():null,
+        position:boundedShelf()?shelfPosition(position):null,
+        indexForPosition:value=>{
+            const slot=Math.round(shelfPosition(value));
+            return Math.max(0,slot-(externalShelfPosition>=0&&slot>externalShelfPosition?1:0));
+        },
         index:Math.max(0,selectedIndex()-(externalShelfPosition>=0&&selectedIndex()>externalShelfPosition?1:0)),
         mode:orderMode,
         album:albums[selectedIndex()],
         albumAt:index=>albums[catalogueSlot(index)]
     }),
     onActivity:()=>{noteUserActivity();lastFlickVelocity=0;},
-    jump:async(index,final,token)=>{
+    jump:async(index,final,token,finitePosition=null)=>{
         latestFastNavRequest=token;
         if(orderBusy||libraryRefreshing||randomAnimating||!totalAlbums)return;
         const generation=catalogueGeneration,source=catalogueSource;
         const slot=catalogueSlot(index);
         if(slot<0||slot>=totalAlbums)return;
         followingNowPlaying=false;cancelFollowAnimation();pinnedRequest++;
-        const destination=nearestPositionForIndex(slot);
+        const destination=finitePosition!==null&&boundedShelf()
+            ?shelfPosition(finitePosition):nearestPositionForIndex(slot);
         // During input: track the finger instantly and render only the
         // existing pooled shelf window. Final release loads the target page.
         target=position=shelfPosition(destination);
@@ -1965,7 +1972,8 @@ const fastNavigator=createFastNavigator(root,{
             await fetchBatch(Math.floor(index/PAGE_SIZE));
             if(token!==latestFastNavRequest||generation!==catalogueGeneration||source!==catalogueSource)return;
         }
-        target=snapShelfPosition(nearestPositionForIndex(slot));
+        target=finitePosition!==null&&boundedShelf()
+            ?shelfPosition(finitePosition):snapShelfPosition(nearestPositionForIndex(slot));
         schedule();
     },
     jumpLetter:letter=>{
