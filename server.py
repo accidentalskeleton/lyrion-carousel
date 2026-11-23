@@ -955,6 +955,16 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                     len(set(album_rank['ids']))==len(expected) and
                     set(album_rank['ids'])==expected):
                 ranks['album']=album_rank
+            artist_year_rank=saved_orders.get('artistYear')
+            if (isinstance(artist_year_rank,dict) and
+                    isinstance(artist_year_rank.get('ids'),list) and
+                    isinstance(artist_year_rank.get('textkeys'),list) and
+                    len(artist_year_rank['ids'])==len(artist_year_rank['textkeys'])==len(expected) and
+                    all(isinstance(i,str) for i in artist_year_rank['ids']) and
+                    all(isinstance(k,str) for k in artist_year_rank['textkeys']) and
+                    len(set(artist_year_rank['ids']))==len(expected) and
+                    set(artist_year_rank['ids'])==expected):
+                ranks['artistYear']=artist_year_rank
             release_rank=saved_orders.get('releaseYear')
             if (isinstance(release_rank,dict) and
                     isinstance(release_rank.get('ids'),list) and
@@ -1207,7 +1217,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         mode=query.get('order',['artistAlbum'])[0]
         excluded_genre_ids={int(genre_id) for genre_id in query.get('exclude_genre_id',[])
                             if genre_id.isdecimal() and int(genre_id)>0}
-        if mode not in ('artistAlbum','album','colour','random','recent','indexed','releaseYear'):
+        if mode not in ('artistAlbum','album','artistYear','colour','random','recent','indexed','releaseYear'):
             self.send_error(400,'Invalid album order');return
         try:
             with _CATALOGUE_LOCK:
@@ -1237,6 +1247,26 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                                 raise ValueError('LMS album order changed during catalogue preparation')
                             rank={'ids':ids,'textkeys':[str(a.get('textkey') or '') for a in rows]}
                             ranks['album']=rank
+                            try:self._save_catalogue_snapshot(snapshot)
+                            except (OSError,sqlite3.Error,ValueError):pass
+                        indexed={str(a['id']):a for a in albums}
+                        albums=[dict(indexed[id],textkey=key)
+                                for id,key in zip(rank['ids'],rank['textkeys']) if id in indexed]
+                    if mode=='artistYear':
+                        # Native LMS artflow groups by artist and sorts albums
+                        # by year within each artist (oldest first).
+                        ranks=snapshot.setdefault('lms_orders',{})
+                        rank=ranks.get('artistYear')
+                        if not isinstance(rank,dict):
+                            rows=[a for page in self._catalogue_pages(sort='artflow') for a in page]
+                            ids=[str(a['id']) for a in rows if a.get('id') is not None]
+                            baseline={str(a['id']) for a in snapshot['albums']
+                                      if a.get('id') is not None}
+                            if (len(ids)!=len(baseline) or len(set(ids))!=len(baseline)
+                                    or set(ids)!=baseline):
+                                raise ValueError('LMS artist/year order changed during preparation')
+                            rank={'ids':ids,'textkeys':[str(a.get('textkey') or '') for a in rows]}
+                            ranks['artistYear']=rank
                             try:self._save_catalogue_snapshot(snapshot)
                             except (OSError,sqlite3.Error,ValueError):pass
                         indexed={str(a['id']):a for a in albums}
