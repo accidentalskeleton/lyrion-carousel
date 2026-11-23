@@ -86,7 +86,7 @@ export function createFastNavigator(root,{state,jump,onActivity,jumpLetter}){
         if(!dragging)slider.value=String(!circular&&finiteBounds
             ?scrubFinitePosition(position,range)
             :clamp(index,0,Math.max(0,total-1)));
-        slider.disabled=total<2;
+        slider.disabled=total<2||range.max<=range.min;
         if(!dragging){
             count.textContent=total?(Math.min(index,total-1)+1).toLocaleString()+' / '+total.toLocaleString()+' CDs':'No CDs';
             caption.textContent=album?(album[1]+' — '+album[0]):modeLabel(mode);
