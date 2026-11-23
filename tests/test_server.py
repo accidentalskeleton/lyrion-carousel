@@ -798,6 +798,69 @@ class ServerTests(unittest.TestCase):
             rebuilt=self.handler._load_catalogue_snapshot()
         self.assertEqual(rebuilt['recent_new_album_ids'],['12'])
 
+    def test_release_year_uses_native_lms_yearartistalbum_and_caches_it(self):
+        # Native LMS sorts by year ASC, then artist namesort/title; Carousel
+        # shows newest year first without reversing artists within a year.
+        rows=[
+            {'id':1,'artist':'Zulu','album':'Same Year','year':2020},
+            {'id':2,'artist':'Older','album':'Nineties','year':'1999'},
+            {'id':3,'artist':'Newest','album':'Future','year':2025},
+            {'id':4,'artist':'Undated','album':'Missing'},
+            {'id':5,'artist':'Unknown','album':'Zero','year':0},
+            {'id':6,'artist':'Alpha','album':'Same Year','year':'2020'},
+        ]
+        native=[rows[3],rows[4],rows[1],rows[5],rows[0],rows[2]]
+        calls=[]
+        def pages(genre_id=None,sort='artistalbum'):
+            calls.append(sort)
+            yield native if sort=='yearartistalbum' else rows
+        with patch.object(self.handler,'_catalogue_pages',side_effect=pages):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+            self.handler.path='/api/catalogue?order=releaseYear'
+            self.handler._serve_catalogue()
+            first=json.loads(self.responses[-1][1])
+            self.handler._serve_catalogue()
+            second=json.loads(self.responses[-1][1])
+            self.assertEqual(first,second)
+            self.assertEqual([item['id'] for item in first['albums_loop']],
+                             [3,6,1,2,4,5])
+            snapshot=server._CATALOGUE_MEMORY[self.handler._catalogue_snapshot_key()]
+            self.assertEqual(snapshot['lms_orders']['releaseYear']['ids'],
+                             [str(item['id']) for item in native])
+            # Genre exclusion must not trigger a third LMS sort request.
+            snapshot['genres']['7']=['3','6']
+            self.handler.path='/api/catalogue?order=releaseYear&exclude_genre_id=7'
+            self.handler._serve_catalogue()
+            self.assertEqual([item['id'] for item in json.loads(self.responses[-1][1])['albums_loop']],
+                             [1,2,4,5])
+        self.assertEqual(calls,['artistalbum','yearartistalbum'])
+        # The native rank survives Carousel process restarts via SQLite.
+        server._CATALOGUE_MEMORY.pop(self.handler._catalogue_snapshot_key(),None)
+        with patch.object(self.handler,'_catalogue_pages',
+                          side_effect=AssertionError('Unnecessary LMS query')):
+            self.handler.path='/api/catalogue?order=releaseYear'
+            self.handler._serve_catalogue()
+            self.assertEqual([item['id'] for item in json.loads(self.responses[-1][1])['albums_loop']],
+                             [3,6,1,2,4,5])
+
+    def test_release_year_invalid_values_are_undated(self):
+        for value in [None,'',0,True,'2020-01-01','unknown','0000',999,2020.5]:
+            self.assertIsNone(server.album_release_year({'year':value}))
+        self.assertEqual(server.album_release_year({'year':' 2024 '}),2024)
+        self.assertEqual(server.album_release_year({'year':2024}),2024)
+
+    def test_release_year_native_order_detects_inconsistent_lms_scan(self):
+        rows=[{'id':1,'album':'One','year':2000},{'id':2,'album':'Two','year':2001}]
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([rows])):
+            self.handler.path='/api/catalogue?order=artistAlbum'
+            self.handler._serve_catalogue()
+        with patch.object(self.handler,'_catalogue_pages',return_value=iter([[rows[0]]])):
+            self.handler.path='/api/catalogue?order=releaseYear'
+            with patch.object(self.handler,'_send_upstream_error') as error:
+                self.handler._serve_catalogue()
+        error.assert_called_once()
+
     def test_large_catalogue_reuses_native_album_order_cache(self):
         rows=[{'id':i,'artist':f'Artist {i%79:03d}','album':f'Album {10000-i:05d}'}
               for i in range(10000)]

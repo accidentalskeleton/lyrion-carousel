@@ -394,6 +394,9 @@ export async function runTests(sources) {
   api.applySetting('shelfVariety','true');
   assert(api.geometry().nodes.some(node=>api.spineWeight(node.album)===1.5),
     'reenabling wider spines restores multi-disc widths');
+  api.setOrderForTest('releaseYear');
+  assert(api.finiteShelfBounds().length===2,
+    'release-year order uses finite, non-wrapping shelf endpoints');
   api.setOrderForTest('recent');
   for(const end of [0,1]){
     api.set({position:api.finiteShelfBounds()[end]});
@@ -520,6 +523,11 @@ export async function runTests(sources) {
 
   api.applySetting('displayCount',20);
   assert(api.state().PAGE_SIZE===40&&stage.children.length>20&&stage.children.length<40, 'display count independent of page size');
+  const beforeReleaseYear=catalogueEvents.length;
+  await api.setDisplayOrder('releaseYear');
+  assert(api.state().orderMode==='releaseYear'&&
+    catalogueEvents.slice(beforeReleaseYear).some(e=>e.action==='read'&&e.url.includes('order=releaseYear')),
+    'release-year selection uses the existing prepared LMS catalogue endpoint');
   await api.setDisplayOrder('random');
   const previous=api.state().albums.map(a=>a[6]);
   library.push({id:96,album:'New album',artist:'Artist'});
@@ -1699,6 +1707,11 @@ export async function runTests(sources) {
     sources.index.includes('class="bf-demo-join"')&&
     sources.index.includes('class="bf-demo-launch"'),
     'Demo settings include local showcase, opt-in shared join and staged launch');
+  assert(sources.index.includes('data-order="releaseYear"')&&
+    sources.app.includes("releaseYear:'Release Year (LMS)'")&&
+    sources.app.includes("['recent','indexed','releaseYear']")&&
+    sources.index.includes('js/app.js?v=release-year-1'),
+    'release-year option has a menu item, finite shelf and browser cache-bust');
   assert(sources.app.includes("import { createDemoMode }")&&
     sources.app.includes("async prepareStep(step,remote)")&&
     sources.app.includes("setCatalogueSource(desired,{manual:false,demo:true})"),
