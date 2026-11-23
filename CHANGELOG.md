@@ -4,6 +4,13 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Add **Release Year (LMS)** ordering for the local library using native LMS `sort:yearartistalbum`. Display newest release years first while preserving LMS ordering within each year, placing undated albums last, and retaining finite shelf navigation, genre exclusions and persistent ordering cache (PR #94).
+
+- Add **Artist → Release Year** ordering for the local library using native LMS `sort:artflow`. Group artists alphabetically and show their albums chronologically, with persistent native sort ranks, artist A–Z fast navigation and genre exclusions (PR #96).
+
+- Correct the **finite fast-scrub timeline** so its slider travel corresponds to the shelf's actual first and last visible-spine positions, rather than allowing unused travel beyond the shelf endpoints. Circular orders retain their wraparound positions (pending verification).
+
+
 - Expand Demo Mode to a 17-scene visual feature tour including the newly merged fast navigator with a guided banner, responsive callouts and arrows; demonstrate album information, actions, sort choices, rediscovery, search and Spotify without starting music.
 
 - Add an 80%-width, shelf-centred translucent fast-scrub timeline hidden at rest; reveal after three quick swipes, five moderate swipes or eight sustained wheel events, or manually with N. Make circular scrub endpoints wrap first/last CDs by the shortest route; direct scrolling on CDs dismisses and suppresses the overlay until browsing pauses; selecting a CD hides the overlay immediately and resets accumulated gesture/wheel navigation history; Both alphabetical modes preserve native LMS order (`sort:artistalbum` and `sort:album`) and their A–Z `textkey` groups, respecting ARTISTSORT/ALBUMARTISTSORT and ALBUMSORT. Only the album ID and sort-key rank are cached separately from shared artwork metadata. Strengthen fast touch/mouse momentum and accelerate repeated mouse-wheel notches for 100+ CD libraries, preserving precise slow gestures, finite shelf bounds and visual-only navigation.
