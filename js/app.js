@@ -5,7 +5,7 @@ import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPositio
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=stable-spotify-album-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=stable-spotify-album-1';
-import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=release-year-1';
+import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=artist-year-1';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 // This identifier lives inside the JavaScript actually loaded by this browser.
@@ -198,7 +198,7 @@ function restoreSourceOrders(){
         const legacy=localStorage.getItem('albumBrowserOrderMode')||(localStorage.getItem('albumBrowserRandomOrder')==='true'?'random':'artistAlbum');
         for(const source of ['library','spotify']){
             const saved=localStorage.getItem('albumBrowserOrderMode:'+source)||(source==='library'?legacy:'artistAlbum');
-            sourceOrderModes[source]=['artistAlbum','album','random','colour','recent','indexed','releaseYear'].includes(saved)&&!(source==='spotify'&&['recent','indexed','releaseYear'].includes(saved))?saved:'artistAlbum';
+            sourceOrderModes[source]=['artistAlbum','album','random','colour','recent','indexed','releaseYear','artistYear'].includes(saved)&&!(source==='spotify'&&['recent','indexed','releaseYear','artistYear'].includes(saved))?saved:'artistAlbum';
         }
     }catch(_){}
     desiredOrderMode=sourceOrderModes[catalogueSource];
@@ -348,13 +348,13 @@ async function followPlayingSource(){if(demoActive)return;
     }
 }
 
-const orderLabels={artistAlbum:'Artist → Album',album:'Album → Artist',random:'Random',colour:'Spine Colour',recent:'New Music (LMS)',indexed:'Recently Added',releaseYear:'Release Year (LMS)'};
-function updateOrderToggle(){const label=orderLabels[orderMode];orderToggle.dataset.mode=orderMode;orderToggle.title='Album order: '+label;orderToggle.setAttribute('aria-label','Album order: '+label+'. Open order options');orderToggle.setAttribute('aria-expanded',String(!orderMenu.hidden));orderToggle.setAttribute('aria-pressed',String(orderMode==='random'));orderMenu.querySelectorAll('[data-order]').forEach(button=>{button.setAttribute('aria-checked',String(button.dataset.order===orderMode));button.disabled=catalogueSource==='spotify'&&['recent','indexed','releaseYear'].includes(button.dataset.order)})}
+const orderLabels={artistAlbum:'Artist → Album',album:'Album → Artist',random:'Random',colour:'Spine Colour',recent:'New Music (LMS)',indexed:'Recently Added',releaseYear:'Release Year (LMS)',artistYear:'Artist → Release Year'};
+function updateOrderToggle(){const label=orderLabels[orderMode];orderToggle.dataset.mode=orderMode;orderToggle.title='Album order: '+label;orderToggle.setAttribute('aria-label','Album order: '+label+'. Open order options');orderToggle.setAttribute('aria-expanded',String(!orderMenu.hidden));orderToggle.setAttribute('aria-pressed',String(orderMode==='random'));orderMenu.querySelectorAll('[data-order]').forEach(button=>{button.setAttribute('aria-checked',String(button.dataset.order===orderMode));button.disabled=catalogueSource==='spotify'&&['recent','indexed','releaseYear','artistYear'].includes(button.dataset.order)})}
 function closeOrderMenu(){orderMenu.hidden=true;updateOrderToggle()}
 function openOrderMenu(){closeAlbumMenu();const rect=orderToggle.getBoundingClientRect();orderMenu.hidden=false;orderMenu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-orderMenu.offsetWidth-12))+'px';orderMenu.style.bottom=Math.max(12,window.innerHeight-rect.top+8)+'px';updateOrderToggle();orderMenu.querySelector(`[data-order="${orderMode}"]`)?.focus()}
 async function setDisplayOrder(mode){
     if(catalogueSource==='spotify'){
-        if(!Object.prototype.hasOwnProperty.call(orderLabels,mode)||mode==='recent'||mode==='indexed'||mode==='releaseYear')return;
+        if(!Object.prototype.hasOwnProperty.call(orderLabels,mode)||mode==='recent'||mode==='indexed'||mode==='releaseYear'||mode==='artistYear')return;
         const selected=albums[selectedIndex()]?.[6]; orderMode=desiredOrderMode=mode;
         if(mode==='random')albums.sort(()=>Math.random()-.5);
         else if(mode==='colour')mode='artistAlbum';
@@ -692,7 +692,7 @@ function bindAlbumNode(node,album,index){
     el.dataset.wear=['none','light','none','none','scuffed','none'][(albumCatalogueSeed(album)>>>7)%6];
     el.dataset.catalogueStyle=['sans','serif','mono'][(albumCatalogueSeed(album)>>>13)%3];
     el.setAttribute('aria-label',album[0]+' by '+(album[1]||'Unknown artist'));
-    el.dataset.spineLabel=orderMode==='artistAlbum'?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
+    el.dataset.spineLabel=(orderMode==='artistAlbum'||orderMode==='artistYear')?(album[1]||'Unknown artist')+' — '+album[0]:album[0]+' — '+(album[1]||'Unknown artist');
     el.title=el.getAttribute('aria-label');
     el.style.setProperty('--art',album[2]);
     if(!node.label){
@@ -717,7 +717,7 @@ function bindAlbumNode(node,album,index){
         bindCatalogueCode(node,album);
         node.artistLabel.textContent=album[1]||'Unknown artist';
         node.titleLabel.textContent=album[0]||'Untitled';
-        node.label.replaceChildren(...(orderMode==='artistAlbum'
+        node.label.replaceChildren(...((orderMode==='artistAlbum'||orderMode==='artistYear')
             ?[node.artistLabel,node.separator,node.titleLabel]
             :[node.titleLabel,node.separator,node.artistLabel]));
         node.label.title=node.label.textContent;
@@ -1969,7 +1969,7 @@ const fastNavigator=createFastNavigator(root,{
         schedule();
     },
     jumpLetter:letter=>{
-        if(orderMode==='artistAlbum'||orderMode==='album')void jumpToLetter(letter);
+        if(orderMode==='artistAlbum'||orderMode==='album'||orderMode==='artistYear')void jumpToLetter(letter);
     }
 });
 // The navigator is a shelf-only control. A closing animation can be
