@@ -5,7 +5,7 @@ import { clamp, modulo, circularDelta, nearestPositionForIndex as nearestPositio
 import { createLmsProvider } from './providers/lms-provider.js?v=multidisc-1';
 import { createSpotifyProvider } from './providers/spotify-provider.js?v=stable-spotify-album-1';
 import { spotifyAlbumInformation, spotifyAlbumUrl, spotifyAlbumSearchUrl } from './spotify.js?v=stable-spotify-album-1';
-import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=4';
+import { createFastNavigator, acceleratedFlick, acceleratedWheel, createSwipeNavigationDetector, shouldRevealForWheel } from './fast-navigation.js?v=release-year-1';
 
 const root=document.getElementById('book-fan-browser'),sourceButtons=[...document.querySelectorAll('.bf-source-button')],stage=root.querySelector('.bf-stage'),meta=root.querySelector('.bf-meta'),play=root.querySelector('.bf-play'),previousTrack=root.querySelector('.bf-previous'),nextTrack=root.querySelector('.bf-next'),queueOpen=root.querySelector('.bf-queue-open'),randomPlay=root.querySelector('.bf-random'),discoveryMenu=root.querySelector('.bf-discovery-menu'),orderToggle=root.querySelector('.bf-order-toggle'),orderMenu=root.querySelector('.bf-order-menu'),frontPreview=root.querySelector('.bf-front-preview'),frontArt=root.querySelector('.bf-front-art'),frontPlay=root.querySelector('.bf-front-play'),connectionLabel=root.querySelector('.bf-connection-label'),playerSelect=root.querySelector('.bf-player-select'),powerButton=root.querySelector('.bf-player-power'),searchOpen=root.querySelector('.bf-search-open'),searchOverlay=root.querySelector('.bf-search-overlay'),searchClose=root.querySelector('.bf-search-close'),searchInput=root.querySelector('.bf-search-input'),searchStatus=root.querySelector('.bf-search-status'),searchResults=root.querySelector('.bf-search-results'),alphabet=root.querySelector('.bf-alphabet');
 // This identifier lives inside the JavaScript actually loaded by this browser.
@@ -147,7 +147,7 @@ function shelfIndexAt(space){
     return cycle*albums.length+lo+(local-a)/(b-a);
 }
 let position=4,target=4,dragging=false,moved=false,startX=0,startPosition=0,pressedAlbumIndex=null,hoveredAlbumIndex=-1,frontPreviewIndex=-1,frontPreviewAlbum=null,lastPointerClientX=-1,lastPointerClientY=-1,lastX=0,lastTime=0,pointerVelocity=0,playing=false,paused=false,randomAnimating=false,discoveryBusy=false,randomAnimationStart=0,randomAnimationFrom=0,randomAnimationTo=0,randomAnimationDuration=0,raf=0,wheelTimer=0,lastSelected=-1;
-const boundedShelf=()=>(orderMode==='recent'||orderMode==='indexed')&&catalogueSource==='library';
+const boundedShelf=()=>['recent','indexed','releaseYear'].includes(orderMode)&&catalogueSource==='library';
 // The finite shelf stops when the OUTER spines reach the viewport edges.
 // Clamping the centre to album 0 / N-1 would leave half the display empty.
 const finiteShelfBounds=()=>{
@@ -198,7 +198,7 @@ function restoreSourceOrders(){
         const legacy=localStorage.getItem('albumBrowserOrderMode')||(localStorage.getItem('albumBrowserRandomOrder')==='true'?'random':'artistAlbum');
         for(const source of ['library','spotify']){
             const saved=localStorage.getItem('albumBrowserOrderMode:'+source)||(source==='library'?legacy:'artistAlbum');
-            sourceOrderModes[source]=['artistAlbum','album','random','colour','recent','indexed'].includes(saved)&&!(source==='spotify'&&(saved==='recent'||saved==='indexed'))?saved:'artistAlbum';
+            sourceOrderModes[source]=['artistAlbum','album','random','colour','recent','indexed','releaseYear'].includes(saved)&&!(source==='spotify'&&['recent','indexed','releaseYear'].includes(saved))?saved:'artistAlbum';
         }
     }catch(_){}
     desiredOrderMode=sourceOrderModes[catalogueSource];
@@ -348,13 +348,13 @@ async function followPlayingSource(){if(demoActive)return;
     }
 }
 
-const orderLabels={artistAlbum:'Artist → Album',album:'Album → Artist',random:'Random',colour:'Spine Colour',recent:'New Music (LMS)',indexed:'Recently Added'};
-function updateOrderToggle(){const label=orderLabels[orderMode];orderToggle.dataset.mode=orderMode;orderToggle.title='Album order: '+label;orderToggle.setAttribute('aria-label','Album order: '+label+'. Open order options');orderToggle.setAttribute('aria-expanded',String(!orderMenu.hidden));orderToggle.setAttribute('aria-pressed',String(orderMode==='random'));orderMenu.querySelectorAll('[data-order]').forEach(button=>{button.setAttribute('aria-checked',String(button.dataset.order===orderMode));button.disabled=catalogueSource==='spotify'&&['recent','indexed'].includes(button.dataset.order)})}
+const orderLabels={artistAlbum:'Artist → Album',album:'Album → Artist',random:'Random',colour:'Spine Colour',recent:'New Music (LMS)',indexed:'Recently Added',releaseYear:'Release Year (LMS)'};
+function updateOrderToggle(){const label=orderLabels[orderMode];orderToggle.dataset.mode=orderMode;orderToggle.title='Album order: '+label;orderToggle.setAttribute('aria-label','Album order: '+label+'. Open order options');orderToggle.setAttribute('aria-expanded',String(!orderMenu.hidden));orderToggle.setAttribute('aria-pressed',String(orderMode==='random'));orderMenu.querySelectorAll('[data-order]').forEach(button=>{button.setAttribute('aria-checked',String(button.dataset.order===orderMode));button.disabled=catalogueSource==='spotify'&&['recent','indexed','releaseYear'].includes(button.dataset.order)})}
 function closeOrderMenu(){orderMenu.hidden=true;updateOrderToggle()}
 function openOrderMenu(){closeAlbumMenu();const rect=orderToggle.getBoundingClientRect();orderMenu.hidden=false;orderMenu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-orderMenu.offsetWidth-12))+'px';orderMenu.style.bottom=Math.max(12,window.innerHeight-rect.top+8)+'px';updateOrderToggle();orderMenu.querySelector(`[data-order="${orderMode}"]`)?.focus()}
 async function setDisplayOrder(mode){
     if(catalogueSource==='spotify'){
-        if(!Object.prototype.hasOwnProperty.call(orderLabels,mode)||mode==='recent'||mode==='indexed')return;
+        if(!Object.prototype.hasOwnProperty.call(orderLabels,mode)||mode==='recent'||mode==='indexed'||mode==='releaseYear')return;
         const selected=albums[selectedIndex()]?.[6]; orderMode=desiredOrderMode=mode;
         if(mode==='random')albums.sort(()=>Math.random()-.5);
         else if(mode==='colour')mode='artistAlbum';

@@ -232,6 +232,27 @@ def save_lms_url(path:Path,lms_url:str)->None:
     finally:
         temporary.unlink(missing_ok=True)
 
+def release_year_sort_key(album:dict)->tuple:
+    """Newest release YEAR first from already retrieved LMS album metadata.
+
+    LMS does not guarantee full YYYY-MM-DD album dates. Unknown or malformed
+    years sort last; equal years use deterministic artist/title/ID ties.
+    """
+    raw=album.get('year')
+    year=None
+    if isinstance(raw,int) and not isinstance(raw,bool) and 1000<=raw<=9999:
+        year=raw
+    elif isinstance(raw,str):
+        value=raw.strip()
+        if len(value)==4 and all('0'<=c<='9' for c in value):
+            candidate=int(value)
+            if 1000<=candidate<=9999:year=candidate
+    artist=str(album.get('artist') or '').casefold()
+    title=str(album.get('album') or album.get('title') or '').casefold()
+    return (year is None,-year if year is not None else 0,
+            artist,title,str(album.get('id','')))
+
+
 def remember_catalogue_order(orders:OrderedDict,key:tuple,payload:bytes)->bool:
     """Cache serialized orders within both entry and byte limits (oldest first).
 
@@ -1170,7 +1191,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         mode=query.get('order',['artistAlbum'])[0]
         excluded_genre_ids={int(genre_id) for genre_id in query.get('exclude_genre_id',[])
                             if genre_id.isdecimal() and int(genre_id)>0}
-        if mode not in ('artistAlbum','album','colour','random','recent','indexed'):
+        if mode not in ('artistAlbum','album','colour','random','recent','indexed','releaseYear'):
             self.send_error(400,'Invalid album order');return
         try:
             with _CATALOGUE_LOCK:
@@ -1205,6 +1226,10 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
                         indexed={str(a['id']):a for a in albums}
                         albums=[dict(indexed[id],textkey=key)
                                 for id,key in zip(rank['ids'],rank['textkeys']) if id in indexed]
+                    if mode=='releaseYear':
+                        # In-memory order from year included in LMS albums
+                        # tags:ajlysiq. No extra LMS/SQL/external requests.
+                        albums.sort(key=release_year_sort_key)
                     if mode=='recent':
                         # Use LMS's native first-added ranking, NOT modification
                         # dates or unreliable album-ID order. The base snapshot
