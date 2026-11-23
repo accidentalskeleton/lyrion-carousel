@@ -1709,8 +1709,8 @@ export async function runTests(sources) {
     'Demo settings include local showcase, opt-in shared join and staged launch');
   assert(sources.index.includes('data-order="releaseYear"')&&
     sources.app.includes("releaseYear:'Release Year (LMS)'")&&
-    sources.app.includes("['recent','indexed','releaseYear']")&&
-    sources.index.includes('js/app.js?v=release-year-1'),
+    sources.app.includes("['recent','indexed','releaseYear'].includes(orderMode)")&&
+    sources.index.includes('js/app.js?v=artist-year-1'),
     'release-year option has a menu item, finite shelf and browser cache-bust');
   assert(sources.app.includes("import { createDemoMode }")&&
     sources.app.includes("async prepareStep(step,remote)")&&
@@ -1743,8 +1743,11 @@ export async function runTests(sources) {
   const menuStart=sources.index.indexOf('<div class="bf-order-menu"');
   const menu=sources.index.slice(menuStart,sources.index.indexOf('<div class="bf-transport"',menuStart));
   const modeOrder=[...menu.matchAll(/data-order="([^"]+)"/g)].map(match=>match[1]);
-  assert(modeOrder.join(',')==='artistAlbum,album,indexed,recent,releaseYear,colour,random',
+  assert(modeOrder.join(',')==='artistAlbum,artistYear,album,indexed,recent,releaseYear,colour,random',
     'order menu groups alphabetical, chronological and visual sorting');
+  assert(orderLabels.includes("artistYear:'Artist → Release Year'")&&
+    sources.app.includes("'artistYear'")&&sources.fastNavigation.includes("mode==='artistYear'"),
+    'native LMS artist/year ordering is supported by menu, browser and fast navigation');
   assert(menu.includes('role="separator"')&&menu.includes('Sort albums by'),
     'sort menu contains a heading and group dividers');
   const buttonContent=id=>{
@@ -1759,9 +1762,9 @@ export async function runTests(sources) {
     sources.albumBrowserCss.includes('[data-mode="recent"] .bf-order-icon.lms-history'),
     'LMS New Music uses a distinct history clock while Recently Added keeps the calendar');
 
-  assert(sources.index.includes('css/album-browser.css?v=release-year-1'),
+  assert(sources.index.includes('css/album-browser.css?v=artist-year-1'),
     'sort menu icon CSS cache version is updated');
-  assert(sources.index.includes('js/app.js?v=release-year-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
+  assert(sources.index.includes('js/app.js?v=artist-year-1')&&sources.index.includes('css/shelf.css?v=touch-selection-1'),
     'Demo Mode changes invalidate the app module cache');
   assert(sources.app.includes("trackAlbum=album;trackPlayNow.hidden=false;trackPlayNow.disabled=!playerId;"),
     'Spotify Album Information displays the same play control as local albums');
