@@ -21,10 +21,12 @@ try {
     const command = request.postDataJSON()?.params?.[1];
     return Array.isArray(command) && command[0] === 'albums' && command[1] === 0;
   };
-  let held = false;
+  let held = false, markIntercepted;
+  const intercepted = new Promise(resolve => { markIntercepted = resolve; });
   await page.route('**/api/lms', async route => {
     if (!held && isInitialAlbums(route.request())) {
       held = true;
+      markIntercepted(true);
       await gate;
     }
     await route.continue();
@@ -36,7 +38,8 @@ try {
     page.waitForRequest(isInitialAlbums,{timeout:30000}),
     page.goto(base,{waitUntil:'domcontentloaded'})
   ]);
-  assert(held,'The initial LMS albums request must be intercepted');
+  assert(await Promise.race([intercepted,delay(5000,false,{ref:false})]),
+    'The initial LMS albums request must be intercepted');
   await message.waitFor({state:'visible',timeout:5000});
   const assertLoading = async () => {
     assert(await message.isVisible(),'Startup message must remain visible during the delay');
