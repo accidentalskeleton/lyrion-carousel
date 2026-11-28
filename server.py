@@ -684,11 +684,7 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
             if isinstance(saved,dict):info=saved
         except (OSError,ValueError,UnicodeError):
             pass
-        try:
-            version=(directory/'VERSION').read_text(encoding='utf-8').strip()
-        except (OSError,UnicodeError):
-            version=''
-        if not re.fullmatch(r'[0-9A-Za-z.+:~-]{1,100}',version):version='unknown'
+        version=read_app_version(directory)
         commit=info.get('commit')
         if not isinstance(commit,str) or not re.fullmatch(r'[0-9a-f]{40}',commit):commit=None
         self._send_payload(200,json.dumps({'version':version,'commit':commit}).encode(),
@@ -1587,6 +1583,14 @@ class LyrionCarouselHandler(SimpleHTTPRequestHandler):
         for name,value in (extra_headers or {}).items(): self.send_header(name,value)
         self.end_headers(); self.wfile.write(payload)
 
+def read_app_version(directory:Path)->str:
+    """Read the same installed version for the console and build API."""
+    try:
+        version=(directory/'VERSION').read_text(encoding='utf-8').strip()
+    except (OSError,UnicodeError):
+        return 'unknown'
+    return version if re.fullmatch(r'[0-9A-Za-z.+:~-]{1,100}',version) else 'unknown'
+
 def main()->int:
     """Read configuration, initialise the cache and run the threaded HTTP server."""
     parser=argparse.ArgumentParser(description=__doc__)
@@ -1607,9 +1611,18 @@ def main()->int:
     def handler(*handler_args,**handler_kwargs): return LyrionCarouselHandler(*handler_args,directory=str(static_dir),lms_url=runtime_config['lms_url'],cache_dir=cache_dir,runtime_config=runtime_config,**handler_kwargs)
     # Long-poll connections must not block ordinary artwork and control requests.
     server=ThreadingHTTPServer((args.bind,args.port),handler)
-    if args.bind in {'0.0.0.0','::'}: print('Lyrion Carousel listening on all network interfaces.'); print(f'Open: http://{socket.gethostname()}:{args.port}/ or http://<server-ip>:{args.port}/')
-    else: print(f'Lyrion Carousel: http://{args.bind}:{args.port}/')
-    print(f'Lyrion server: {runtime_config["lms_url"]}'); print(f'Artwork cache: {cache_dir}'); print(f'Runtime config: batch={args.batch_size}, idle={args.idle_return_seconds}s, library-events=CometD, live-status=CometD, album-index=lightweight, random-scroll-max={args.random_scroll_max_seconds}s')
+    port=server.server_address[1]
+    print(f'Lyrion Carousel {read_app_version(static_dir)}',flush=True)
+    if args.bind in {'0.0.0.0','::'}:
+        print(f'HTTP listener: all network interfaces, port {port}',flush=True)
+        print(f'Open: http://{socket.gethostname()}:{port}/ or http://<server-ip>:{port}/',flush=True)
+    else:
+        print(f'Open: http://{args.bind}:{port}/',flush=True)
+    print(f'Lyrion server: {runtime_config["lms_url"]}',flush=True)
+    print(f'Artwork cache: {cache_dir}',flush=True)
+    print(f'Runtime config: batch={args.batch_size}, idle={args.idle_return_seconds}s, library-events=CometD, live-status=CometD, album-index=lightweight, random-scroll-max={args.random_scroll_max_seconds}s',flush=True)
+    print('Library preparation begins when a browser opens Carousel; the HTTP server does not wait for indexing.',flush=True)
+    print('Carousel is running in the foreground. Press Ctrl+C to stop.',flush=True)
     try: server.serve_forever()
     except KeyboardInterrupt: print('\nStopping.')
     finally: server.server_close()
