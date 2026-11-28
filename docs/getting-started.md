@@ -19,6 +19,20 @@ python3 server.py --bind 0.0.0.0
 
 `0.0.0.0` is a listening address, not a browser destination. Do not expose this server directly to the internet.
 
+### What to expect at startup
+
+When started directly, Carousel runs in the foreground. The terminal displays the installed version, listening address/port, LMS address and cache directory, followed by the message `Carousel is running in the foreground. Press Ctrl+C to stop.` This is normal: the command does not return to the shell until you stop the server.
+
+Open the displayed browser URL as soon as the server is running. Carousel serves the web interface without waiting for LMS catalogue indexing. The browser prepares the music library on demand and reports its current stage, including connecting to LMS, loading albums and preparing album order.
+
+![Carousel startup screen showing Preparing your music library and Loading albums from Lyrion Music Server](../assets/lyrion-carousel-startup.webp)
+
+*Actual startup screen captured during a deliberately delayed LMS album request.*
+
+A first visit with a cold cache or a slow LMS may take longer than subsequent visits. The message disappears automatically when the album shelf is ready. If LMS is unavailable, Carousel reports the connection failure and retries automatically.
+
+If the browser cannot reach the web interface at all, check that the server is listening on the expected address and port. For Docker deployments, publish the container port (for example, `-p 8088:8088`) and browse to the Docker host's reachable IP address or permitted hostname, not `0.0.0.0` or the container's internal hostname. Verify the LMS URL separately. A successful ping alone does not establish that the HTTP port is reachable.
+
 ### HTTP Host and cross-site request protection
 
 Carousel validates every incoming HTTP `Host` header **before** serving static content or proxying LMS calls. Loopback IPs, RFC 1918 private IPv4 addresses, IPv6 unique-local/link-local addresses, `localhost`, the machine's hostname and its `.local` form are accepted. Arbitrary public DNS names and unconfigured `.local`, `.lan` and `.home.arpa` names are **not** accepted. Additional local names can be explicitly permitted:
