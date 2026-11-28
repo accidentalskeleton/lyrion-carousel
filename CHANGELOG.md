@@ -4,6 +4,8 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+- Clarify foreground server startup with the installed version, actual HTTP port and Ctrl+C instructions. Display initial library preparation stages immediately in the browser while LMS requests and album ordering complete; the HTTP listener does not wait for library indexing.
+
 - Add **Release Year (LMS)** ordering for the local library using native LMS `sort:yearartistalbum`. Display newest release years first while preserving LMS ordering within each year, placing undated albums last, and retaining finite shelf navigation, genre exclusions and persistent ordering cache (PR #94).
 
 - Add **Artist → Release Year** ordering for the local library using native LMS `sort:artflow`. Group artists alphabetically and show their albums chronologically, with persistent native sort ranks, artist A–Z fast navigation and genre exclusions (PR #96).

@@ -74,6 +74,8 @@ python3 server.py --lms http://streamer:9000
 
 Open `http://127.0.0.1:8088/` in a browser. Replace the LMS address with your own if needed.
 
+Carousel runs in the foreground and is ready to serve its web interface without waiting for LMS indexing. While albums load, the browser displays a startup message. See [what to expect at startup, including a screenshot](docs/getting-started.md#what-to-expect-at-startup).
+
 For configuration, deployment and security guidance, see the linked documentation.
 
 ## Documentation

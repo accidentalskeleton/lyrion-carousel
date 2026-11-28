@@ -93,7 +93,7 @@ class UnifiedMetadataTests(unittest.TestCase):
             db.execute('PRAGMA user_version = 11')
         with self.assertRaises(ValueError):
             metadata_db.connect(self.db_path)
-        with sqlite3.connect(self.db_path) as db:
+        with closing(sqlite3.connect(self.db_path)) as db, db:
             self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],11)
 
     def test_legacy_cache_is_not_imported(self):
