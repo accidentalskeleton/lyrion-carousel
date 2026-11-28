@@ -57,6 +57,32 @@ Finite wheel input must retain small deltas: snapping a 120-unit wheel notch
 back to the nearest spine erased its entire movement. Circular modes keep
 their existing geometry and wheel-release snapping.
 
+## Delayed startup browser check
+
+Unlike the shelf fixture, this check opens the real application. Start a
+separate Carousel server on port 18088 with a reachable LMS and a nonempty
+library; use a temporary artwork cache to keep production cache data separate.
+
+```bash
+python3 server.py --lms http://streamer:9000 --bind 0.0.0.0 --port 18088 \
+  --cache-dir "$(mktemp -d /tmp/carousel-startup.XXXXXX)"
+```
+
+In another terminal, using the Playwright installation from above (or a
+persistent installation outside the checkout):
+
+```bash
+PLAYWRIGHT_MODULE=/tmp/lyrion-browser-tests/node_modules/playwright/index.mjs \
+  node tests/startup-playwright.mjs http://127.0.0.1:18088/ /tmp/carousel-startup.png
+```
+
+The test uses a fresh browser context, intercepts the initial LMS albums
+request for at least ten seconds, verifies the visible startup message,
+captures a local screenshot, and releases the request to check that the
+real LMS shelf appears and the message disappears. It sends no playback
+commands. Do not commit screenshots of a real music library. This is a
+separate integration test requiring LMS, not part of the static shelf fixture.
+
 ## Security and privacy
 
 Do not commit access tokens, passwords, SSH keys, real private network details,
