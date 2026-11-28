@@ -5,6 +5,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -715,12 +716,12 @@ class ServerTests(unittest.TestCase):
         with patch.object(self.handler,'_catalogue_pages',return_value=iter(pages)):
             self.handler._serve_catalogue()
         # Date rows are historical state and survive an artwork-cache clear.
-        with metadata_db.connect(self.handler._metadata_db_path()) as db:
+        with closing(metadata_db.connect(self.handler._metadata_db_path())) as db, db:
             db.execute("INSERT INTO album_dates VALUES (?,?,?,?)",
                        (self.handler.lms_url, '1', 'stable', 123))
         self.handler._clear_cache_files()
         self.assertIsNone(self.stored_catalogue())
-        with metadata_db.connect(self.handler._metadata_db_path()) as db:
+        with closing(metadata_db.connect(self.handler._metadata_db_path())) as db, db:
             self.assertEqual(db.execute("SELECT added FROM album_dates "
                 "WHERE lms_url=? AND album_id='1'",(self.handler.lms_url,)).fetchone()[0],123)
         self.assertNotIn(self.handler._catalogue_snapshot_key(),server._CATALOGUE_MEMORY)
@@ -1138,7 +1139,7 @@ class ServerTests(unittest.TestCase):
         image_path, meta_path = self.paths('cold')
         Image.new('RGB', (8, 8), 'white').save(image_path, format='PNG')
         # Invalid JSON stored in the database must be recomputed from artwork.
-        with metadata_db.connect(self.handler._metadata_db_path()) as db:
+        with closing(metadata_db.connect(self.handler._metadata_db_path())) as db, db:
             db.execute("INSERT INTO artwork_metadata VALUES (?,?,?,?)",
                        (self.handler.lms_url, 'library', 'cold', 'broken'))
         self.handler._serve_artwork_meta('cold')
