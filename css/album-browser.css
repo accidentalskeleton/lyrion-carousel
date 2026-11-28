@@ -1000,3 +1000,20 @@ body {
 @media(prefers-reduced-motion:reduce) {
     .bf-fast-navigator {backdrop-filter:none;-webkit-backdrop-filter:none}
 }
+
+/* The static page is useful even while the first catalogue request is pending. */
+.bf-startup-message { display:none; }
+#book-fan-browser.is-starting .bf-startup-message {
+    position:absolute;
+    inset:48px 16px 64px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    text-align:center;
+    color:var(--bf-muted,#aaa);
+    pointer-events:none;
+}
+.bf-startup-message strong { color:#f1eee8; font-size:clamp(16px,3vw,24px); }
+.bf-startup-message small { max-width:38em; }
