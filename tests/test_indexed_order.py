@@ -2,6 +2,7 @@
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -71,7 +72,7 @@ class IndexedOrderTests(unittest.TestCase):
         self.assertEqual(indexed_order.indexed_album_order(albums, self.rpc, self.path),
                          ['3', '2', '1'])
         self.assertEqual([c[-1] for c in self.calls], ['album_id:3'])
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute(
                 "SELECT added FROM album_dates WHERE album_id='1'").fetchone()[0], 100)
 
@@ -82,7 +83,7 @@ class IndexedOrderTests(unittest.TestCase):
         self.calls.clear()
         indexed_order.indexed_album_order([self.album(1, 'Replacement')], self.rpc, self.path)
         self.assertEqual(len(self.calls), 1)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute(
                 "SELECT added FROM album_dates WHERE album_id='1'").fetchone()[0], 700)
 
@@ -121,7 +122,7 @@ class IndexedOrderTests(unittest.TestCase):
             return {'count': len(rows), 'titles_loop': rows[:1000]}
         with self.assertRaises(OSError):
             indexed_order.indexed_album_order(albums, interrupted, self.path)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM album_dates').fetchone()[0], 0)
         self.tracks = {'bulk': rows}
         self.assertEqual(len(indexed_order.indexed_album_order(albums, self.rpc, self.path)), 25)
