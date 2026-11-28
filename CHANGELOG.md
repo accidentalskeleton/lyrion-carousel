@@ -4,13 +4,17 @@ All notable changes to Lyrion Carousel are documented here.
 
 ## Unreleased
 
+## [0.14.0] - 2026-11-28
+
+- Close seven SQLite connections in regression tests; verify 104 Python tests without ResourceWarnings and add a repeatable ten-second delayed-LMS startup browser check with screenshot capture. Document foreground startup and Docker connectivity troubleshooting.
+
 - Clarify foreground server startup with the installed version, actual HTTP port and Ctrl+C instructions. Display initial library preparation stages immediately in the browser while LMS requests and album ordering complete; the HTTP listener does not wait for library indexing.
 
 - Add **Release Year (LMS)** ordering for the local library using native LMS `sort:yearartistalbum`. Display newest release years first while preserving LMS ordering within each year, placing undated albums last, and retaining finite shelf navigation, genre exclusions and persistent ordering cache (PR #94).
 
 - Add **Artist → Release Year** ordering for the local library using native LMS `sort:artflow`. Group artists alphabetically and show their albums chronologically, with persistent native sort ranks, artist A–Z fast navigation and genre exclusions (PR #96).
 
-- Correct the **finite fast-scrub timeline** so its slider travel corresponds to the shelf's actual first and last visible-spine positions, rather than allowing unused travel beyond the shelf endpoints. Circular orders retain their wraparound positions (pending verification).
+- Correct the **finite fast-scrub timeline** so its slider travel corresponds to the shelf's actual first and last visible-spine positions, rather than allowing unused travel beyond the shelf endpoints. Circular orders retain their wraparound positions.
 
 
 - Expand Demo Mode to a 17-scene visual feature tour including the newly merged fast navigator with a guided banner, responsive callouts and arrows; demonstrate album information, actions, sort choices, rediscovery, search and Spotify without starting music.
