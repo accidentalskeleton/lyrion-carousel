@@ -6,7 +6,7 @@
 
 Lyrion Carousel is a standalone album-browsing and playback-control interface for Lyrion Music Server (LMS). Browse the library as a circular shelf of CD spines, with enlarged jewel-case artwork when you select an album. It uses CSS transforms; no WebGL renderer or remote font downloads are required.
 
-Canonical release version: **0.13.1** in [`VERSION`](VERSION). Pre-release Debian packages identify their source commit (`0.13.1~git<sha>`), and Settings → About compares the browser-loaded build with the installed server build.
+Canonical release version: **0.14.0** in [`VERSION`](VERSION). Pre-release Debian packages identify their source commit (`0.14.0~git<sha>`), and Settings → About compares the browser-loaded build with the installed server build.
 
 ## Contents
 

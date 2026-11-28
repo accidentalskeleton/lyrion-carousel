@@ -12,13 +12,13 @@ Use the [scripted Raspberry Pi kiosk installer and troubleshooting guide](raspbe
 
 ## Versioning
 
-`VERSION` remains the canonical **release** version (currently `0.13.1`). Untagged pre-release `.deb` builds automatically append the source commit SHA, e.g. `0.13.1~git267cd42400`. This is derived at build time; the tracked `VERSION` file is **not** modified (otherwise the commit would change). Exact Git release-tag builds such as `v0.13.1` use the clean release number. Builds refuse uncommitted tracked changes so a stamped SHA cannot falsely identify modified code.
+`VERSION` remains the canonical **release** version (currently `0.14.0`). Untagged pre-release `.deb` builds automatically append the source commit SHA, e.g. `0.14.0~git267cd42400`. This is derived at build time; the tracked `VERSION` file is **not** modified (otherwise the commit would change). Exact Git release-tag builds such as `v0.14.0` use the clean release number. Builds refuse uncommitted tracked changes so a stamped SHA cannot falsely identify modified code.
 
 The installed package, `/opt/lyrion-carousel/VERSION` and `/opt/lyrion-carousel/BUILD_INFO.json` identify the same build. The packaged HTML references, JavaScript entrypoints and nested module imports use commit-specific cache keys so newly loaded pages do not reuse old code from the browser cache.
 
 **Settings → About** shows **Browser build** (the identifier embedded in the JavaScript that tab actually loaded), **Server build** (read afresh from `/api/build`) and **Build status**. If they differ, reload the tab; a page already open during a package upgrade keeps its old JavaScript until reloaded. On un-packaged development checkouts the browser displays `development` and the match is not asserted.
 
-The normal GitHub release checker continues comparing the stable numeric release version. A final `0.13.1` release supersedes a pre-release of the same number.
+The normal GitHub release checker continues comparing the stable numeric release version. A final `0.14.0` release supersedes a pre-release of the same number.
 
 ## Debian packaging
 
